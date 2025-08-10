@@ -1,0 +1,74 @@
+# Core MCP Server Dependencies
+mcp>=1.0.0
+pydantic>=2.0.0
+anyio>=4.0.0
+httpx>=0.25.0
+
+# Web Scraping and HTTP
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+html5lib>=1.1
+
+# Kubernetes Client Library
+kubernetes>=28.1.0
+
+# YAML Processing
+PyYAML>=6.0
+ruamel.yaml>=0.17.0
+
+# System Monitoring and Diagnostics
+psutil>=5.9.0
+py-cpuinfo>=9.0.0
+distro>=1.8.0
+
+# Network Diagnostics
+netaddr>=0.8.0
+dnspython>=2.4.0
+scapy>=2.5.0
+
+# Container Runtime Integration
+docker>=6.1.0
+
+# Log Processing and Analysis
+loguru>=0.7.0
+rich>=13.0.0
+colorama>=0.4.6
+
+# Metrics and Monitoring
+prometheus-client>=0.17.0
+grafana-api>=1.0.3
+
+# Database for Caching and State
+aiosqlite>=0.19.0
+sqlalchemy>=2.0.0
+
+# CLI Tools Integration
+click>=8.1.0
+typer>=0.9.0
+
+# Async HTTP Server
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+configparser>=5.3.0
+
+# Security and Authentication
+cryptography>=41.0.0
+passlib>=1.7.4
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Testing Dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.11.0
+
+# Development Tools
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0

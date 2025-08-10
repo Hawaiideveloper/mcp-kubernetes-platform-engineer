@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "kubernetes-platform-engineer": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["src/main.py"]
+    }
+  }
+}

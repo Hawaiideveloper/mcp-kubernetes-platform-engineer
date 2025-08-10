@@ -1,0 +1,78 @@
+# Test Dependencies for Kubernetes Platform Engineer MCP Server
+# These are additional dependencies needed for testing
+
+# Core testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-timeout>=2.1.0
+pytest-xdist>=3.3.1
+pytest-benchmark>=4.0.0
+pytest-html>=3.2.0
+
+# Async testing support
+asyncio-mqtt>=0.11.0
+aioresponses>=0.7.4
+
+# Mock and fixture utilities
+responses>=0.23.3
+factory-boy>=3.3.0
+faker>=19.6.2
+freezegun>=1.2.2
+
+# Performance testing
+memory-profiler>=0.61.0
+psutil>=5.9.5
+line-profiler>=4.1.1
+
+# Database testing
+pytest-postgresql>=5.0.0
+testing.postgresql>=1.3.0
+
+# Security testing
+bandit[toml]>=1.7.5
+safety>=2.3.5
+semgrep>=1.45.0
+
+# API testing
+httpx>=0.24.1
+respx>=0.20.2
+
+# Kubernetes testing mocks
+pyfakefs>=5.3.0
+# Kubernetes Testing Support
+kubernetes>=28.1.0
+
+# Load testing
+locust>=2.16.1
+
+# Report generation
+allure-pytest>=2.13.2
+pytest-json-report>=1.5.0
+
+# Code quality
+flake8>=6.1.0
+black>=23.9.1
+isort>=5.12.0
+mypy>=1.5.1
+
+# Documentation testing
+sphinx>=7.2.6
+doc8>=1.1.1
+
+# Test data generation
+hypothesis>=6.87.0
+mimesis>=11.1.0
+
+# Docker testing
+pytest-docker>=2.0.1
+testcontainers>=3.7.1
+
+# Network testing
+pytest-socket>=0.6.0
+pytest-httpserver>=1.0.8
+
+# Environment management
+python-dotenv>=1.0.0
+pydantic-settings>=2.0.3
