@@ -13,6 +13,7 @@ from mcp import ClientSession, ListResourcesResult, ListToolsResult, ReadResourc
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
 from mcp.server.session import ServerSession
+from mcp.server.stdio import StdioServerTransport
 from mcp.types import (
     CallToolResult,
     EmbeddedResource,
@@ -608,9 +609,11 @@ class KubernetesPlatformEngineerMCPServer:
                 )
     
     async def start(self):
-        """Start the MCP server."""
+        """Start the MCP server over stdio so editors like Cursor can connect."""
         try:
-            self.logger.info(f"Starting Kubernetes Platform Engineer MCP Server on {self.config.host}:{self.config.port}")
+            self.logger.info(
+                f"Starting Kubernetes Platform Engineer MCP Server (stdio) on {self.config.host}:{self.config.port}"
+            )
             
             # Initialize managers
             await self.k8s_manager.initialize()
@@ -620,13 +623,17 @@ class KubernetesPlatformEngineerMCPServer:
             await self.documentation_manager.initialize()
             await self.github_issues_manager.initialize()
             
-            # Start the server
-            self.logger.info("MCP server initialized and ready")
+            # Serve MCP over stdio
+            init_opts = InitializationOptions(
+                server_name="kubernetes-platform-engineer",
+                server_version=self.config.version,
+                capabilities={}
+            )
+            transport = StdioServerTransport()
+            session = ServerSession(self.server, transport, init_opts)
+            self.logger.info("MCP server initialized; waiting for stdio client...")
+            await session.run()
             
-            # Keep the server running
-            while True:
-                await asyncio.sleep(1)
-                    
         except Exception as e:
             self.logger.error(f"Failed to start server: {e}", exc_info=True)
             raise
