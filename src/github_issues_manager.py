@@ -24,7 +24,16 @@ class GitHubIssuesManager:
         """Initialize GitHub issues manager."""
         self.config = config
         self.logger = get_logger(__name__)
-        self.db_path = "/app/data/github_issues.db"
+        # Use relative path that works both in development and production
+        import tempfile
+        import os
+        try:
+            data_dir = "./data"
+            os.makedirs(data_dir, exist_ok=True)
+            self.db_path = f"{data_dir}/github_issues.db"
+        except OSError:
+            # Fallback to temp directory if we can't write to ./data
+            self.db_path = os.path.join(tempfile.gettempdir(), "github_issues.db")
         self.github_repos = [
             "kubernetes/kubernetes",
             "kubernetes/kubectl",
@@ -66,7 +75,11 @@ class GitHubIssuesManager:
     async def _setup_database(self):
         """Setup SQLite database for storing GitHub issues."""
         import os
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        try:
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        except OSError:
+            # Directory creation handled in __init__, this is just a safety check
+            pass
         
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""

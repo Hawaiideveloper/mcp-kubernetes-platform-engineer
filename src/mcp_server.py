@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence
 from mcp import ClientSession, ListResourcesResult, ListToolsResult, ReadResourceResult
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
-from mcp.server.session import ServerSession
-from mcp.server.stdio import StdioServerTransport
+
+from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolResult,
     EmbeddedResource,
@@ -29,6 +29,8 @@ from .monitoring_manager import MonitoringManager
 from .security_manager import SecurityManager
 from .documentation_manager import DocumentationManager
 from .github_issues_manager import GitHubIssuesManager
+from .kubectl_manager import KubectlManager
+from .helm_manager import HelmManager
 from .logger import get_logger
 
 
@@ -53,6 +55,12 @@ class KubernetesPlatformEngineerMCPServer:
         # Initialize MCP server
         self.server = Server("kubernetes-platform-engineer")
         
+        # Check for non-destructive mode
+        import os
+        self.non_destructive_mode = os.getenv('ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS', 'false').lower() == 'true'
+        if self.non_destructive_mode:
+            self.logger.info("Running in NON-DESTRUCTIVE MODE - destructive operations disabled")
+        
         # Initialize managers
         self.k8s_manager = KubernetesManager(config.kubernetes)
         self.diagnostics_manager = DiagnosticsManager(config.diagnostics)
@@ -60,6 +68,10 @@ class KubernetesPlatformEngineerMCPServer:
         self.security_manager = SecurityManager(config.security)
         self.documentation_manager = DocumentationManager(config)
         self.github_issues_manager = GitHubIssuesManager(config)
+        
+        # Initialize enhanced managers
+        self.kubectl_manager = KubectlManager(non_destructive_mode=self.non_destructive_mode)
+        self.helm_manager = HelmManager(non_destructive_mode=self.non_destructive_mode)
         
         # Register MCP handlers
         self._register_handlers()
@@ -624,15 +636,17 @@ class KubernetesPlatformEngineerMCPServer:
             await self.github_issues_manager.initialize()
             
             # Serve MCP over stdio
-            init_opts = InitializationOptions(
-                server_name="kubernetes-platform-engineer",
-                server_version=self.config.version,
-                capabilities={}
-            )
-            transport = StdioServerTransport()
-            session = ServerSession(self.server, transport, init_opts)
             self.logger.info("MCP server initialized; waiting for stdio client...")
-            await session.run()
+            async with stdio_server() as (read_stream, write_stream):
+                await self.server.run(
+                    read_stream, 
+                    write_stream, 
+                    InitializationOptions(
+                        server_name="kubernetes-platform-engineer",
+                        server_version=self.config.version,
+                        capabilities=self.server.get_capabilities()
+                    )
+                )
             
         except Exception as e:
             self.logger.error(f"Failed to start server: {e}", exc_info=True)
