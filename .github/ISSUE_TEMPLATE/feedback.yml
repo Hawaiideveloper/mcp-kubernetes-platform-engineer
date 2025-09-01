@@ -1,0 +1,65 @@
+name: "🚀 Launch Feedback Survey"
+description: "Share your feedback to help us improve MCP Kubernetes Platform Engineer!"
+labels: [feedback, survey, community]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # 🚀 Launch Feedback Survey
+        
+        Thanks for trying out MCP Kubernetes Platform Engineer 🙌
+        Please help improve by answering a few quick questions:
+
+  - type: textarea
+    id: setup-experience
+    attributes:
+      label: "Setup Experience"
+      description: "Was setup clear and smooth? Anything confusing or broken?"
+      placeholder: "Describe your setup experience..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: most-valuable-feature
+    attributes:
+      label: "Most Valuable Feature"
+      description: "Which tool/command did you use most (diagnose_cluster_health, search_documentation, etc.)? Why?"
+      placeholder: "Tell us what you found most valuable..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: missing-features
+    attributes:
+      label: "Missing Feature(s)"
+      description: "What did you expect but not find?"
+      placeholder: "List any missing features or capabilities..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: performance
+    attributes:
+      label: "Performance"
+      description: "Were responses fast enough? Any timeouts, slow queries, or high resource usage?"
+      placeholder: "Share your experience with performance..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: integration
+    attributes:
+      label: "Integration"
+      description: "Did you connect via Docker, Kubernetes, or VS Code MCP? Would you prefer a hosted SaaS version?"
+      placeholder: "Describe your integration experience..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: overall-experience
+    attributes:
+      label: "Overall Experience"
+      description: "What’s the single biggest improvement you’d like to see next?"
+      placeholder: "Your top suggestion for improvement..."
+    validations:
+      required: true
