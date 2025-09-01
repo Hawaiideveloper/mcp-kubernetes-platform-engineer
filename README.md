@@ -1,5 +1,11 @@
 
+
 # Kubernetes Platform Engineer MCP Server
+
+> **🚀 We want your feedback!**
+>
+> Please help us improve by filling out the [🚀 Launch Feedback Survey](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/issues/new?template=feedback.yml) — your input shapes the future of this project!
+
 
 ## Table of Contents
 
