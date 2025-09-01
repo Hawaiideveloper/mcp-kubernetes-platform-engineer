@@ -6,8 +6,8 @@ import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
-from .config import SecurityConfig
-from .logger import get_logger
+from config import SecurityConfig
+from logger import get_logger
 
 
 class SecurityManager:

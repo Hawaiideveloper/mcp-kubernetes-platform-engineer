@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import re
 
-from .config import ServerConfig
-from .logger import get_logger
+from config import ServerConfig
+from logger import get_logger
 
 
 class GitHubIssuesManager:

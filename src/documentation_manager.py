@@ -12,8 +12,8 @@ from bs4 import BeautifulSoup
 import hashlib
 from datetime import datetime
 
-from .config import ServerConfig
-from .logger import get_logger
+from config import ServerConfig
+from logger import get_logger
 
 
 class DocumentationManager:

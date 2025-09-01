@@ -74,6 +74,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Ensure docs directory is included
+COPY docs/ ./docs/
+
 # Create directories for logs, configs, and data
 RUN mkdir -p /app/logs /app/configs /app/data /root/.kube
 
@@ -88,7 +91,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import src.health_check; src.health_check.check()" || exit 1
 
 # Expose MCP server port
-EXPOSE 3000
+EXPOSE 3001
 
-# Default command
-CMD ["python", "src/main.py"]
+# Default command - start the HTTP server
+CMD ["python", "src/main.py", "start", "--host", "0.0.0.0", "--port", "3001"]

@@ -28,9 +28,9 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .mcp_server import KubernetesPlatformEngineerMCPServer
-from .config import ServerConfig
-from .logger import setup_logging
+from mcp_server import KubernetesPlatformEngineerMCPServer
+from config import ServerConfig
+from logger import setup_logging
 
 # FastAPI app for HTTP REST API
 app = FastAPI(

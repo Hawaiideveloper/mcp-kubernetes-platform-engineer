@@ -22,16 +22,16 @@ from mcp.types import (
     Tool,
 )
 
-from .config import ServerConfig
-from .k8s_manager import KubernetesManager
-from .diagnostics_manager import DiagnosticsManager
-from .monitoring_manager import MonitoringManager
-from .security_manager import SecurityManager
-from .documentation_manager import DocumentationManager
-from .github_issues_manager import GitHubIssuesManager
-from .kubectl_manager import KubectlManager
-from .helm_manager import HelmManager
-from .logger import get_logger
+from config import ServerConfig
+from k8s_manager import KubernetesManager
+from diagnostics_manager import DiagnosticsManager
+from monitoring_manager import MonitoringManager
+from security_manager import SecurityManager
+from documentation_manager import DocumentationManager
+from github_issues_manager import GitHubIssuesManager
+from kubectl_manager import KubectlManager
+from helm_manager import HelmManager
+from logger import get_logger
 
 
 class KubernetesPlatformEngineerMCPServer:

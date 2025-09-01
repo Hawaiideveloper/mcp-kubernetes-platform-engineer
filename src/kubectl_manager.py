@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 try:
-    from .logger import get_logger
+    from logger import get_logger
 except ImportError:
     from logger import get_logger
 
