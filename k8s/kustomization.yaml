@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mcp-kubernetes
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+images:
+  - name: k8s-platform-engineer-mcp
+    newTag: latest
+
+commonLabels:
+  app.kubernetes.io/name: kubernetes-platform-engineer
+  app.kubernetes.io/part-of: kubernetes-platform-engineer-mcp
+
+patchesStrategicMerge:
+  # Add any patches here if needed
+
+configMapGenerator:
+  - name: mcp-server-config
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: mcp-server-secrets
+    envs:
+      - secrets.env

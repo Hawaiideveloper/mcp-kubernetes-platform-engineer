@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubernetes-mcp-server-config
+  namespace: mcp-kubernetes
+  labels:
+    app.kubernetes.io/name: kubernetes-platform-engineer
+    app.kubernetes.io/component: mcp-server
+data:
+  MCP_HOST: "0.0.0.0"
+  MCP_PORT: "3001"
+  LOG_LEVEL: "INFO"
+  DEBUG: "false"
+  ENABLE_METRICS: "true"
+  RBAC_ENABLED: "true"
+  POD_SECURITY_STANDARDS: "true"
+  NETWORK_POLICIES: "true"
+  GITHUB_ISSUES_UPDATE_INTERVAL: "3600"
