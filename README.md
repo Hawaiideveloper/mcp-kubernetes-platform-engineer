@@ -1,4 +1,49 @@
+
 # Kubernetes Platform Engineer MCP Server
+
+## Table of Contents
+
+- [Kubernetes Platform Engineer MCP Server](#kubernetes-platform-engineer-mcp-server)
+  - [Quick Start Options](#-quick-start-options)
+    - [Option 1: Kubernetes Deployment (Recommended for Production)](#option-1-kubernetes-deployment-recommended-for-production)
+    - [Option 2: Docker Deployment (Quick Testing)](#option-2-docker-deployment-quick-testing)
+    - [Manual Setup (if preferred)](#manual-setup-if-preferred)
+  - [Production Deployment Status](#-production-deployment-status)
+    - [Kubernetes Cluster Deployment (NEW!)](#kubernetes-cluster-deployment-new)
+    - [Kubernetes Deployment Features](#kubernetes-deployment-features)
+    - [Deployment Commands](#-deployment-commands)
+  - [Core Features](#-core-features)
+    - [Kubernetes-Native Deployment](#kubernetes-native-deployment)
+    - [Cluster Management & Troubleshooting](#cluster-management--troubleshooting)
+    - [Documentation & Knowledge Base](#documentation--knowledge-base)
+    - [GitHub Issues Intelligence & Continuous Learning](#github-issues-intelligence--continuous-learning)
+    - [Performance Monitoring & Analysis](#performance-monitoring--analysis)
+    - [Security & Compliance](#security--compliance)
+    - [Automated Remediation](#automated-remediation)
+  - [MCP Tools Overview](#-mcp-tools-overview)
+  - [Installation & Setup](#-installation--setup)
+    - [Prerequisites](#prerequisites)
+    - [Configuration](#configuration)
+    - [Manual Installation](#manual-installation)
+  - [Usage Examples](#-usage-examples)
+    - [AI Assistant Integration](#ai-assistant-integration)
+    - [Kubernetes Deployment Integration](#kubernetes-deployment-integration)
+    - [Direct API Usage](#direct-api-usage)
+  - [Continuous Learning & Knowledge Evolution](#-continuous-learning--knowledge-evolution)
+    - [How It Works](#how-it-works)
+    - [Monitored Repositories](#monitored-repositories)
+    - [Knowledge Growth Metrics](#knowledge-growth-metrics)
+    - [What This Means for You](#what-this-means-for-you)
+  - [Architecture](#-architecture)
+    - [Kubernetes Deployment Architecture](#kubernetes-deployment-architecture)
+    - [Container/Docker Architecture](#containerdocker-architecture)
+  - [Troubleshooting Guide](#-troubleshooting-guide)
+    - [Known Issues & Solutions](#-known-issues--solutions)
+    - [Setup & Continuous Learning Issues](#-setup--continuous-learning-issues)
+    - [Installation Issues](#-installation-issues)
+    - [Testing Issues](#-testing-issues)
+    - [Performance Issues](#-performance-issues)
+
 
 A comprehensive Model Context Protocol (MCP) server designed for Kubernetes platform engineering, cluster troubleshooting, monitoring, and advanced system administration. **Now with native Kubernetes deployment support!**
 
