@@ -1,18 +1,45 @@
 # Kubernetes Platform Engineer MCP Server
 
-A comprehensive Model Context Protocol (MCP) server designed for Kubernetes platform engineering, cluster troubleshooting, monitoring, and advanced system administration.
+A comprehensive Model Context Protocol (MCP) server designed for Kubernetes platform engineering, cluster troubleshooting, monitoring, and advanced system administration. **Now with native Kubernetes deployment support!**
 
 > **🧠 Always Learning**: This MCP server continuously monitors 17+ major Kubernetes repositories and automatically updates its knowledge base every hour. As the Kubernetes ecosystem evolves with new issues, solutions, and best practices, your assistant grows smarter without any manual intervention.
 
-## 🚀 **Quick Start - One Command Setup**
+> **🚀 Production Ready**: Successfully deployed in both Docker containers and Kubernetes clusters with full authentication, persistent storage, and comprehensive documentation integration (1,029+ official Kubernetes reference files).
+
+## 🚀 **Quick Start Options**
+
+### **Option 1: Kubernetes Deployment (Recommended for Production)**
+
+```bash
+# Clone the repository
+git clone https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer.git
+cd mcp-kubernetes-platform-engineer
+
+# Deploy to Kubernetes cluster
+kubectl apply -f k8s/
+
+# Access via NodePort (replace with your cluster IP)
+curl http://<your-cluster-ip>:30001/health
+```
+
+**Kubernetes Deployment Features:**
+- ✅ Production-ready Kubernetes manifests with RBAC
+- ✅ GitHub Container Registry authentication
+- ✅ Persistent storage for knowledge base and logs
+- ✅ Service mesh ready (ClusterIP + NodePort services)
+- ✅ Health checks and monitoring integration
+- ✅ Official Kubernetes documentation (1,029+ files)
+
+### **Option 2: Docker Deployment (Quick Testing)**
 
 ```bash
 # Automated setup with VS Code integration
-curl -fsSL https://raw.githubusercontent.com/your-org/mcp-kubernetes-platform-engineer/main/start.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/main/start.sh | bash
 ```
 
-**That's it!** The script will:
-- ✅ Build and start the MCP server
+**Docker Deployment Features:**
+- ✅ One-command setup with automated VS Code integration  
+- ✅ Build and start the MCP server container
 - ✅ Configure VS Code/Copilot integration automatically  
 - ✅ Create management scripts (start/stop/logs/status)
 - ✅ Begin continuous learning from Kubernetes GitHub issues
@@ -20,12 +47,93 @@ curl -fsSL https://raw.githubusercontent.com/your-org/mcp-kubernetes-platform-en
 ### **Manual Setup (if preferred)**
 
 ```bash
-git clone https://github.com/your-org/mcp-kubernetes-platform-engineer.git
+git clone https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer.git
 cd mcp-kubernetes-platform-engineer
+
+# For Kubernetes deployment
+kubectl apply -f k8s/
+
+# For Docker deployment  
 ./start.sh
 ```
 
+## 🎯 **Production Deployment Status**
+
+### **✅ Kubernetes Cluster Deployment (NEW!)**
+**Live Status:** Successfully deployed and operational
+- **Image:** `ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest`
+- **Namespace:** `mcp-kubernetes`
+- **Services:** ClusterIP (internal) + NodePort (external access)
+- **Storage:** 5Gi persistent volume for knowledge base
+- **Authentication:** GitHub Container Registry with Personal Access Token
+- **Documentation:** 1,029 official Kubernetes reference files integrated
+- **Health Status:** All health checks passing ✅
+
+**Access Points:**
+```bash
+# External access via NodePort
+curl http://<cluster-ip>:30001/health
+
+# Internal cluster access
+curl http://kubernetes-mcp-server-service.mcp-kubernetes.svc.cluster.local:3001/health
+
+# Pod logs
+kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server
+```
+
+**Kubernetes Resources:**
+- **Deployment:** `kubernetes-mcp-server` (1/1 replicas ready)
+- **Services:** `kubernetes-mcp-server-service` (ClusterIP), `kubernetes-mcp-server-nodeport` (NodePort)
+- **ServiceAccount:** `kubernetes-mcp-server-sa` with cluster-wide read permissions
+- **ConfigMap:** `kubernetes-mcp-server-config` with runtime configuration
+- **PVC:** `kubernetes-mcp-server-data` (5Gi, bound)
+- **Secret:** `ghcr-secret` for GitHub Container Registry authentication
+
+### **🎯 Kubernetes Deployment Features**
+- **Production-Ready Manifests** - Complete YAML configurations for enterprise deployment
+- **GitHub Container Registry Integration** - Automated image pulls with PAT authentication
+- **RBAC Security** - ServiceAccount with cluster-wide read permissions for diagnostics
+- **Persistent Storage** - 5Gi volume for knowledge base and continuous learning data
+- **Service Mesh Ready** - ClusterIP for internal communication, NodePort for external access
+- **Health Monitoring** - Kubernetes-native health checks with liveness and readiness probes
+- **Comprehensive Documentation** - 1,029 official Kubernetes reference documents integrated
+- **Auto-scaling Ready** - Deployment configured for horizontal pod autoscaling
+- **Monitoring Integration** - Prometheus metrics endpoint on port 8080
+- **Security Standards** - Non-root containers with read-only root filesystem
+
+### **🔧 Deployment Commands**
+
+```bash
+# Quick Kubernetes deployment
+kubectl create namespace mcp-kubernetes
+kubectl apply -f k8s/
+
+# Check deployment status
+kubectl get pods -n mcp-kubernetes
+kubectl get services -n mcp-kubernetes
+
+# View logs
+kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server
+
+# Access health endpoint
+curl http://<cluster-ip>:30001/health
+
+# Port forward for local access (alternative to NodePort)
+kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001
+curl http://localhost:3001/health
+```
+
 ## 🛠️ **Core Features**
+
+### **🚀 Kubernetes-Native Deployment**
+- **Production Kubernetes Manifests** - Complete YAML configurations for enterprise deployment
+- **GitHub Container Registry** - Automated image distribution with authentication
+- **Persistent Knowledge Base** - 5Gi storage for continuous learning and issue database
+- **Service Discovery** - DNS-based service resolution within cluster
+- **RBAC Integration** - ServiceAccount with appropriate cluster permissions
+- **Health Monitoring** - Kubernetes-native liveness and readiness probes
+- **Horizontal Scaling** - Ready for HPA configuration based on metrics
+- **Network Policies** - Security-first networking with policy support
 
 ### **🔧 Cluster Management & Troubleshooting**
 - **Comprehensive Cluster Health Diagnostics** - Deep analysis of nodes, pods, services, and networking
@@ -111,7 +219,7 @@ K8S_CLUSTER_NAME=your-cluster
 
 # Server Configuration  
 MCP_HOST=0.0.0.0
-MCP_PORT=3000
+MCP_PORT=3001
 DEBUG=false
 
 # Monitoring Configuration
@@ -173,11 +281,38 @@ python src/main.py
 - `@k8s-platform-engineer get kubectl commands for debugging failed pods`
 - `@k8s-platform-engineer show trending kubernetes issues this week`
 
+### **Kubernetes Deployment Integration**
+
+**Access MCP Server in Kubernetes:**
+```bash
+# Direct cluster access via service
+kubectl run debug-pod --image=curlimages/curl -it --rm -- \
+  curl http://kubernetes-mcp-server-service.mcp-kubernetes.svc.cluster.local:3001/health
+
+# Port forward for local development
+kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001
+
+# External access via NodePort
+curl http://$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}'):30001/health
+```
+
+**Monitor Deployment:**
+```bash
+# Watch pod status
+kubectl get pods -n mcp-kubernetes -w
+
+# Check service endpoints
+kubectl get endpoints -n mcp-kubernetes
+
+# View detailed pod information
+kubectl describe pod -n mcp-kubernetes -l app.kubernetes.io/name=kubernetes-platform-engineer
+```
+
 ### **Direct API Usage**
 
 ```bash
 # Get cluster health overview
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "tools/call",
@@ -190,7 +325,7 @@ curl -X POST http://localhost:3000/mcp \
   }'
 
 # Troubleshoot specific pod
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "tools/call", 
@@ -205,7 +340,7 @@ curl -X POST http://localhost:3000/mcp \
   }'
 
 # Search Kubernetes documentation
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "tools/call",
@@ -219,7 +354,7 @@ curl -X POST http://localhost:3000/mcp \
   }'
 
 # Find similar GitHub issues
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "tools/call",
@@ -308,6 +443,37 @@ Example output:
 
 ## 🏗️ **Architecture**
 
+### **Kubernetes Deployment Architecture**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Kubernetes Cluster                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │              mcp-kubernetes namespace               │ │
+│  ├─────────────────────────────────────────────────────────┤ │
+│  │  ┌─────────────────┐  ┌─────────────────┐              │ │
+│  │  │   Deployment    │  │    Services     │              │ │
+│  │  │ kubernetes-mcp- │  │ - ClusterIP     │              │ │
+│  │  │    server       │  │ - NodePort      │              │ │
+│  │  └─────────────────┘  └─────────────────┘              │ │
+│  │  ┌─────────────────┐  ┌─────────────────┐              │ │
+│  │  │ ServiceAccount  │  │      PVC        │              │ │
+│  │  │  + RBAC        │  │   (5Gi data)    │              │ │
+│  │  └─────────────────┘  └─────────────────┘              │ │
+│  │  ┌─────────────────┐  ┌─────────────────┐              │ │
+│  │  │   ConfigMap     │  │ ImagePullSecret │              │ │
+│  │  │ (config data)   │  │  (ghcr.io)     │              │ │
+│  │  └─────────────────┘  └─────────────────┘              │ │
+│  └─────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │   Nodes         │  │    Pods         │                  │
+│  │ (cluster infra) │  │ (workloads)     │                  │
+│  └─────────────────┘  └─────────────────┘                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### **Container/Docker Architecture**
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    MCP Server                               │
@@ -785,7 +951,63 @@ When reporting issues, please include:
 [Any other relevant information]
 ```
 
-## 📊 **Monitoring & Observability**
+## � **Quick Reference Commands**
+
+### **Kubernetes Deployment**
+```bash
+# Deploy to cluster
+kubectl apply -f k8s/                    # Deploy all resources
+kubectl get pods -n mcp-kubernetes       # Check pod status
+kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server  # View logs
+kubectl delete -f k8s/                   # Remove deployment
+
+# Service access
+kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001  # Local access
+curl http://localhost:3001/health         # Test health endpoint
+kubectl get svc -n mcp-kubernetes         # Check service endpoints
+
+# Troubleshooting
+kubectl describe pod -n mcp-kubernetes -l app.kubernetes.io/name=kubernetes-platform-engineer  # Pod details
+kubectl get events -n mcp-kubernetes --sort-by='.lastTimestamp'  # Recent events
+kubectl exec -n mcp-kubernetes deployment/kubernetes-mcp-server -- ps aux  # Container processes
+```
+
+### **Docker Development**
+```bash
+# Setup and Management
+./start.sh              # Complete automated setup with VS Code integration
+./stop.sh               # Stop the MCP server
+./status.sh             # Check server status and health
+./logs.sh               # View real-time logs
+./update.sh             # Update and restart server
+
+# Development
+pytest tests/ -v        # Run tests
+black src/              # Format code
+mypy src/               # Type checking
+
+# Docker Operations
+docker build -t k8s-platform-engineer-mcp .  # Build image
+docker logs k8s-mcp-server -f                # Follow logs
+docker exec -it k8s-mcp-server /bin/bash     # Enter container
+```
+
+### **Image Management**
+```bash
+# GitHub Container Registry
+echo $GITHUB_PERSONAL_ACCESS_TOKEN | docker login ghcr.io -u <username> --password-stdin
+docker tag k8s-platform-engineer-mcp:latest ghcr.io/<username>/mcp-kubernetes-platform-engineer:latest
+docker push ghcr.io/<username>/mcp-kubernetes-platform-engineer:latest
+
+# Create ImagePullSecret for Kubernetes
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=<username> \
+  --docker-password=$GITHUB_PERSONAL_ACCESS_TOKEN \
+  -n mcp-kubernetes
+```
+
+## �📊 **Monitoring & Observability**
 
 The MCP server includes built-in monitoring capabilities:
 
@@ -815,10 +1037,27 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙋 **Support**
 
-- **Documentation** - [Wiki](https://github.com/your-org/mcp-kubernetes-platform-engineer/wiki)
-- **Issues** - [GitHub Issues](https://github.com/your-org/mcp-kubernetes-platform-engineer/issues)
-- **Discussions** - [GitHub Discussions](https://github.com/your-org/mcp-kubernetes-platform-engineer/discussions)
+- **Documentation** - [Wiki](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/wiki)
+- **Issues** - [GitHub Issues](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/issues)
+- **Discussions** - [GitHub Discussions](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/discussions)
+- **Container Registry** - [GitHub Container Registry](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/pkgs/container/mcp-kubernetes-platform-engineer)
 
 ---
+
+## 🎉 **Production Deployment Status**
+
+### **✅ Currently Operational**
+- **🚀 Kubernetes Deployment**: Successfully running on cluster at `172.100.10.107:30001`
+- **📦 Container Registry**: `ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest`
+- **🏥 Health Status**: All endpoints responding with healthy status
+- **📚 Documentation**: 1,029 official Kubernetes reference files integrated
+- **🔐 Security**: RBAC configured with GitHub registry authentication
+- **💾 Storage**: 5Gi persistent volume for knowledge base
+
+### **🔗 Live Access Points**
+- **External Health Check**: `curl http://172.100.10.107:30001/health`
+- **Internal Service**: `kubernetes-mcp-server-service.mcp-kubernetes.svc.cluster.local:3001`
+- **Monitoring**: Prometheus metrics on port 8080
+- **Documentation**: Enhanced with official Kubernetes references
 
 **Built for Kubernetes Platform Engineers by Kubernetes Platform Engineers** 🚀
