@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:get_issue_statistics",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "github_issues_manager.py:573-618 — get_issue_statistics() queries a SQLite DB populated by real GitHub API calls via aiohttp; mcp_server.py:605-606 dispatches to it correctly",
+    "diagnosis": "The handler exists and queries real data from a SQLite database, but returns empty dict on any error (line 617) with no indication to the caller that data may be absent or stale due to failed GitHub fetches.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Return a structured error envelope instead of `{}` on exception.\n2. Add a `last_fetched_at` and `fetch_status` field to the stats dict so the caller can tell whether the DB is populated.\n3. On empty DB (total_issues == 0) return a sentinel `{\"status\": \"empty\", \"reason\": \"db_not_yet_populated\"}`.",
+    "test_plan": "Unit-test get_issue_statistics() against an empty DB and assert a non-empty error envelope is returned. Integration-test by mocking the GitHub API to fail and verifying the stats endpoint still returns a parseable dict with an error flag."
+  },
+  {
+    "component_id": "behavior:analyzer_hpa",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No HPAAnalyzer class exists anywhere in src/; monitoring_manager.py and diagnostics_manager.py both contain hardcoded/canned data. The README.md line 151 claims 'Auto-scaling Ready - Deployment configured for horizontal pod autoscaling' without any HPA analysis implementation.",
+    "diagnosis": "There is no HPA analyzer anywhere in the codebase; the feature is entirely unimplemented despite the README advertising it.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/hpa_analyzer.py with class HPAAnalyzer:\n  async def analyze(self, namespace: Optional[str]) -> Dict:\n    hpas = k8s_client.AutoscalingV2Api().list_namespaced_hpa(ns)\n    for hpa in hpas:\n      current = hpa.status.current_metrics  # may be None if metrics-server absent\n      desired = hpa.status.desired_replicas\n      max_r = hpa.spec.max_replicas\n      yield findings: [at_max, no_metrics, thrashing]\nEdge cases: metrics-server not installed (current_metrics is None), HPA targeting non-existent workload, minReplicas==maxReplicas.",
+    "test_plan": "Unit-test with mocked AutoscalingV2Api responses covering: (a) HPA at max replicas, (b) HPA with nil current_metrics, (c) HPA with scale-down thrashing (desired fluctuating). Integration-test against a real cluster with a synthetic HPA and verify findings are populated."
+  },
+  {
+    "component_id": "mcp-tool:find_kubectl_commands",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "mcp_server.py:571-575 — dispatches to documentation_manager.find_commands(); documentation_manager.py:382-399 — find_commands() iterates self.documentation_db which is populated by scraping kubernetes.io at startup via aiohttp; if the scrape fails (network unavailable, rate-limited, HTML structure changed), documentation_db remains empty and the method silently returns [].",
+    "diagnosis": "find_kubectl_commands returns silently empty results whenever the runtime web-scrape of kubernetes.io fails, with no fallback static command reference and no error surfaced to the caller.",
+    "fix_class": "implement",
+    "proposed_fix": "Bundle a minimal static kubectl command reference JSON file in the repo (e.g. src/data/kubectl_commands.json).\nIn find_commands(), check if documentation_db is empty and fall back to loading from the static file.\nIf both are empty, return a structured error: {\"error\": \"documentation_index_not_loaded\", \"commands\": []}.",
+    "test_plan": "Unit-test find_commands() with documentation_db empty and assert the static fallback is used. Integration-test that after a simulated scrape failure the tool still returns a non-empty list of common kubectl commands."
+  },
+  {
+    "component_id": "functional_unit_test.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "functional_unit_test.md:66-86 — test_crashloopbackoff_pattern_recognition calls manager.analyze_issue_pattern(pattern); github_issues_manager.py has no method analyze_issue_pattern (confirmed via grep of all `def ` in that file). Also line 79: asserts result[\"solutions\"], result[\"sub_component\"] — none of these keys exist in the DB schema (github_issues table has no solutions column).",
+    "diagnosis": "The functional test document describes 390 tests that call methods and assert on data structures that do not exist in the actual codebase, making every documented test non-executable fiction.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Either (a) implement the missing methods (analyze_issue_pattern, etc.) and DB schema changes to make the tests runnable, or (b) replace the document with tests that target real methods: get_issue_statistics(), find_similar_issues(), search_issues(). Mark all tests that call non-existent methods with a TODO comment and a GitHub issue reference so they are not mistaken for passing tests.",
+    "test_plan": "Run `pytest tests/ -v` and verify zero import errors or AttributeError. All documented test signatures should correspond to real callable methods."
+  },
+  {
+    "component_id": "README.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "README.md:58 — 'Production Ready: Successfully deployed ... 1,029+ official Kubernetes reference files'; README.md:204-205 — '45,720+ indexed issues'; README.md:477-480 — example /stats output shows {\"total_issues\": 47832, ...}. The documentation_db is built at runtime by scraping kubernetes.io (documentation_manager.py:51-66); the github_issues DB is populated by live GitHub API calls (github_issues_manager.py:145-166). Neither dataset is bundled; both may be empty on a fresh start with no network.",
+    "diagnosis": "The README makes concrete production-readiness and scale claims (45,720+ issues, 1,029+ docs, live health endpoint) that are contingent on successful runtime network operations that may not complete, and advertises an HTTP /health endpoint that does not exist in the MCP stdio server.",
+    "fix_class": "document",
+    "proposed_fix": "1. Replace concrete counts with 'up to N issues fetched at runtime'.\n2. Add a caveat section: 'Knowledge base is empty on first start until GitHub API and docs scrape complete (may take minutes; requires network and optionally GITHUB_TOKEN)'.\n3. Remove the /health and /stats curl examples — mcp_server.py serves stdio only, not HTTP.\n4. Remove the claim '172.100.10.107:30001 Currently Operational' (line 1101) — this is a development environment address not relevant to users.",
+    "test_plan": "Review README against code: grep for every curl example and confirm a matching HTTP handler exists in src/. Confirm all feature bullet points map to callable MCP tool methods."
+  },
+  {
+    "component_id": "mcp-tool:get_troubleshooting_guide",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "mcp_server.py:577-579 — dispatches to documentation_manager.get_troubleshooting_guide(issue_type); documentation_manager.py:401-414 — iterates self.documentation_db and matches on trouble['title'] or trouble['content']; if documentation_db is empty (scrape failed), returns [].",
+    "diagnosis": "get_troubleshooting_guide silently returns an empty list when the runtime docs scrape of kubernetes.io has not completed or failed, providing no guidance to the caller.",
+    "fix_class": "implement",
+    "proposed_fix": "1. Bundle a minimal static troubleshooting guide dict keyed by common issue types (pod-crash, image-pull, network, storage, rbac) in src/data/troubleshooting_guides.json.\n2. In get_troubleshooting_guide(), if the scraped DB yields no results, fall back to the static guides with a 'source: static' flag.\n3. Return {\"error\": \"no_guides_found\", \"issue_type\": issue_type} instead of [] when both sources are empty.",
+    "test_plan": "Unit-test with documentation_db empty and assert static fallback guides are returned for known issue types. Test with an unknown issue_type and assert a structured error dict is returned instead of []."
+  },
+  {
+    "component_id": "status.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "status.sh:1 — no shebang guard; status.sh:1-12 — no `set -euo pipefail`; status.sh:4 — hardcodes `echo '✓ Health: OK (Docker healthcheck passed)'` unconditionally even when the container health state is not checked; the actual Docker health status is never queried.",
+    "diagnosis": "status.sh hardcodes a 'Health: OK' success message regardless of actual container health, providing false assurance, and lacks error-exit discipline.",
+    "fix_class": "rewrite",
+    "proposed_fix": "#!/usr/bin/env bash\nset -euo pipefail\nif docker ps --filter 'name=k8s-mcp-server' --filter 'status=running' --format '{{.Names}}' | grep -q k8s-mcp-server; then\n  health=$(docker inspect --format '{{.State.Health.Status}}' k8s-mcp-server 2>/dev/null || echo 'none')\n  echo \"Container: Running | Health: ${health}\"\nelse\n  echo 'Container: Not running'; exit 1\nfi",
+    "test_plan": "Run status.sh with a stopped container and confirm exit code 1. Run with a running but unhealthy container (docker inspect returns 'unhealthy') and confirm that status is printed accurately."
+  },
+  {
+    "component_id": "enhanced:kubectl_exec",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py — no Tool named 'kubectl_exec' appears anywhere in the file (grep confirms only 'kubectl_generic' at line 309-323); mcp_server.py — no import of enhanced_tools (grep returns no output); the entire enhanced_tools.py module is unreachable from the running server.",
+    "diagnosis": "kubectl_exec does not exist as a schema in enhanced_tools.py, and even if it did, the module is not imported by mcp_server.py so no enhanced tool schema is ever registered.",
+    "fix_class": "implement",
+    "proposed_fix": "1. Add Tool('kubectl_exec', ...) schema to enhanced_tools.py with fields: pod_name (required), namespace, container, command (required), stdin (bool).\n2. Implement the handler in kubectl_manager.py using subprocess(['kubectl','exec','-n',ns,pod,'--',*cmd]) with timeout and output size limits.\n3. Wire up: in mcp_server.py add `from enhanced_tools import get_enhanced_kubectl_tools` and include in ListToolsResult; add elif name=='kubectl_exec' dispatch branch.\n4. In non_destructive_mode, block if command contains write-side-effects.",
+    "test_plan": "Unit-test that kubectl_exec is present in the ListToolsResult. Integration-test against a real pod running 'echo hello' and verify stdout is returned. Test that non_destructive_mode blocks commands like 'rm -rf'."
+  },
+  {
+    "component_id": "mcp-tool:find_similar_issues",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "mcp_server.py:593-596 — dispatches to github_issues_manager.find_similar_issues(); github_issues_manager.py:488-489 — builds SQL with string interpolation: `f\"title LIKE '%{term}%' OR body LIKE '%{term}%'\"` for each key_term without parameterization; this is executed directly via aiosqlite.connect().execute(sql, ...) at line 500.",
+    "diagnosis": "find_similar_issues constructs SQL by embedding user-derived terms directly into the query string, enabling SQL injection via crafted error_message inputs.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the f-string SQL construction with parameterized queries:\nconditions = ' OR '.join(['(title LIKE ? OR body LIKE ?)'] * len(key_terms))\nparams = [val for t in key_terms for val in (f'%{t}%', f'%{t}%')]\nparams.append(max_results)\nsql = f'SELECT ... FROM github_issues WHERE ({conditions}) AND state = ? ORDER BY ... LIMIT ?'\nparams.insert(-1, 'closed')\nThen execute(sql, params).",
+    "test_plan": "Pass error_message=\"' OR '1'='1\" and verify no unexpected rows are returned and no SQLite error is raised. Add a test with a normal error message and verify results are returned correctly."
+  },
+  {
+    "component_id": "start.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "start.sh:8 — uses `set -e` only (no `-u` or `-o pipefail`); start.sh:97-103 — GITHUB_TOKEN printed directly into docker run ENV_ARGS: `ENV_ARGS=\"$ENV_ARGS -e GITHUB_TOKEN=$GITHUB_TOKEN\"` — the token value is visible in `docker inspect` and `ps aux` output on the host; start.sh:193-231 — the fallback jq-not-found branch at line 233 replaces the entire VS Code settings.json with only the MCP config, silently destroying user settings.",
+    "diagnosis": "start.sh leaks the GITHUB_TOKEN into Docker environment args visible in process listings, and unconditionally overwrites VS Code user settings when jq is absent.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Add `set -euo pipefail` at line 8.\n2. Pass token via --env-file: write token to a temp file with `mktemp`, chmod 600, use `--env-file` flag, then `rm` the temp file after docker run.\n3. In the jq-absent branch: refuse to proceed and print an error 'jq is required for safe settings merge; install with: brew install jq' instead of overwriting settings.",
+    "test_plan": "Run start.sh with a dummy GITHUB_TOKEN; verify `docker inspect k8s-mcp-server` does not expose the token value in Env[]. Run without jq and verify the script exits non-zero and settings.json is untouched."
+  }
+]

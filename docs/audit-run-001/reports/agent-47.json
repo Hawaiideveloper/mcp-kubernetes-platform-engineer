@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "helm_manager.py:58 — `logger.info(f\"Running helm command: {' '.join(cmd)}\")`; combined with helm_manager.py:296-301 where `--password` arg is appended to `args` and `cmd = ['helm'] + args`",
+    "diagnosis": "Repository passwords passed to `add_helm_repository` are logged in plaintext via the INFO-level log statement that reconstructs the full command string.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Scrub credential arguments before logging. After building `cmd`, create a sanitized copy: `log_cmd = [('***' if args[i-1] in ('--password', '--username') else a) for i, a in enumerate(cmd)]` and use `log_cmd` in the logger call only. Alternatively, log only the subcommand name (e.g., `helm repo add <name>`) without arguments.",
+    "test_plan": "Unit-test `_run_helm(['repo', 'add', 'myrepo', 'https://...', '--username', 'u', '--password', 'secret'])` with a captured log handler and assert the string 'secret' does not appear in any log record."
+  },
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "helm_manager.py:125 — `repo_result = await self.add_helm_repository(repository, repository)` inside `install_helm_chart`",
+    "diagnosis": "`install_helm_chart` passes the `repository` URL as both the repo `name` and `url` arguments, which would register a repo named after its full URL (e.g., `https://charts.helm.sh/stable`) — an invalid Helm repo name that will always fail.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Either require a separate `repository_name` parameter in `install_helm_chart`, or derive a safe slug from the URL: `repo_name = re.sub(r'[^a-z0-9]', '-', url.rstrip('/').rsplit('/', 1)[-1].lower())`. Pass that slug as `name` to `add_helm_repository`.",
+    "test_plan": "Call `install_helm_chart('rel', 'stable/nginx', repository='https://charts.helm.sh/stable')` with a mock `_run_helm` and assert the `helm repo add` call receives a valid name (no slashes/colons), not the raw URL."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "documentation_manager.py:40-49 — `async def initialize(self): ... await self._build_documentation_index()` which makes live HTTP requests to `kubernetes.io` at server startup",
+    "diagnosis": "`DocumentationManager.initialize()` performs uncached live web-scraping of kubernetes.io at every server start; any network failure, rate-limit, or timeout causes the entire MCP server startup to raise and abort, and the scraped data is only in-memory (lost on restart).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Wrap `_build_documentation_index` in a try/except and degrade gracefully (log warning, leave `documentation_db` empty) rather than raising. Add a file-based or SQLite cache keyed on URL hash with a configurable TTL (e.g., 24 h) so restarts reuse persisted content. Remove the `raise` at line 49.",
+    "test_plan": "Mock `aiohttp.ClientSession.get` to raise `aiohttp.ClientError`; assert `initialize()` completes without exception, `documentation_db` is empty, and a warning is logged. Also test that a second call within TTL reads from cache and issues zero HTTP requests."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "low",
+    "evidence": "documentation_manager.py:280-326 — `async def _load_best_practices(self)` sets `self.best_practices` to a hardcoded dict of static strings with no external source",
+    "diagnosis": "`_load_best_practices` is declared `async` and appears to load data, but it only assigns a hardcoded in-memory dict; the `async` keyword is misleading and the data is never refreshed.",
+    "fix_class": "document",
+    "proposed_fix": "Either rename to `_init_best_practices` and make it synchronous (removing the `async` keyword), or replace with an actual load from a bundled YAML/JSON file (`best_practices.yaml`) so content can be updated without code changes. Add a comment clarifying this is static seed data.",
+    "test_plan": "Assert `_load_best_practices` is idempotent (calling twice does not duplicate entries), and verify all six category keys are present with at least one item each."
+  },
+  {
+    "component_id": "mcp-tool:search_documentation",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "mcp_server.py:560-563 — handler calls `self.documentation_manager.search_documentation(...)`; documentation_manager.py:328-370 — method iterates `self.documentation_db` which is populated only by live HTTP scraping at startup",
+    "diagnosis": "`search_documentation` searches an in-memory dict populated by scraping kubernetes.io at startup; if startup scraping fails or has not yet completed, `documentation_db` is empty and the tool silently returns an empty list rather than an error.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In `search_documentation`, check `if not self.documentation_db` and return a structured error response `{'error': 'Documentation index not yet built', 'fallback': self.best_practices}` instead of an empty list. Also surface a readiness flag via a `is_ready()` method that mcp_server can check before dispatching.",
+    "test_plan": "Call `search_documentation('pod')` on a `DocumentationManager` whose `documentation_db` is empty; assert the result contains an `error` key and the best_practices fallback is included."
+  },
+  {
+    "component_id": "setup-vscode-k8s.sh",
+    "kind": "shell",
+    "severity": "critical",
+    "evidence": "setup-vscode-k8s.sh:77,89 — hardcoded path `/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json` (missing the `@` separator between user and domain in the home directory path)",
+    "diagnosis": "The embedded Python heredoc uses a hardcoded, malformed absolute path (`hawaiidevelopergmail.com` instead of `hawaiideveloper`) which will raise `FileNotFoundError` on any machine including the author's, making the script completely non-functional.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace both hardcoded paths with the shell variable `$SETTINGS_FILE` that is correctly set on line 9 using `$HOME`. Pass `$SETTINGS_FILE` into the Python heredoc as an environment variable or argument: `python3 -c \"import os,json; ...\" \"$SETTINGS_FILE\"`, avoiding heredoc variable quoting issues.",
+    "test_plan": "Run `bash -n setup-vscode-k8s.sh` to check syntax; then run with `SETTINGS_FILE=/tmp/test_settings.json` (pre-populated with `{}`) and verify the file is updated with the MCP config keys and the original content is preserved."
+  },
+  {
+    "component_id": "stop.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "stop.sh:1-5 — no `set -euo pipefail`; stops `docker stop k8s-mcp-server` but server is described throughout docs as running via `kubectl` / stdio, not as a named Docker container",
+    "diagnosis": "`stop.sh` targets a Docker container named `k8s-mcp-server` with no `set -euo pipefail`, but the server is a stdio MCP process launched by an MCP host (not a standalone Docker container), so this script is a no-op in the documented deployment model.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` at line 1. Rewrite to kill the actual process: `pkill -f 'python.*mcp_server.py' || true`. If Docker is a supported deployment mode, document it explicitly and add a mode flag (`--docker` vs `--process`). Remove the misleading `|| true` silencer on the `docker rm` which hides real errors.",
+    "test_plan": "Verify `bash -n stop.sh` passes. Run in a environment where `python mcp_server.py` is backgrounded; assert the process is no longer running after `stop.sh` completes. Confirm script exits non-zero when invoked with `set -e` and the target does not exist (i.e., the `|| true` is intentional and documented)."
+  },
+  {
+    "component_id": "behavior:analyzer_pvc",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No PVCAnalyzer class exists anywhere in src/; closest existing code is k8s_manager.py (not read in this kit) which handles generic cluster info",
+    "diagnosis": "PVCAnalyzer for pending/mount-failed/capacity states is a missing feature that needs a concrete design before implementation.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: `PVCFinding(name, namespace, phase, capacity_bytes, used_bytes, storage_class, bound_pv, events: List[str], diagnosis: str, remediation: str)`. Interface: `async def analyze_pvc(name: str, namespace: str) -> PVCFinding`. Dependencies: `kubernetes.client.CoreV1Api.read_namespaced_persistent_volume_claim`, `list_namespaced_event` filtered by `involvedObject.name`. Logic branches: (1) phase==Pending -> inspect StorageClass provisioner, check PV availability, surface top event; (2) mount-failed -> parse pod events for `FailedMount`, extract node and volume plugin error; (3) capacity -> compare `status.capacity` vs metrics-server usage, flag >80% threshold. Edge cases: RWO PVC bound to unavailable node, dynamic provisioner timeout, CSI driver not installed.",
+    "test_plan": "Unit-test each branch with mocked CoreV1Api responses: assert Pending returns a diagnosis mentioning the provisioner name; assert mount-failed surfaces the node name from events; assert capacity >80% sets a warning flag. Integration-test against a kind cluster with a PVC in Pending state."
+  },
+  {
+    "component_id": "tests/production/test_security_compliance.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_security_compliance.py:127-130 — `security_manager.resolve_privileged_pod_violation = AsyncMock(return_value=mock_resolution)` then immediately `await security_manager.resolve_privileged_pod_violation(security_context)`; identical pattern at lines 255, 377, 505, 651, 763, 898",
+    "diagnosis": "Every test installs its own AsyncMock as the method under test and then calls that mock — the tests assert only that the mock returns what it was told to return, providing zero coverage of real SecurityManager behavior.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the `security_manager.<method> = AsyncMock(...)` assignment lines. Implement the actual methods in SecurityManager (calling the kubernetes client), then mock only the underlying k8s API calls (e.g., `manager.k8s_client.list_namespaced_pod = AsyncMock(...)`). Assertions should then validate real logic: field extraction, severity mapping, remediation YAML generation.",
+    "test_plan": "After rewrite, run the test suite with coverage; assert that `SecurityManager.resolve_privileged_pod_violation` (the real method, not a mock) is covered. Confirm tests fail when the real method is changed to return incorrect severity values."
+  },
+  {
+    "component_id": "k8s/rbac.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/rbac.yaml:20 — `resources: [\"nodes\", \"namespaces\", \"pods\", \"services\", \"endpoints\", \"persistentvolumes\", \"persistentvolumeclaims\", \"configmaps\", \"secrets\", \"events\"]` all granted `get, list, watch` in a single ClusterRole",
+    "diagnosis": "The ClusterRole grants read access to `secrets` cluster-wide; for an MCP diagnostic server that only needs to read pod/node/event data, this grants unnecessary access to all secret values in every namespace, violating least-privilege.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove `secrets` from the broad `get/list/watch` ClusterRole rule. Add a separate, namespace-scoped Role in `mcp-kubernetes` only if the server needs its own operational secrets (e.g., kubeconfig). If secret scanning is required, scope it to a dedicated audit Role with `list` only (no `get`) and bind it to a separate ServiceAccount used only for that scan operation.",
+    "test_plan": "Apply the modified `rbac.yaml` to a test cluster; run `kubectl auth can-i get secrets --as=system:serviceaccount:mcp-kubernetes:kubernetes-mcp-server-sa -n kube-system` and confirm it returns `no`. Verify existing diagnostic tools still function by running the MCP server's `diagnose_cluster_health` tool against a live cluster."
+  }
+]

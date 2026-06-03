@@ -1,0 +1,55 @@
+{
+  "agent_id": 6,
+  "components": [
+    {
+      "id": "behavior:analyzer_ingress",
+      "kind": "behavior",
+      "focus": "IngressAnalyzer: no backend, TLS expiry, host conflict"
+    },
+    {
+      "id": "enhanced:kubectl_rollout",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "enhanced:kubectl_apply",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "tests/production/test_cluster_management.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "enhanced:kubectl_scale",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "tests/conftest.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:analyzer_pvc",
+      "kind": "behavior",
+      "focus": "PVCAnalyzer: pending, mount-failed, capacity"
+    },
+    {
+      "id": "behavior:analyzer_pod",
+      "kind": "behavior",
+      "focus": "PodAnalyzer: ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures"
+    },
+    {
+      "id": "tests/production/test_pod_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "mcp-tool:analyze_logs",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

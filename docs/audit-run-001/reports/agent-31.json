@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:get_troubleshooting_guide",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:577-580 — `result = await self.documentation_manager.get_troubleshooting_guide(issue_type=arguments[\"issue_type\"])` → src/documentation_manager.py:401-414 — iterates `self.documentation_db` which is populated by live HTTP scrapes of kubernetes.io at startup",
+    "diagnosis": "The handler is wired and calls a real method, but the method returns data only if the live kubernetes.io scrape at startup succeeded; if network is unavailable the db is empty and the tool silently returns an empty list with no error indication to the caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a fallback: if `self.documentation_db` is empty, raise a descriptive MCPError or return a structured error dict instead of []. Bundle a minimal static offline index of the most-common troubleshooting pages (crash loop, OOMKilled, ImagePullBackOff) as a JSON file in the package. Load the static index first, then overlay live scrape results.",
+    "test_plan": "Unit-test get_troubleshooting_guide with an empty documentation_db and assert a non-empty error response. Integration-test with the static bundle present but no network and assert at least 3 guides are returned for 'CrashLoopBackOff'."
+  },
+  {
+    "component_id": "src/config.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/config.py:59-61 — `admission_controllers` default list includes `\"PodSecurityPolicy\"` which was removed in Kubernetes 1.25",
+    "diagnosis": "The SecurityConfig default hardcodes PodSecurityPolicy, a controller removed from Kubernetes core in v1.25, making the default configuration incorrect for any cluster running 1.25+.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove `\"PodSecurityPolicy\"` from the default list (line 60) and replace with `\"NodeRestriction\"`. Add a comment noting the list is for documentation/reference only and is not enforced at runtime by this server. Consider reading the list from an env var `K8S_ADMISSION_CONTROLLERS` so operators can override it.",
+    "test_plan": "Unit-test that `SecurityConfig()` does not contain 'PodSecurityPolicy' in admission_controllers. Add a test that instantiating with K8S_ADMISSION_CONTROLLERS env set produces the correct list."
+  },
+  {
+    "component_id": "mcp-tool:search_documentation",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:560-563 — dispatches to `self.documentation_manager.search_documentation(...)` → src/documentation_manager.py:328-374 — returns `[]` when `self.documentation_db` is empty (network failure at init)",
+    "diagnosis": "search_documentation silently returns an empty list whenever the startup HTTP scrape of kubernetes.io failed, giving callers no signal that results are incomplete rather than genuinely absent.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Track an `_init_success: bool` flag in DocumentationManager. In search_documentation, if documentation_db is empty and _init_success is False, return `{\"error\": \"documentation index unavailable\", \"reason\": \"network scrape failed at startup\"}` rather than []. Introduce a static fallback index (same as get_troubleshooting_guide fix).",
+    "test_plan": "Mock aiohttp to raise ConnectionError during initialize(); call search_documentation('pod'); assert result contains 'error' key. Confirm existing unit tests still pass when the db is populated."
+  },
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design task — no existing RBAC ServiceAccount separation found anywhere in src/ or k8s/",
+    "diagnosis": "No RBAC split exists; a single implicit identity is used for all operations, violating least-privilege.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: two K8s ServiceAccounts — `mcp-k8s-reader` (ClusterRole: get/list/watch on all core resources) and `mcp-k8s-writer` (Role in target namespace: create/patch/delete on pods, deployments, configmaps). Interface: KubernetesManager accepts `role: Literal['read', 'write']` and selects the matching kubeconfig/token path from env vars `K8S_READ_TOKEN_PATH` and `K8S_WRITE_TOKEN_PATH`. All diagnostic/monitoring managers use role='read'; execute_remediation uses role='write'. Edge cases: write token absent → execute_remediation raises PermissionError with clear message; in-cluster detection uses projected service account volumes.",
+    "test_plan": "Unit-test that KubernetesManager(role='read') picks K8S_READ_TOKEN_PATH and KubernetesManager(role='write') picks K8S_WRITE_TOKEN_PATH. Integration-test that execute_remediation with only read token raises PermissionError."
+  },
+  {
+    "component_id": "behavior:nim_backend_integration",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design task — no LLM backend interface exists anywhere in src/",
+    "diagnosis": "No pluggable LLM backend interface exists; findings currently contain no AI-enriched summaries, and there is no hook to add them.",
+    "fix_class": "design",
+    "proposed_fix": "Define abstract class `LLMBackend(ABC)` with method `async def enrich(finding: dict) -> dict`. Implement `NIMBackend(LLMBackend)` that POSTs to `NIM_BASE_URL/v1/chat/completions` with model from env `NIM_MODEL` (default `meta/llama-3.1-8b-instruct`). Cache key = `sha256(json.dumps(finding, sort_keys=True))` stored in a simple dict with TTL=3600s. Factory function `get_backend()` reads env var `LLM_BACKEND` (nim|openai|none, default none). Inject backend into DiagnosticsManager; call `await backend.enrich(result)` before returning. Edge cases: timeout > 5 s returns original finding unmodified; NIM 429 retries once after 1 s.",
+    "test_plan": "Unit-test NIMBackend with a mock HTTP server returning a known response; verify cache hit skips HTTP call on second identical finding-hash. Test backend=none returns finding unchanged."
+  },
+  {
+    "component_id": "mcp-tool:search_github_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/github_issues_manager.py:56 — `self.github_token = None  # Add GitHub token for higher rate limits`; no `os.getenv('GITHUB_TOKEN')` call anywhere in the file; start.sh:98 passes `-e GITHUB_TOKEN=$GITHUB_TOKEN` to docker run, but the manager never reads it",
+    "diagnosis": "GITHUB_TOKEN is passed to the container but GitHubIssuesManager never reads it from the environment, so all GitHub API calls run unauthenticated and hit the 60 req/hr rate limit, causing the initial fetch of 17 repos to be rate-limited on first startup.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In GitHubIssuesManager.__init__ (line 56) replace `self.github_token = None` with `self.github_token = os.getenv('GITHUB_TOKEN')`. No other changes needed; headers construction at line 154 already branches on `if self.github_token`. Add import os at top of file if not already present (it is imported conditionally in __init__ at line 29).",
+    "test_plan": "Set GITHUB_TOKEN=test-token in env; instantiate GitHubIssuesManager; assert self.github_token == 'test-token'. Mock aiohttp session and verify Authorization header is present in the request."
+  },
+  {
+    "component_id": "behavior:probe_tuning_remediation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design task — execute_remediation exists in src/k8s_manager.py but no probe-specific remediation path is implemented",
+    "diagnosis": "No deterministic remediation exists for connection-refused errors caused by misconfigured liveness/readiness probes at startup.",
+    "fix_class": "design",
+    "proposed_fix": "Implement `ProbeRemediator` in a new `remediators/probe.py`. Interface: `async def remediate(pod_name, namespace, dry_run) -> RemediationResult`. Logic: (1) kubectl describe pod to extract current probe settings and last failure message matching 'connection refused'; (2) if initialDelaySeconds < 30, compute suggested value = max(observed_startup_latency_p99 * 1.5, 30); (3) patch deployment spec via strategic merge patch `{spec:{template:{spec:{containers:[{name:X, readinessProbe:{initialDelaySeconds:Y}, livenessProbe:{initialDelaySeconds:Z}}]}}}}`. Data model: `RemediationResult(action, original_value, new_value, applied: bool, dry_run: bool)`. Edge cases: pod not owned by deployment → return unsupported; already healthy → no-op with explanation.",
+    "test_plan": "Unit-test with a mock pod description containing 'connection refused' and initialDelaySeconds=5; assert suggested patch sets initialDelaySeconds >= 30. Test dry_run=True produces correct patch JSON without calling kubectl apply."
+  },
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:43-66 — kubectl_describe Tool schema defined; grep of src/mcp_server.py for 'enhanced_tools' returns no output (confirmed via grep); src/mcp_server.py:608-610 — unknown tool names fall through to 'Unknown tool: {name}' error response",
+    "diagnosis": "kubectl_describe is defined as a Tool schema in enhanced_tools.py but enhanced_tools is never imported in mcp_server.py, so the schema is never registered and the handler never runs — the tool is entirely dead.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py _register_handlers, import and extend the tools list: `from enhanced_tools import get_enhanced_kubectl_tools; ...tools=[ ...existing..., *get_enhanced_kubectl_tools()]`. Add dispatch cases in handle_call_tool for each kubectl tool name routing to self.kubectl_manager methods. Alternatively, if kubectl_manager already supports these, register them from mcp_server.py directly without going through enhanced_tools.",
+    "test_plan": "Call list_tools() and assert 'kubectl_describe' appears in the returned tool names. Call kubectl_describe with a mock kubectl_manager and assert the result is not the 'Unknown tool' error."
+  },
+  {
+    "component_id": "start.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "start.sh:6 — `set -e` only; line 98 — `ENV_ARGS=\"$ENV_ARGS -e GITHUB_TOKEN=$GITHUB_TOKEN\"` passes token as unquoted shell argument visible in docker inspect and process list",
+    "diagnosis": "start.sh lacks `set -u` and `set -o pipefail` allowing unbound variable errors and pipeline failures to go silently undetected; the GITHUB_TOKEN is interpolated directly into a shell argument, leaking its value in the docker run process list visible via `ps aux` or `docker inspect`.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 6: change to `set -euo pipefail`. Line 97-99: replace inline env arg with `--env-file` approach — write token to a temp file `TMPENV=$(mktemp); echo \"GITHUB_TOKEN=$GITHUB_TOKEN\" > $TMPENV; trap 'rm -f $TMPENV' EXIT` and pass `--env-file $TMPENV` to docker run instead of `-e GITHUB_TOKEN=...`. This prevents the token appearing in the process args.",
+    "test_plan": "Run start.sh with GITHUB_TOKEN=secret; after docker run, execute `docker inspect k8s-mcp-server | grep -i token` and assert it does not reveal the token value. Test with an undefined variable to confirm set -u causes immediate exit."
+  },
+  {
+    "component_id": "behavior:five_min_watchdog",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design task — no watchdog loop or health-gate implementation found in any src/ file",
+    "diagnosis": "No watchdog exists to confirm a pod healed after remediation; the auto-remediator has no way to know if a fix actually worked.",
+    "fix_class": "design",
+    "proposed_fix": "Implement `Watchdog` class with method `async def watch_until_healthy(pod_name, namespace, timeout=300) -> WatchdogResult`. Logic: poll every 10 s up to timeout; at each tick: (1) kubectl get pod — check readyCondition=True; (2) kubectl get events --field-selector involvedObject.name=<pod> --since=<remedy_time> — assert no new Warning events. WatchdogResult: `{healed: bool, elapsed_seconds: int, final_state: str, new_warnings: list[str]}`. Healing criterion: pod.status.containerStatuses[*].ready == True AND zero new Warning-level events since the remediation timestamp. Edge cases: pod deleted during watch → healed=False, reason='deleted'; timeout hit before ready → healed=False with partial state.",
+    "test_plan": "Unit-test watch_until_healthy with a mock that flips ready=True at tick 3; assert healed=True and elapsed reflects ~30s. Test timeout path: mock never flips ready; assert healed=False returned at 300s."
+  }
+]

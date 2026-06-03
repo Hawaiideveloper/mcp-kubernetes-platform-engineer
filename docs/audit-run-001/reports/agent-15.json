@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:analyzer_base",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No file named analyzer_base.py exists anywhere in src/; grep for 'BaseAnalyzer' returns zero hits across the entire repo.",
+    "diagnosis": "The BaseAnalyzer abstract class does not exist; every manager returns ad-hoc dicts with no shared contract, making a future auto-remediator impossible to plug in uniformly.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzer_base.py:\n  from abc import ABC, abstractmethod\n  from dataclasses import dataclass\n  @dataclass\n  class Finding:\n      severity: str  # critical|high|medium|low\n      title: str\n      evidence: dict\n      suggested_fix: str\n  class BaseAnalyzer(ABC):\n      @abstractmethod\n      async def analyze(self, k8s_state: dict) -> list[Finding]: ...",
+    "test_plan": "Unit-test that each concrete manager subclass raises TypeError if analyze() is not implemented; integration test that analyze() returns a list[Finding] with all required fields populated for a mock k8s_state."
+  },
+  {
+    "component_id": "mcp-tool:get_issue_statistics",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:605-606 dispatches to github_issues_manager.get_issue_statistics(); src/github_issues_manager.py:573-618 queries a real aiosqlite DB seeded by _fetch_recent_issues(). However github_issues_manager.py:56 sets self.github_token = None, so without a token all GitHub API calls are rate-limited to 60 req/hr and typically fail silently (line 267: 'self.logger.warning(f\"Rate limited for {repo}\")'). On a cold start the DB is empty and the tool returns all-zero stats with no indication of staleness.",
+    "diagnosis": "get_issue_statistics returns real SQL aggregates but those aggregates are over an empty or stale database whenever no GitHub token is configured, giving the caller misleading zero-counts with no staleness warning.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a 'last_fetched_at' timestamp column to the DB; in get_issue_statistics() include it in the returned dict. Add a 'data_ready' boolean that is False when total_issues==0. Surface a 'token_configured' field so callers can tell why data may be absent.\n  stats['data_ready'] = stats['total_issues'] > 0\n  stats['token_configured'] = bool(self.github_token)\n  stats['last_fetched_at'] = <query max(indexed_at)>",
+    "test_plan": "Test with empty DB: assert data_ready==False and total_issues==0. Test with populated DB: assert data_ready==True and by_state/by_severity dicts are non-empty. Test that token_configured reflects the presence or absence of self.github_token."
+  },
+  {
+    "component_id": "enhanced:kubectl_logs",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:130-159 defines the kubectl_logs Tool schema. grep of src/mcp_server.py for 'enhanced_tools' returns zero hits — the module is never imported. The handle_call_tool dispatcher (mcp_server.py:483-621) has no case for 'kubectl_logs'. The tool is advertised to MCP clients via handle_list_tools only if wired up, which it is not.",
+    "diagnosis": "enhanced_tools.py is a dead module: its Tool schemas are never returned to MCP clients and calling any of its tools would fall through to the 'Unknown tool' branch at mcp_server.py:608.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py:\n  from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools\n  # In handle_list_tools, extend the tools list:\n  tools=[ ...existing... ] + get_enhanced_kubectl_tools() + get_enhanced_helm_tools()\n  # In handle_call_tool, add dispatch branches:\n  elif name == 'kubectl_logs':\n      result = await self.kubectl_manager.kubectl_logs(**arguments)",
+    "test_plan": "Call handle_list_tools and assert 'kubectl_logs' is present. Call handle_call_tool with name='kubectl_logs' and a valid pod_name; assert result is not the 'Unknown tool' error string and delegates to kubectl_manager.kubectl_logs."
+  },
+  {
+    "component_id": "src/mcp_server.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "mcp_server.py:483 — handle_call_tool catches all exceptions and returns them as plain text (line 618-620: 'return CallToolResult(content=[TextContent(type=\"text\", text=f\"Error: {str(e)}\")])'). Line 484: 'arguments: Optional[Dict[str, Any]]' — if a required field like pod_name is absent, line 502 raises KeyError which is swallowed as a generic 'Error: pod_name'. Lines 59-63 import os inside __init__ instead of at module top. No validation of arguments before passing to managers.",
+    "diagnosis": "The single bare except clause hides all failures as opaque text strings, making programmatic error handling by MCP clients impossible, and the absence of argument validation means missing required fields produce uninformative KeyError messages.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Move 'import os' to module top. Add a validation helper:\n  def _require(args, *keys):\n      missing = [k for k in keys if k not in (args or {})]\n      if missing: raise ValueError(f'Missing required args: {missing}')\nCall it before each dispatch (e.g., _require(arguments, 'pod_name')). Return structured errors:\n  return CallToolResult(isError=True, content=[TextContent(type='text', text=json.dumps({'error': str(e), 'tool': name}))])",
+    "test_plan": "Call handle_call_tool('troubleshoot_pod_issues', {}) — assert isError=True and message mentions 'pod_name'. Call with a valid pod_name against a mocked diagnostics_manager — assert successful result. Verify no bare 'import os' inside __init__."
+  },
+  {
+    "component_id": "src/github_issues_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "github_issues_manager.py:488 builds a raw SQL fragment by interpolating key_terms directly into the query string: 'f\"title LIKE \\'%{term}%\\' OR body LIKE \\'%{term}%\\'\"'. These terms come from user-supplied error_message via _extract_key_terms (line 518). Line 490 executes this raw string with aiosqlite. Additionally, lines 68-72 in initialize() call asyncio.create_task() without storing a reference in a way that allows cleanup on error, and line 72 stores it in self.update_task but the shutdown path at line 225 (stop()) is never called by mcp_server.py.",
+    "diagnosis": "find_similar_issues constructs SQL with unsanitized user input, exposing a SQL injection vector; the background asyncio task started in initialize() leaks because mcp_server.py never calls stop() on shutdown.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the interpolated SQL fragment with parameterized queries:\n  placeholders = ' OR '.join(['(title LIKE ? OR body LIKE ?)' for _ in key_terms])\n  params = [v for t in key_terms for v in (f'%{t}%', f'%{t}%')]\n  sql = f'SELECT ... WHERE ({placeholders}) ...' \n  cursor.execute(sql, params + [max_results])\nAdd cleanup in mcp_server.py start() finally block: await self.github_issues_manager.stop()",
+    "test_plan": "Pass error_message=\"' OR '1'='1\" and assert no rows are returned that shouldn't match. Assert the background task is cancelled when stop() is called. Integration test: search for a real term inserted into test DB and confirm expected row is returned."
+  },
+  {
+    "component_id": "CHANGELOG.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "CHANGELOG.md:103-104 claims '390 Total Tests' and 'Production-ready functional unit test suite covering all 45,720+ Kubernetes GitHub issues'. Actual test count across all test files is 55 (grep -c 'def test_' across all .py files). CHANGELOG.md:275-284 shows curl responses like '{\"status\":\"secure\",\"vulnerabilities\":\"None\"}' implying a live HTTP REST API; the current server is stdio-only (mcp_server.py:640: 'async with stdio_server()'). CHANGELOG.md:379 claims '99.9% uptime since deployment' — no uptime tracking code exists in the repo.",
+    "diagnosis": "The CHANGELOG makes multiple materially false production-readiness claims: test count is 7x overclaimed (390 vs 55), a REST API is described that does not exist in the codebase, and operational metrics (uptime, response time) are invented.",
+    "fix_class": "document",
+    "proposed_fix": "Replace overclaimed sections with accurate statements:\n  - Tests: '55 test functions across 5 files (unit, production, integration stubs)'\n  - Server: 'stdio MCP transport only; no HTTP REST API'\n  - Remove all 'uptime', 'response time', and 'zero critical issues' operational claims\n  - Mark 'Phase 3: Production Readiness' as IN PROGRESS, not COMPLETE",
+    "test_plan": "Run 'pytest --collect-only -q' and confirm count matches what the changelog states. CI lint step that greps CHANGELOG for absolute claims like '99.9%' and fails the build if present without a linked evidence artifact."
+  },
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:9 states '390 Total Tests'. Actual grep count is 55. Line 14 claims '78 Dependencies' — requirements-test.txt does not exist in the repo (find returns nothing). Line 30 states 'conftest.py (446 lines)' — actual file is at tests/conftest.py; wc -l shows it to be present but the Integration, Performance, and Security test directories listed on lines 35-36 do not exist under tests/ (only 'unit' and 'production' subdirs exist). Line 155 states 'Status: COMPLETE - Production-Ready Test Suite Successfully Implemented'.",
+    "diagnosis": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md fabricates test counts, dependency counts, directory structure, and completion status that are contradicted by the actual repository contents.",
+    "fix_class": "document",
+    "proposed_fix": "Rewrite the summary to reflect reality:\n  - Total tests: 55 (counted via pytest --collect-only)\n  - Test categories present: unit (21), production (35); integration/performance/security missing\n  - requirements-test.txt: not present\n  - Status: PARTIAL — unit and production stubs exist; integration, performance, security suites are unimplemented\n  Remove all coverage percentage and 45,720+ issue coverage claims.",
+    "test_plan": "Add a CI job that runs 'pytest --collect-only -q 2>&1 | tail -1' and writes the count to a badge file; gate merges on that count matching a documented minimum."
+  },
+  {
+    "component_id": "behavior:dpo_pair_extraction",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No file, class, or function named 'dpo', 'dpo_pair', or 'DPO' exists anywhere in the repo (grep returns zero hits). The concept of DPO (Direct Preference Optimization) training pair generation is entirely absent from the codebase.",
+    "diagnosis": "DPO pair extraction behavior is undesigned and unimplemented; no data model, interface, or storage layer exists for it.",
+    "fix_class": "design",
+    "proposed_fix": "Data model:\n  @dataclass\n  class DPOPair:\n      prompt: str          # the k8s incident description\n      chosen: str          # accepted remediation action + evidence\n      rejected: list[str]  # alternative actions that were not taken\n      metadata: dict       # issue_id, severity, component, timestamp\nInterface: async def extract_dpo_pair(issue: GitHubIssue, chosen_action: str, rejected_actions: list[str]) -> DPOPair\nStorage: append to JSONL file or insert into a dpo_pairs SQLite table alongside github_issues.db\nEdge cases: issue body is None, chosen_action duplicated in rejected list, non-English body text.",
+    "test_plan": "Unit test: given a mock issue with body text, chosen='restart pod', rejected=['delete pod', 'ignore'], assert returned DPOPair has prompt derived from title+body and chosen/rejected correctly assigned. Test edge cases: None body, empty rejected list."
+  },
+  {
+    "component_id": "mcp-tool:search_documentation",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:560-563 dispatches to documentation_manager.search_documentation(). src/documentation_manager.py:51-88 builds documentation_db by making live HTTP GET requests to kubernetes.io during initialize(). If network is unavailable or rate-limited, line 87 logs the error and continues, leaving documentation_db empty. search_documentation at line 336 then iterates over an empty dict and silently returns []. No cache persistence to disk; every server restart re-crawls from scratch. The tool description claims 'Search Kubernetes official documentation' but may silently return nothing.",
+    "diagnosis": "search_documentation silently returns empty results when the live crawl fails at startup, with no indication to the caller that the documentation index is empty; the index is also never persisted so restarts always re-crawl.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Persist documentation_db to a JSON/SQLite file on disk after each successful crawl and load it on startup before crawling:\n  if os.path.exists(cache_path): load_from_cache()\n  else: await _build_documentation_index(); save_to_cache()\nReturn a metadata envelope from search_documentation:\n  {'results': [...], 'index_size': len(self.documentation_db), 'index_built_at': ...}\nCallers can detect index_size==0 and warn the user.",
+    "test_plan": "Mock aiohttp to raise an exception; call initialize() and then search_documentation('pod'); assert result metadata shows index_size==0 rather than silent empty list. After a successful mock crawl, assert cache file is written and reloaded on next initialize() without network calls."
+  },
+  {
+    "component_id": "mcp-tool:troubleshoot_pod_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:500-506 dispatches to diagnostics_manager.troubleshoot_pod_issues(). src/diagnostics_manager.py:110-148 contains the implementation: line 111 has the comment '# Stub implementation - would query actual pod status', lines 112-148 unconditionally return hardcoded data: status='CrashLoopBackOff', restart_count=5, logs=['2025-08-09 10:30:15 ERROR: Failed to connect to database', ...]. No kubernetes client call is made regardless of the pod_name or namespace passed.",
+    "diagnosis": "troubleshoot_pod_issues always returns the same hardcoded CrashLoopBackOff scenario regardless of the actual pod requested, making it useless and actively misleading for real cluster troubleshooting.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub with real kubernetes client calls:\n  from kubernetes_asyncio import client, config\n  v1 = client.CoreV1Api()\n  pod = await v1.read_namespaced_pod(name=pod_name, namespace=namespace)\n  results['status'] = pod.status.phase\n  results['restart_count'] = sum(cs.restart_count for cs in (pod.status.container_statuses or []))\n  if include_logs:\n      results['logs'] = await v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, tail_lines=50)\n  if include_events:\n      events = await v1.list_namespaced_event(namespace, field_selector=f'involvedObject.name={pod_name}')\n      results['events'] = [{'type':e.type,'reason':e.reason,'message':e.message} for e in events.items]",
+    "test_plan": "Mock kubernetes_asyncio client to return a pod with phase='Running' and zero restarts; assert results['status']=='Running' and results['restart_count']==0. Mock a pod with CrashLoopBackOff state; assert matching output. Test that passing a non-existent pod_name raises ApiException which is caught and returned as an error dict."
+  }
+]

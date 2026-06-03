@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:get_trending_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:599-602 — `result = await self.github_issues_manager.get_trending_issues(days=arguments.get('days', 7), max_results=arguments.get('max_results', 15))` dispatches to src/github_issues_manager.py:541-571 which queries a local SQLite DB populated at startup via real GitHub API calls",
+    "diagnosis": "The tool does call the real GitHub API indirectly (via startup fetch and background loop), but results depend entirely on what was cached at init time; if the DB is empty (rate-limited, cold start, no network), it silently returns an empty list with no error indication to the caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In get_trending_issues, after the DB query returns 0 rows, fall back to a live GitHub search API call or return a structured error payload. Add a `freshness_seconds` field to each returned issue so callers know data staleness. Expose a `db_initialized` flag from `get_issue_statistics` so clients can detect empty-DB state.",
+    "test_plan": "Unit-test with an empty SQLite DB to confirm the empty-list silent return; integration-test with a seeded DB; mock the GitHub API to verify the fallback path is exercised."
+  },
+  {
+    "component_id": "k8s/deployment.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — `image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest` and line 38 `imagePullPolicy: Always`; line 49-50 `KUBECONFIG: \"/var/run/secrets/kubernetes.io/serviceaccount\"` (a directory, not a file); line 90 `readOnlyRootFilesystem: false`",
+    "diagnosis": "Three concurrent issues: (1) mutable `latest` tag defeats reproducible deploys; (2) KUBECONFIG env var is set to the SA token directory rather than omitted (in-cluster clients use env KUBERNETES_SERVICE_HOST/PORT + the mounted token automatically, KUBECONFIG to a directory is invalid); (3) readOnlyRootFilesystem is false, widening the attack surface.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Pin image to a SHA digest or semver tag. Remove the KUBECONFIG env var entirely (the python kubernetes client auto-detects in-cluster config via KUBERNETES_SERVICE_HOST). Set `readOnlyRootFilesystem: true` and add an emptyDir tmpfs for any writable paths the app requires (e.g. /tmp). Also add `seccompProfile: RuntimeDefault` under the pod-level securityContext.",
+    "test_plan": "Apply the manifest to a test cluster and verify the pod reaches Running state; confirm `kubectl exec` into the container shows KUBECONFIG is unset; verify the python client initializes without error via pod logs."
+  },
+  {
+    "component_id": "mcp-tool:find_similar_issues",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/github_issues_manager.py:488-491 — `search_terms = \" OR \".join([f\"title LIKE '%{term}%' OR body LIKE '%{term}%'\" for term in key_terms])` then `sql = f\"\"\"SELECT ... WHERE ({search_terms})\"\"\"` — user-derived key_terms are interpolated directly into SQL without parameterization",
+    "diagnosis": "SQL injection vulnerability: key_terms extracted from the user-supplied error_message are string-interpolated into the SQL query rather than bound as parameters, allowing an attacker to craft an error_message that modifies the query.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the f-string SQL construction with parameterized queries. Build a list of `(title LIKE ? OR body LIKE ?)` clauses and extend the params list correspondingly:\n```python\nclauses = [\"(title LIKE ? OR body LIKE ?)\"] * len(key_terms)\nparams = [v for t in key_terms for v in (f\"%{t}%\", f\"%{t}%\")]\nsql = f\"SELECT ... FROM github_issues WHERE {' OR '.join(clauses)} AND state='closed' ... LIMIT ?\"\nparams.append(max_results)\n```",
+    "test_plan": "Pass `error_message` containing `%' OR '1'='1` and verify the query returns only legitimately matching rows (not all rows); add a dedicated SQL injection unit test."
+  },
+  {
+    "component_id": "behavior:restart_first_ladder",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No implementation exists anywhere in the codebase for a staged restart ladder.",
+    "diagnosis": "Design task: implement a state-machine that attempts a rollout restart, monitors pod health for 5 minutes, and escalates to a broader remediation strategy if pods do not stabilize.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: `RemediationJob(id, target_ns, target_name, resource_kind, state: Enum[PENDING, RESTART_ISSUED, WATCHING, ESCALATED, RESOLVED, FAILED], started_at, last_transition_at, attempt_count)`. Interface: `async def restart_first_ladder(ns, name, kind) -> RemediationJob`. Steps: (1) call `kubectl rollout restart deploy/<name> -n <ns>`; (2) poll `kubectl rollout status` every 30s for up to 5m; (3) if all pods Ready -> RESOLVED; (4) else transition to ESCALATED and invoke `execute_remediation(issue_type='crash_loop', target=name)`. Edge cases: resource not found (fail fast), partial readiness (count ready replicas), CrashLoopBackOff persisting after restart (skip straight to escalate). Dependencies: KubectlManager.kubectl_rollout, KubectlManager.kubectl_get.",
+    "test_plan": "Unit-test the state machine with a mock kubectl that simulates success at step 2, failure at step 2 (timeout), and CrashLoopBackOff; integration-test against a real cluster deploying a broken image and verifying ESCALATED state is reached within 6 minutes."
+  },
+  {
+    "component_id": "start.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "start.sh:2 — `set -e` only; lines 98-99 — `ENV_ARGS=\"$ENV_ARGS -e GITHUB_TOKEN=$GITHUB_TOKEN\"` inlines the token into docker run args visible to `ps aux`; line 119 — `KUBE_MOUNT=\"-v $HOME/.kube/config:/root/.kube/config:ro\"` mounts the kubeconfig as root inside the container; lines 244-287 — generated scripts stop.sh/update.sh/logs.sh/status.sh are written into the working directory without sanitizing $HOME or relative paths",
+    "diagnosis": "Three issues: (1) missing `set -u` and `set -o pipefail` means unset variables and failed pipe stages are silently ignored; (2) GITHUB_TOKEN passed via `-e KEY=VALUE` on docker run CLI is exposed in process listings; (3) kubeconfig is mounted to /root inside a non-root container (runAsUser 1001), so it will be unreadable at runtime.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` at line 2. Pass the token via `--env-file` (a temp file with 0600 perms, deleted after docker run). Fix the kubeconfig mount to `/home/appuser/.kube/config` matching runAsUser 1001's home, or write it to a dedicated volume. Ensure generated scripts use absolute paths and are not world-writable (chmod 750).",
+    "test_plan": "Run `bash -n start.sh` for syntax checks; run shellcheck on start.sh; verify `docker inspect` of a running container shows no GITHUB_TOKEN in Env; confirm the kubeconfig is readable from inside the container as uid 1001."
+  },
+  {
+    "component_id": "behavior:analyzer_pvc",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No PVCAnalyzer implementation found anywhere in the codebase.",
+    "diagnosis": "Design task: implement a PVCAnalyzer that classifies a PVC's problem as Pending (unbound), MountFailed (pod event), or CapacityExhausted (usage near limit).",
+    "fix_class": "design",
+    "proposed_fix": "Interface: `async def analyze_pvc(namespace: str, pvc_name: str) -> PVCDiagnosis`. Data model: `PVCDiagnosis(pvc_name, namespace, phase, condition: Enum[PENDING_NO_PV, PENDING_NO_SC, MOUNT_FAILED, CAPACITY_NEAR_LIMIT, HEALTHY], detail, recommended_action)`. Steps: (1) `kubectl get pvc <name> -o json` -> check `.status.phase`; if Pending, check `.spec.storageClassName` exists and SC has a provisioner; (2) `kubectl get events --field-selector involvedObject.name=<pvc>` to detect MountVolume.MountError; (3) if mounted, `kubectl exec` into the pod and `df -h <mountpath>` to check capacity (>85% -> CAPACITY_NEAR_LIMIT). Dependencies: KubectlManager.kubectl_get, kubectl_describe. Edge cases: PVC bound but pod not yet scheduled (check pod status separately), ReadWriteMany PVCs shared across pods.",
+    "test_plan": "Create a PVC referencing a non-existent StorageClass and verify PENDING_NO_SC; create a PVC that fails mount with a bad NFS path and verify MOUNT_FAILED; fill a volume to >85% and verify CAPACITY_NEAR_LIMIT."
+  },
+  {
+    "component_id": "src/kubectl_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/kubectl_manager.py:45-81 — `_run_kubectl` is a synchronous `subprocess.run` called from every `async def` method (e.g. line 119 `result = self._run_kubectl(args)`). The method is not wrapped in `asyncio.run_in_executor`; line 33 `if not self._check_kubectl(): raise RuntimeError` aborts at import time if kubectl is absent, crashing the entire MCP server.",
+    "diagnosis": "Every async kubectl operation blocks the event loop because `subprocess.run` is synchronous; under concurrent MCP tool calls this will stall all other in-flight requests for up to 60 seconds (the timeout). Additionally, the constructor raises if kubectl is missing, making the whole server unlaunchable in kubectl-less environments.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Wrap `subprocess.run` calls in `asyncio.get_event_loop().run_in_executor(None, ...)` or switch to `asyncio.create_subprocess_exec`. Convert `_check_kubectl` into a deferred check that sets `self.kubectl_available = False` without raising, and have each public method return a structured error if `kubectl_available` is False. Example:\n```python\nasync def _run_kubectl_async(self, args, input_data=None):\n    loop = asyncio.get_event_loop()\n    return await loop.run_in_executor(None, self._run_kubectl, args, input_data)\n```",
+    "test_plan": "Write a concurrent test that issues 5 kubectl_get calls simultaneously and verifies all complete within 5s (not 5*60s); write a test with kubectl absent confirming the server starts and returns structured errors instead of crashing."
+  },
+  {
+    "component_id": "mcp-tool:performance_analysis",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:256-329 — all `_analyze_*_performance` helpers return hardcoded dicts, e.g. line 261 `\"avg_response_time\": \"45ms\"`, line 281 `\"cpu_avg\": \"42%\"`. No kubernetes client call, no metrics-server query, no Prometheus query is made anywhere in monitoring_manager.py.",
+    "diagnosis": "The performance_analysis tool returns entirely fabricated data regardless of what cluster state actually is, making it actively misleading rather than just incomplete.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub helpers with real calls: (1) use `kubectl top nodes/pods` (via KubectlManager) for CPU/memory; (2) if metrics-server is available, call its REST API via the python kubernetes client `CustomObjectsApi`; (3) if Prometheus endpoint is configured, issue PromQL queries via aiohttp. For each metric, fall back gracefully and mark the field `\"source\": \"unavailable\"` rather than returning fake numbers. Add `config.monitoring.prometheus_url` to MonitoringConfig.",
+    "test_plan": "Mock KubectlManager to return sample `kubectl top` output and assert the returned metrics match; integration-test against a real cluster with metrics-server and assert returned CPU values are non-zero and vary between calls."
+  },
+  {
+    "component_id": "coming_soon.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "coming_soon.md:179-180 — \"Code coverage expansion to 100% for critical paths\" and \"Test coverage maintained above 95%\" (line 199); coming_soon.md:196 — \"API response time under 2 seconds for 99% of requests\"; coming_soon.md:198 — \"Bug resolution time under 24 hours for critical issues\". None of these are currently met: no test suite exists in the repo, and multiple managers return hardcoded stubs.",
+    "diagnosis": "The coming_soon.md presents aspirational metrics as if they were near-term deliverables against a working codebase, but the codebase has no tests, multiple stubbed managers, and no real k8s client usage, making the framing actively misleading to evaluators.",
+    "fix_class": "document",
+    "proposed_fix": "Prefix the Metrics & Success Criteria section with a disclaimer stating current baseline is 0% test coverage and stub implementations. Move all items under a \"Future State\" heading. Remove the \"Next 30 Days\" framing from items that require implementing real k8s client calls (which is the entire core). Add a \"Current State\" section that honestly documents what is and is not implemented.",
+    "test_plan": "Peer review the updated doc against the actual codebase to confirm no claim implies functionality that does not exist; verify no numeric SLA appears without a `[target, not current]` qualifier."
+  },
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "k8s/deployment.yaml:27 — single `serviceAccountName: kubernetes-mcp-server-sa` is used for all operations. No RBAC manifests are present in the k8s/ directory beyond deployment.yaml.",
+    "diagnosis": "Design task: separate the single ServiceAccount into a read-only SA for diagnosis operations and a namespaced-write SA for apply/patch operations, following least-privilege.",
+    "fix_class": "design",
+    "proposed_fix": "Create two ServiceAccounts: `mcp-diagnose-sa` (ClusterRole: `view` + custom verbs `get,list,watch` on events, nodes, pods/log) and `mcp-apply-sa` (Role scoped per namespace: `get,list,create,update,patch` on deployments, services, configmaps only). The MCP server starts with `mcp-diagnose-sa` bound by default. For write operations (kubectl_apply, kubectl_patch, execute_remediation), the server must be explicitly configured with `mcp-apply-sa` via env var `WRITE_SERVICE_ACCOUNT`. Add a third ClusterRoleBinding for `mcp-apply-sa` restricted to a user-supplied namespace allowlist. Edge cases: cross-namespace diagnosis, CRD resources not covered by `view` ClusterRole (add explicit rules).",
+    "test_plan": "Deploy with `mcp-diagnose-sa` only and assert `kubectl apply` calls return 403; switch to `mcp-apply-sa` and assert apply succeeds within the allowed namespace; assert apply to a disallowed namespace returns 403."
+  }
+]

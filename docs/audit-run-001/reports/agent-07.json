@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "enhanced:kubectl_get",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:1-34 — no import of enhanced_tools; grep of mcp_server.py for 'enhanced_tools', 'from enhanced', 'kubectl_get' returns zero results",
+    "diagnosis": "enhanced_tools.py defines kubectl_get (and 28 other tool schemas) but mcp_server.py never imports the module, so none of these tools are registered or reachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py _register_handlers, import and merge: `from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools`; extend the tools list returned by handle_list_tools with those results; add elif branches in handle_call_tool dispatching kubectl_get (and peers) to self.kubectl_manager.get_resources(...). Alternatively, delete enhanced_tools.py if the kubectl_manager already exposes equivalent tools.",
+    "test_plan": "After wiring, call handle_list_tools and assert 'kubectl_get' appears in the returned list; call handle_call_tool('kubectl_get', {'resource':'pods'}) and assert no 'Unknown tool' error is returned."
+  },
+  {
+    "component_id": "behavior:analyzer_ingress",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No IngressAnalyzer class exists anywhere in src/; grep returns zero hits for 'IngressAnalyzer', 'ingress.*analyz', 'tls.*expir'",
+    "diagnosis": "IngressAnalyzer is entirely unimplemented; no backend-reachability check, TLS expiry detection, or host-conflict scan exists in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzers/ingress_analyzer.py extending BaseAnalyzer. Input: networking.k8s.io/v1 Ingress list + Service list + TLS Secret list. Checks: (1) for each rule.backend.service, verify Service exists and selector matches running pod; (2) parse tls[].secretName, load Secret, decode cert, check NotAfter < now+30d; (3) detect duplicate host entries across Ingress objects. Output: list[Finding]. Dependencies: kubernetes.client.NetworkingV1Api, cryptography.x509.",
+    "test_plan": "Unit-test with synthetic Ingress objects: one with missing Service backend, one with an expired-cert Secret, one with a duplicate host; assert each produces a Finding with correct severity and message."
+  },
+  {
+    "component_id": "behavior:orphan_job_cleanup",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No orphan job detection or cleanup logic exists in any src/*.py file; grep for 'orphan', 'ownerReference', 'job.*cleanup' returns zero results",
+    "diagnosis": "There is no implementation that identifies Jobs lacking a valid ownerReference and queues them for deletion.",
+    "fix_class": "implement",
+    "proposed_fix": "In a new RemediationAction subclass OrphanJobCleaner: (1) list all Jobs in target namespace via BatchV1Api.list_namespaced_job; (2) filter jobs where metadata.ownerReferences is None or the referenced UID no longer exists in the CronJob list; (3) if dry_run=False, call BatchV1Api.delete_namespaced_job with propagation_policy='Background'; return list of deleted job names. Edge cases: running jobs (status.active > 0) must be excluded; respect a min-age threshold (e.g. 24h) to avoid racing a freshly-created job.",
+    "test_plan": "Mock BatchV1Api responses with three jobs: one owned by active CronJob, one with stale ownerRef UID, one running; assert only the stale-ref job appears in cleanup output and the running job is skipped."
+  },
+  {
+    "component_id": "behavior:finding_serialization",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No Finding dataclass, TypedDict, or Pydantic model exists in any src/ file; grep for 'class Finding', 'Finding(', 'dataclass' returns zero results",
+    "diagnosis": "There is no shared structured type for analyzer output, forcing each hypothetical analyzer to invent its own dict schema, making synthesis and PR/DPO generation ambiguous.",
+    "fix_class": "implement",
+    "proposed_fix": "Add src/models/finding.py: `@dataclass class Finding: id: str; component_id: str; kind: Literal['misconfiguration','degradation','security','orphan']; severity: Literal['critical','high','medium','low','info']; resource_ref: str; message: str; evidence: dict; remediation: Optional[str]; created_at: datetime`. Add `to_dict()` and `from_dict()` helpers. Import this type in all analyzers and the remediation queue.",
+    "test_plan": "Round-trip test: construct a Finding, call to_dict(), call from_dict(result), assert all fields equal the original; test JSON serialization produces valid schema."
+  },
+  {
+    "component_id": "behavior:analyzer_cronjob",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No CronJobAnalyzer class exists in any src/ file; grep for 'CronJobAnalyzer', 'missed.*schedule', 'lastScheduleTime' returns zero results",
+    "diagnosis": "CronJob missed-schedule detection and orphaned-job attribution are entirely unimplemented.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzers/cronjob_analyzer.py. Logic: (1) list CronJobs via BatchV1Api.list_namespaced_cron_job; (2) parse spec.schedule with croniter to compute expected next run; compare to status.lastScheduleTime — if delta > 2x period emit missed-schedule Finding; (3) list all Jobs; for each Job check ownerReferences[].name against CronJob names — jobs whose owner no longer exists are orphans; emit orphan Finding. Dependencies: croniter, kubernetes.client.BatchV1Api.",
+    "test_plan": "Mock a CronJob with schedule '*/5 * * * *' and lastScheduleTime 30 minutes ago; assert one missed-schedule Finding is emitted. Mock a Job with ownerReference pointing to a non-existent CronJob; assert one orphan Finding is emitted."
+  },
+  {
+    "component_id": "behavior:analyzer_base",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No BaseAnalyzer abstract class exists in any src/ file; grep for 'BaseAnalyzer', 'ABC', 'abstractmethod' in src/ returns zero results",
+    "diagnosis": "There is no abstract base class defining the analyzer contract, so all future analyzers have no enforced interface and no shared initialization logic.",
+    "fix_class": "implement",
+    "proposed_fix": "Add src/analyzers/base.py: `class BaseAnalyzer(ABC): def __init__(self, k8s_client): self.k8s = k8s_client; @abstractmethod async def analyze(self, namespace: Optional[str] = None) -> List[Finding]: ...; async def run_safe(self, namespace) -> List[Finding]: try: return await self.analyze(namespace); except Exception as e: return [Finding(..., message=str(e))]`. All analyzers inherit from this; the auto-remediator instantiates them polymorphically.",
+    "test_plan": "Assert that instantiating BaseAnalyzer directly raises TypeError; create a concrete subclass that returns an empty list, confirm run_safe catches an injected exception and returns an error Finding."
+  },
+  {
+    "component_id": "behavior:event_stream_watcher",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No event stream watcher exists in src/; grep for 'watch', 'Watch()', 'event_type', 'ADDED.*MODIFIED.*DELETED' in src/ returns zero results",
+    "diagnosis": "There is no implementation that subscribes to the Kubernetes event stream, classifies events, and routes to a remediation queue.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/watchers/event_watcher.py: use kubernetes.watch.Watch().stream(CoreV1Api.list_event_for_all_namespaces) in an asyncio task; for each event classify by reason (BackOff->pod_issue, FailedMount->storage_issue, etc.); push a tuple (event_type, raw_event) to an asyncio.Queue; a separate consumer coroutine dequeues and calls the matching analyzer. Reconnect on ApiException with exponential backoff. Expose start()/stop() methods.",
+    "test_plan": "Mock Watch.stream to yield three synthetic events of different reasons; assert the queue receives three items with correct classifications; assert stop() cancels the background task cleanly."
+  },
+  {
+    "component_id": "functional_unit_test.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "functional_unit_test.md:57 — 'TOTAL: 390 COMPREHENSIVE TESTS'; actual test functions counted: unit/test_issue_patterns.py=21, production/test_pod_issues.py=10, production/test_cluster_management.py=8, production/test_network_service_issues.py=9, production/test_security_compliance.py=7 → actual total: 55. Also: line 79 references manager.analyze_issue_pattern() which does not exist in github_issues_manager.py; line 279 references doc_manager.get_solution_documentation() which does not exist in documentation_manager.py; line 298 references doc_manager.get_best_practices_for_issue() which does not exist; line 312 references doc_manager.get_commands_for_issue() which does not exist; line 331 references manager.initialize_database() which does not exist.",
+    "diagnosis": "The document claims 390 tests and references six methods that do not exist in the codebase, making it actively misleading about production readiness.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the '390 COMPREHENSIVE TESTS' claim with the actual count (55). Remove or mark all code examples that call non-existent methods (analyze_issue_pattern, get_solution_documentation, get_best_practices_for_issue, get_commands_for_issue, initialize_database, store_issue) as 'planned — not yet implemented'. Add a 'Test Coverage Gap' section listing missing test categories.",
+    "test_plan": "After editing, run grep to confirm no example still calls the five non-existent methods; run pytest --collect-only and verify the stated count matches the collected count."
+  },
+  {
+    "component_id": "src/diagnostics_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "diagnostics_manager.py:55 — '# Stub implementation for different check types'; line 110 — '# Stub implementation - would query actual pod status'; line 112-125 — hardcoded status='CrashLoopBackOff', restart_count=5, issues list, suggestions list; line 128-132 — hardcoded log lines with date '2025-08-09'; lines 218-275 — _check_nodes/_check_pods/_check_services/_check_networking/_check_storage all return hardcoded dicts (e.g. 'master-1', 'calico', '172.100.10.0/24') with no kubernetes client import or call anywhere in the file",
+    "diagnosis": "All five diagnostic methods are stubs returning hardcoded fake data; no kubernetes client is imported or called, so every call to diagnose_cluster_health, troubleshoot_pod_issues, or check_network_connectivity returns fabricated results regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a KubernetesManager or raw kubernetes.client into DiagnosticsManager.__init__. Replace _check_nodes() with CoreV1Api.list_node(); replace _check_pods() with CoreV1Api.list_namespaced_pod(); replace _check_services() with CoreV1Api.list_namespaced_service(); replace _check_networking() with a NetworkPolicyApi call; replace _check_storage() with CoreV1Api.list_persistent_volume(). troubleshoot_pod_issues() must call read_namespaced_pod_log() for logs and CoreV1Api.list_namespaced_event() for events.",
+    "test_plan": "Use kubernetes.client mock fixtures; call diagnose_cluster_health(['nodes']) and assert the returned node names match the mock's response, not the hardcoded strings 'master-1'/'worker-1'/'worker-2'."
+  },
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/pvc.yaml:1-16 — full file; no storageClassName validation (line 15 uses 'local-path' which is a cluster-specific provisioner not present by default); no annotations for backup or retention policy; no volumeMode field (defaults to Filesystem, undocumented); no ownerReference or labels linking PVC to a specific workload beyond the app label; file contains no resource limits beyond the storage request; no note about the PVC being unbound if local-path provisioner is absent",
+    "diagnosis": "The PVC manifest hardcodes a non-standard storageClassName ('local-path') with no fallback and omits volumeMode, making it silently unbound on clusters without that specific provisioner.",
+    "fix_class": "document",
+    "proposed_fix": "Add a comment block explaining the local-path dependency and how to substitute (e.g. standard, gp2, hostpath). Add volumeMode: Filesystem explicitly. Add an annotation `helm.sh/resource-policy: keep` or equivalent to prevent accidental deletion on chart uninstall. Add a note that admins should set storageClassName to match their cluster's default if local-path is unavailable.",
+    "test_plan": "Validate the manifest with 'kubectl apply --dry-run=client' against a cluster without the local-path provisioner and confirm a clear error is returned; update CI to lint manifests with kubeval or kube-score."
+  }
+]

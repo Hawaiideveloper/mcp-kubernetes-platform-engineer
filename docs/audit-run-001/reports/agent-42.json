@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "enhanced:kubectl_rollout",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:228 — name=\"kubectl_rollout\"; grep of src/mcp_server.py returns zero matches for 'kubectl_rollout'; grep of mcp_server.py imports shows no 'enhanced_tools' import",
+    "diagnosis": "The kubectl_rollout Tool schema is defined in enhanced_tools.py but enhanced_tools.py is never imported by mcp_server.py, so this tool is completely unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Either (a) import get_enhanced_tools() from enhanced_tools in mcp_server.py and merge the returned list into the ListToolsResult, then add dispatch branches for kubectl_rollout calling kubectl_manager.rollout(), or (b) delete the dead schema if no implementation is planned. Option (a) requires adding a kubectl_rollout handler that calls subprocess/kubernetes client for rollout status/history/undo/restart.",
+    "test_plan": "After wiring, call the tool via MCP list-tools and verify kubectl_rollout appears; invoke with action=status and confirm a real kubectl rollout status call is issued against a test cluster or mocked KubeClient."
+  },
+  {
+    "component_id": "mcp-tool:analyze_resource_usage",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:55-68 — entire method body is a stub comment ('# Stub implementation for different scopes') delegating to _analyze_cluster_resources which returns hardcoded dicts at lines 196-217 (e.g., 'total_cores': 12, 'used_cores': 5.4); no kubernetes import exists anywhere in monitoring_manager.py",
+    "diagnosis": "analyze_resource_usage never calls the Kubernetes metrics API; it returns fabricated static numbers regardless of the actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes.client.CustomObjectsApi (metrics.k8s.io/v1beta1) into MonitoringManager.__init__. Replace _analyze_cluster_resources, _analyze_node_resources, etc. with calls to custom_objects_api.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes') and 'pods'. Parse and aggregate the returned usage fields. Add graceful fallback when metrics-server is unavailable.",
+    "test_plan": "Mock kubernetes.client.CustomObjectsApi to return a known metrics payload; assert analyze_resource_usage returns matching cpu/memory values. Run against a real cluster with kubectl top node output to verify parity."
+  },
+  {
+    "component_id": "tests/production/test_pod_issues.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/production/test_pod_issues.py:70 — 'mcp_server.resolve_issue_end_to_end = AsyncMock(return_value=mock_pipeline_result)'; lines 151-157: 'github_issues_manager.find_similar_issues = AsyncMock(...)', 'k8s_manager.resolve_imagepull_issue = AsyncMock(...)'; none of resolve_issue_end_to_end, resolve_imagepull_issue, resolve_pending_pod, resolve_oom_issue, resolve_init_container_failure, resolve_pod_eviction, resolve_quota_exceeded, resolve_security_violation, resolve_network_policy_issue, resolve_multi_container_pod exist in any source manager file",
+    "diagnosis": "Every test in this file mocks methods that do not exist on the real manager objects, so the tests validate only the mock itself—they provide zero coverage of actual source code behavior.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Implement the missing manager methods (resolve_imagepull_issue, resolve_pending_pod, etc.) in k8s_manager.py / diagnostics_manager.py using real kubernetes API calls, then rewrite each test to exercise the real method with a mocked kubernetes.client, asserting on actual return-value logic rather than pre-loaded mock dicts.",
+    "test_plan": "After implementation, run pytest tests/production/test_pod_issues.py without patching the method under test; confirm at least one live kubernetes call is intercepted by a mock client fixture and the assertion reflects code logic rather than hardcoded data."
+  },
+  {
+    "component_id": "mcp-tool:get_troubleshooting_guide",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/documentation_manager.py:40-66 — initialize() calls _build_documentation_index() which fetches live URLs via aiohttp from kubernetes.io at startup; get_troubleshooting_guide at line 401 queries self.documentation_db populated by that fetch; no offline fallback or cache persistence exists",
+    "diagnosis": "get_troubleshooting_guide depends entirely on a successful live HTTP crawl of kubernetes.io at startup; if the crawl fails or the network is unavailable, documentation_db is empty and the tool returns an empty list with no error signal.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a bundled offline documentation seed (e.g., a JSON file committed to data/) loaded unconditionally in initialize(), then attempt the live crawl as an additive update. If crawl fails, log a warning but serve from seed. Return a structured error when documentation_db is empty rather than a silent empty list.",
+    "test_plan": "Unit test with aiohttp patched to raise ConnectionError; assert get_troubleshooting_guide still returns results from the offline seed. Integration test with network available to confirm live docs augment the seed."
+  },
+  {
+    "component_id": "CHANGELOG.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "CHANGELOG.md:104 — 'Production-ready functional unit test suite covering all 45,720+ Kubernetes GitHub issues'; line 164 — '50,000+ issue database with AI-powered similarity detection'; line 490 — '>95% code coverage achieved'; line 71 — '[1.0.0] - 2025-09-01 PRODUCTION READY RELEASE'; all managers (k8s_manager.py:29, monitoring_manager.py:59) carry explicit stub comments; no kubernetes import exists in any manager file",
+    "diagnosis": "CHANGELOG claims production-ready status, 45,720+ real issues indexed, 95%+ code coverage, and AI-powered similarity detection, all of which are false—every manager returns hardcoded fake data and no kubernetes client is ever loaded.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the PRODUCTION READY header with a DEVELOPMENT PREVIEW label. Replace metric claims (45,720+, 50,000+, 95% coverage, AI-powered) with accurate counts or remove them. Add a Known Limitations section at the top of the Unreleased section explicitly stating that all cluster-facing tools return stub data pending kubernetes client integration.",
+    "test_plan": "Review updated CHANGELOG against actual test run output (pytest --co -q) and actual kubernetes import grep to confirm no remaining false claims."
+  },
+  {
+    "component_id": "behavior:finding_dedup",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "Design task — no existing implementation in src/; relevant future context in diagnostics_manager.py and security_manager.py which produce flat lists of findings with no deduplication logic",
+    "diagnosis": "No finding deduplication exists; when implemented, the system will emit duplicate findings for the same root cause across multiple resources, creating alert fatigue.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: add a Finding dataclass with fields root_cause_key: str (hash of issue_type + message template), affected_resources: list[str], count: int, first_seen, last_seen. Interface: def dedup_findings(findings: list[Finding]) -> list[Finding] groups by root_cause_key and merges affected_resources lists, keeping the highest-severity instance. Dependencies: hashlib for key generation, existing diagnostics_manager output. Edge cases: same error message but distinct root causes (distinguish by resource_type prefix in key); findings from different namespaces that share root cause should merge with namespace listed per resource. Test plan: create 10 Finding objects with 3 distinct root_cause_keys; assert dedup_findings returns 3 findings each with correct affected_resources count.",
+    "test_plan": "Unit test dedup_findings with synthetic finding lists containing intentional duplicates; assert output length equals unique root_cause_key count and affected_resources contains all original resource names."
+  },
+  {
+    "component_id": "GettingStarted.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GettingStarted.md:47 — '@k8s-platform-engineer diagnose why my pods are crashing' and '@k8s-platform-engineer analyze resource usage in production namespace'; src/monitoring_manager.py and src/k8s_manager.py return entirely hardcoded fake data with no live cluster calls; GettingStarted.md:5 — 'production-ready Kubernetes platform engineering assistant'",
+    "diagnosis": "GettingStarted.md instructs users to query live cluster data (pod crash diagnosis, resource usage analysis) against a tool implementation that returns fabricated static values, misleading users into thinking they receive real cluster insights.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'production-ready' with 'early-preview' in the footer. Add a Prerequisites note: 'Real cluster analysis requires kubernetes client integration (not yet implemented; current responses are illustrative stubs).' Update Copilot query examples to documentation/guidance queries that the documentation_manager does serve, rather than live-cluster queries that do not work.",
+    "test_plan": "Human review of updated doc against source code confirms no claims of live cluster analysis remain without the kubernetes client integration caveat."
+  },
+  {
+    "component_id": "enhanced:helm_status",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:604 — name=\"helm_status\"; grep of src/mcp_server.py for 'helm_status' returns zero matches; mcp_server.py imports list shows no 'enhanced_tools' import at lines 8-34",
+    "diagnosis": "The helm_status Tool schema is defined in enhanced_tools.py but the module is not imported by mcp_server.py, making the tool unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Import enhanced_tools in mcp_server.py and include its tool list in handle_list_tools(). Add a dispatch branch for helm_status that calls self.helm_manager.get_release_status(release_name, namespace, output_format). Verify helm_manager.py has a corresponding method; if absent, implement it using subprocess(['helm','status',release_name,'--output',output_format]) or the Helm Go library via kubectl exec.",
+    "test_plan": "After wiring, list tools via MCP and confirm helm_status appears; invoke with a known release name against a mocked helm_manager and assert the correct subprocess or API call is made."
+  },
+  {
+    "component_id": "GETTING_STARTED.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GETTING_STARTED.md:141-142 — 'Real-time cluster analysis (if kubectl configured)' and '45,720+ indexed Kubernetes GitHub issues'; GETTING_STARTED.md:101 — 'Mount your kubeconfig for live cluster access'; src/k8s_manager.py:29 — comment 'Kubernetes client initialization would go here / For now, we'll use a stub implementation'; no kubernetes import in any src/ file",
+    "diagnosis": "GETTING_STARTED.md claims real-time cluster analysis and a 45,720+ issue knowledge base, but the kubernetes client is never initialized and monitoring_manager returns hardcoded data regardless of kubeconfig mount.",
+    "fix_class": "document",
+    "proposed_fix": "Remove or qualify the 'Real-time cluster analysis' bullet to state 'Cluster analysis (stub implementation; real API integration in development)'. Replace '45,720+' with an accurate count verifiable from the SQLite database at runtime, or remove the claim. Add a note under Kubernetes Configuration that mounting kubeconfig is a no-op until the kubernetes client integration is complete.",
+    "test_plan": "Review updated doc against grep results for kubernetes imports and stub comments; no unqualified real-time or live-data claims should remain."
+  },
+  {
+    "component_id": "behavior:trading_ns_hardblock",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "Design task — no namespace guardrail exists anywhere in src/; src/k8s_manager.py:91+ execute_remediation accepts arbitrary target strings with no namespace filtering; ibkr-live-trader, daxxon-trading, brightflow-live namespaces receive no special treatment",
+    "diagnosis": "No code prevents the auto-remediator from applying mutations (restart, patch, scale) to safety-critical trading namespaces without a PR gate, creating risk of unattended production financial system disruption.",
+    "fix_class": "implement",
+    "proposed_fix": "Data model: add BLOCKED_NAMESPACES = frozenset({'ibkr-live-trader','daxxon-trading','brightflow-live'}) in config.py. Interface: add a guard function check_namespace_block(namespace: str, dry_run: bool) -> None that raises NamespaceBlockedError if namespace in BLOCKED_NAMESPACES and not dry_run. Call this guard at the top of execute_remediation() and any kubectl_manager write operation before any cluster mutation. Edge cases: handle namespace=None (do not block), partial name matches (exact match only to avoid false positives), dry_run=True must still be allowed for inspection. Dependencies: config.py constant, custom exception class NamespaceBlockedError. The MCP tool response must surface the block reason to the caller.",
+    "test_plan": "Unit test: call execute_remediation with namespace='ibkr-live-trader' and dry_run=False; assert NamespaceBlockedError is raised and no kubernetes API call is made. Confirm dry_run=True proceeds without error. Integration test: verify the error propagates as a structured MCP error response."
+  }
+]

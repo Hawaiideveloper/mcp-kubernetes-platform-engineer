@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:finding_dedup",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design-task — no existing dedup logic found in any manager or server file",
+    "diagnosis": "No deduplication mechanism exists; the PRD must define how identical root-cause findings emitted for N resources are collapsed into a single finding with an affected-resource list.",
+    "fix_class": "design",
+    "proposed_fix": "Add a FindingDeduplicator class: key = (check_type, issue_reason, normalized_message_template). Each unique key maps to a FindingGroup(root_cause, affected_resources: List[str], count, first_seen, last_seen). Deduplication runs after all check_* methods return, before results are serialized. Edge cases: same reason/different namespaces should be grouped separately; transient vs persistent states need a stability window (e.g., >=2 observations) before grouping.",
+    "test_plan": "Unit test: inject 5 pod objects with ImagePullBackOff across 2 namespaces; assert output contains exactly 2 FindingGroups with counts 3 and 2. Integration test: run diagnose_cluster_health against a live cluster with known duplicates and assert the response payload has no duplicate (check_type, reason) pairs."
+  },
+  {
+    "component_id": "mcp-port-forward.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "mcp-port-forward.sh:60 — `sleep 3` and mcp-port-forward.sh:119 — `sleep 2`; mcp-port-forward.sh:100-101 — curl called twice for the same URL; mcp-port-forward.sh:10-11 — LOCAL_PORT and REMOTE_PORT both hardcoded to 3001 with no env-var override",
+    "diagnosis": "Script has unconditional fixed sleeps instead of polling for readiness, double-invokes curl in test_connectivity leaking any response body to stdout before the conditional check, and exposes no way to change ports without editing the file.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace sleep 3 with a poll loop: `for i in $(seq 1 15); do curl -sf http://localhost:$LOCAL_PORT/health && break; sleep 1; done`. Capture curl once: `RESPONSE=$(curl -sf http://localhost:$LOCAL_PORT/health) && echo \"healthy: $RESPONSE\"`. Add `LOCAL_PORT=${LOCAL_PORT:-3001}` and `REMOTE_PORT=${REMOTE_PORT:-3001}` at the top so callers can override without editing the file.",
+    "test_plan": "Run `LOCAL_PORT=3002 ./mcp-port-forward.sh start` against a mock kubectl stub and verify it uses 3002. Confirm test_connectivity emits exactly one curl call by tracing with bash -x and asserting no duplicate HTTP calls."
+  },
+  {
+    "component_id": "behavior:analyzer_pvc",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "design-task — src/diagnostics_manager.py:266-275 _check_storage returns hardcoded stub data; no PVC-specific analyzer class exists anywhere in src/",
+    "diagnosis": "No PVCAnalyzer exists; the PRD must design one that covers Pending (no matching PV or StorageClass), mount-failed (kubelet attach/mount errors in events), and capacity-exceeded states.",
+    "fix_class": "design",
+    "proposed_fix": "PVCAnalyzer.analyze(namespace=None) -> List[PVCFinding]: (1) Call core_v1.list_persistent_volume_claim_for_all_namespaces (filtered by namespace if given). (2) For phase==Pending: check StorageClass existence and available PVs matching access-mode and capacity; emit FINDING_PVC_PENDING. (3) For Bound PVCs: query events for 'FailedMount'/'FailedAttach' within last 1h; emit FINDING_PVC_MOUNT_FAILED with node and volume details. (4) For Bound PVCs: compare requests.storage vs capacity.storage; if >90% emit FINDING_PVC_CAPACITY_HIGH. Return typed PVCFinding(pvc_name, namespace, kind, severity, detail).",
+    "test_plan": "Unit test with mocked k8s API: inject one Pending PVC with missing StorageClass, one Bound PVC with FailedMount event, one Bound PVC at 95% capacity — assert three distinct findings with correct kind values. Integration test: deploy a PVC with a nonexistent storage class and verify FINDING_PVC_PENDING is returned within 5 seconds."
+  },
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:494-498 dispatches to diagnostics_manager.diagnose_cluster_health; src/diagnostics_manager.py:55 comment 'Stub implementation for different check types'; src/diagnostics_manager.py:217-275 — _check_nodes, _check_pods, _check_services, _check_networking, _check_storage all return hardcoded dictionaries with invented node names, pod counts, and IP addresses, zero calls to kubernetes client",
+    "diagnosis": "diagnose_cluster_health is fully stubbed and returns invented data regardless of actual cluster state; no kubernetes API is called anywhere in the call chain.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes.client CoreV1Api and AppsV1Api into DiagnosticsManager.__init__. In _check_nodes call core_v1.list_node() and map .status.conditions to ready/not-ready counts. In _check_pods call core_v1.list_pod_for_all_namespaces(namespace=namespace) and group by phase. In _check_services call core_v1.list_service_for_all_namespaces. Remove all hardcoded return dicts and populate results from live API responses.",
+    "test_plan": "Mock kubernetes.client with a fixture that returns two nodes (one NotReady) and verify _check_nodes returns not_ready_nodes=1. Run end-to-end against a real cluster with a deliberately failed pod and assert it appears in issues_found."
+  },
+  {
+    "component_id": "behavior:safety_allowlist",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "design-task — no allowlist, namespace gating, or PR-only safeguard exists in any source file; execute_remediation at src/mcp_server.py:552-557 dispatches without namespace checks",
+    "diagnosis": "The PRD must define an allowlisted-namespace mechanism so the auto-remediator applies changes directly only to approved namespaces and raises a PR for all others.",
+    "fix_class": "design",
+    "proposed_fix": "Add ALLOWED_AUTO_REMEDIATE_NAMESPACES env var (comma-separated, default empty = no auto-merge). In execute_remediation: if target namespace not in allowlist, serialize the patch as a GitOps PR (call GitHub API to open branch + PR with the manifest diff) and return {action: 'pr_created', pr_url: ...} instead of applying directly. If in allowlist, apply via kubectl/k8s client and return {action: 'applied'}. Allowlist membership check must be exact-match, not substring.",
+    "test_plan": "Unit test: call execute_remediation with namespace='kube-system' (not in allowlist) and assert action=='pr_created' and k8s apply was NOT called. Unit test: call with namespace in allowlist and assert apply was called and no PR was created."
+  },
+  {
+    "component_id": "behavior:analyzer_pod",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "design-task — src/diagnostics_manager.py:111-125 troubleshoot_pod_issues hardcodes status='CrashLoopBackOff' and restart_count=5 for every pod regardless of input; no live detection of ImagePullBackOff, OOMKilled, or probe failures",
+    "diagnosis": "The PRD must design a PodAnalyzer that detects real pod failure modes by inspecting live container statuses and events.",
+    "fix_class": "design",
+    "proposed_fix": "PodAnalyzer.analyze(pod_name, namespace) -> PodDiagnosis: (1) core_v1.read_namespaced_pod to get live spec+status. (2) For each container_status: if waiting.reason in ['ImagePullBackOff','ErrImagePull'] emit FINDING_IMAGE_PULL with image name. (3) If waiting.reason=='CrashLoopBackOff' or restart_count>threshold emit FINDING_CRASH_LOOP; fetch last 100 log lines for root-cause snippet. (4) If last_state.terminated.reason=='OOMKilled' emit FINDING_OOM with memory limit. (5) Query events for FailedLiveness/FailedReadiness to emit FINDING_PROBE_FAIL. Return structured PodDiagnosis with per-container findings.",
+    "test_plan": "Unit test: mock pod object with waiting.reason='ImagePullBackOff'; assert exactly one FINDING_IMAGE_PULL finding. Unit test: mock terminated reason='OOMKilled'; assert FINDING_OOM. Integration test: deploy a pod with an invalid image and call analyze; assert FINDING_IMAGE_PULL within 30 seconds."
+  },
+  {
+    "component_id": "enhanced:helm_status",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:604-627 defines helm_status Tool schema; grep of entire src/ directory finds zero import of enhanced_tools in mcp_server.py (confirmed: grep returned no output); src/mcp_server.py:73-74 initializes self.helm_manager but handle_call_tool contains no elif for 'helm_status'",
+    "diagnosis": "The helm_status schema is defined in enhanced_tools.py but enhanced_tools is never imported and helm_status is never registered as a callable tool in mcp_server.py, making it completely dead.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py handle_list_tools, add: `from enhanced_tools import get_enhanced_helm_tools` and include `*get_enhanced_helm_tools()` in the tools list. In handle_call_tool add: `elif name == 'helm_status': result = await self.helm_manager.helm_status(release_name=arguments['release_name'], namespace=arguments.get('namespace'), output_format=arguments.get('output_format','table'))`. Repeat the same pattern for all other enhanced tool names in the module.",
+    "test_plan": "After wiring, call the MCP server with tool name 'helm_status' and a valid release name; assert the response contains stdout from `helm status`. Verify the tool appears in list_tools response."
+  },
+  {
+    "component_id": "GETTING_STARTED.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GETTING_STARTED.md:141 — '45,720+ indexed Kubernetes GitHub issues'; GETTING_STARTED.md:142 — 'Real-time cluster analysis (if kubectl configured)'; GETTING_STARTED.md:149-153 — 'server automatically updates its knowledge base every hour'; GETTING_STARTED.md:70,201 — `curl http://localhost:3001/health`; GETTING_STARTED.md:219 — `curl http://localhost:3001/stats | jq`",
+    "diagnosis": "The document overclaims a specific issue count (45,720+), live cluster analysis, hourly self-updating knowledge base, and HTTP health+stats endpoints — none of which are implemented: the server uses stdio (not HTTP), diagnostics are stubs, and health/stats routes do not exist.",
+    "fix_class": "document",
+    "proposed_fix": "Remove the '45,720+' count claim (replace with 'indexed issues from monitored repositories'). Change 'Real-time cluster analysis' to 'Cluster analysis via local kubeconfig (requires kubectl configured)'. Remove the automatic hourly update claim or qualify it as 'when GITHUB_TOKEN is set'. Replace all `curl http://localhost:3001/...` examples with instructions for testing via the MCP stdio protocol (e.g., using the mcp CLI or a compatible client).",
+    "test_plan": "After editing, grep the doc for '/health', '/stats', '45,720', 'automatically updates', and 'real-time' — all should be absent or replaced with accurate qualified statements."
+  },
+  {
+    "component_id": "src/enhanced_tools.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:1-859 — file defines get_enhanced_kubectl_tools() and get_enhanced_helm_tools() returning lists of Tool schemas; confirmed by grep: zero import of this module exists in any other src/ file; src/mcp_server.py:73-74 initializes KubectlManager and HelmManager but none of the tool names defined in enhanced_tools.py appear in handle_call_tool dispatch",
+    "diagnosis": "The entire enhanced_tools.py module is dead code: its 30+ tool schemas are never registered with the MCP server and never reachable by any client call.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Import the module in mcp_server.py: `from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools`. In handle_list_tools extend the tools list: `*get_enhanced_kubectl_tools(), *get_enhanced_helm_tools()`. In handle_call_tool add dispatch branches mapping each tool name to the corresponding self.kubectl_manager or self.helm_manager method. A dispatch table (dict mapping name -> callable) is preferable to 30 elif branches.",
+    "test_plan": "After wiring, call list_tools and assert the response includes 'kubectl_get', 'helm_status', and at least 28 other enhanced tool names. Call 'ping' tool and assert a successful response from KubectlManager.ping()."
+  },
+  {
+    "component_id": "behavior:event_stream_watcher",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "design-task — no watch/stream implementation exists in any src/ file; kubernetes.watch is not imported anywhere in the repo",
+    "diagnosis": "The PRD must design an EventStreamWatcher that consumes the live Kubernetes event stream, classifies events, and routes actionable ones to the remediation queue.",
+    "fix_class": "design",
+    "proposed_fix": "EventStreamWatcher(core_v1, remediation_queue: asyncio.Queue): async def watch(): use kubernetes.watch.Watch().stream(core_v1.list_event_for_all_namespaces, timeout_seconds=0) in a task. For each event: extract (reason, involved_object.kind, involved_object.name, namespace, message). Classify via a rule table: reason=='BackOff' and kind=='Pod' -> CRASH_LOOP; reason in ['FailedMount','FailedAttach'] -> PVC_MOUNT; reason=='OOMKilling' -> OOM. Enqueue a RemediationTask(kind, resource_ref, severity, raw_event) to remediation_queue. Reconnect with exponential backoff on connection errors. Stop via an asyncio.Event cancellation token.",
+    "test_plan": "Unit test: feed a synthetic BackOff event into the classifier; assert CRASH_LOOP task is enqueued. Unit test: feed a FailedMount event; assert PVC_MOUNT task. Integration test: create a pod that crashes in a test namespace; assert EventStreamWatcher enqueues a CRASH_LOOP task within 10 seconds."
+  }
+]

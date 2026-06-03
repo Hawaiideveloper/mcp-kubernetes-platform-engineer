@@ -1,0 +1,55 @@
+{
+  "agent_id": 46,
+  "components": [
+    {
+      "id": "enhanced:kubectl_scale",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/security_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:finding_dedup",
+      "kind": "behavior",
+      "focus": "dedupe N findings for same root cause across resources"
+    },
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    },
+    {
+      "id": "behavior:rbac_split",
+      "kind": "behavior",
+      "focus": "separate ServiceAccounts: read-only for diagnosis, namespaced-write for apply"
+    },
+    {
+      "id": "behavior:analyzer_deployment",
+      "kind": "behavior",
+      "focus": "DeploymentAnalyzer: replica mismatch, rollout stuck"
+    },
+    {
+      "id": "k8s/pvc.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:analyzer_cronjob",
+      "kind": "behavior",
+      "focus": "CronJobAnalyzer: missed schedules, orphaned jobs (saw the manual-cw5-003 thing)"
+    },
+    {
+      "id": "security-scan-demo.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "src/helm_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    }
+  ]
+}

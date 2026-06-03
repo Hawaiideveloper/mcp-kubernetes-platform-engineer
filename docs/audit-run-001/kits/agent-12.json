@@ -1,0 +1,55 @@
+{
+  "agent_id": 12,
+  "components": [
+    {
+      "id": "behavior:vcluster_sandbox",
+      "kind": "behavior",
+      "focus": "spin up vcluster, apply candidate fix, smoke test, tear down. Lifecycle ~10s"
+    },
+    {
+      "id": "behavior:analyzer_service",
+      "kind": "behavior",
+      "focus": "ServiceAnalyzer: no endpoints, selector mismatch"
+    },
+    {
+      "id": "src/documentation_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "security-scan-demo.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/pvc.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "enhanced:helm_uninstall",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    },
+    {
+      "id": "behavior:iteration_state_machine",
+      "kind": "behavior",
+      "focus": "review\u2192PRD\u2192split\u2192implement\u2192verify loop with stop conditions"
+    },
+    {
+      "id": "behavior:analyzer_network_policy",
+      "kind": "behavior",
+      "focus": "NetPolAnalyzer: orphan policies, denied flows"
+    },
+    {
+      "id": "tests/production/test_cluster_management.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "agent_id": 29,
+  "components": [
+    {
+      "id": "src/config.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:kubectl_apply",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:done_definition",
+      "kind": "behavior",
+      "focus": "what \"proven with output\" means: green pytest + image build + clean events + empty failed pods"
+    },
+    {
+      "id": "behavior:gitops_pr_generation",
+      "kind": "behavior",
+      "focus": "PR body: finding ID + evidence + sandbox log. Title format. Labels."
+    },
+    {
+      "id": "mcp-tool:analyze_logs",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:vcluster_sandbox",
+      "kind": "behavior",
+      "focus": "spin up vcluster, apply candidate fix, smoke test, tear down. Lifecycle ~10s"
+    },
+    {
+      "id": "k8s/ingress.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "tests/production/test_network_service_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:event_stream_watcher",
+      "kind": "behavior",
+      "focus": "watch k8s events stream, classify, route to remediation queue"
+    },
+    {
+      "id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "agent_id": 41,
+  "components": [
+    {
+      "id": "behavior:analyzer_base",
+      "kind": "behavior",
+      "focus": "BaseAnalyzer abstract class: input=k8s state, output=Finding"
+    },
+    {
+      "id": "enhanced:kubectl_delete",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:analyze_logs",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/github_issues_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "k8s/deployment.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:analyzer_node",
+      "kind": "behavior",
+      "focus": "NodeAnalyzer: NotReady, disk pressure, memory pressure, PID pressure"
+    },
+    {
+      "id": "behavior:analyzer_deployment",
+      "kind": "behavior",
+      "focus": "DeploymentAnalyzer: replica mismatch, rollout stuck"
+    },
+    {
+      "id": "mcp-tool:find_similar_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "mcp-tool:get_trending_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/__init__.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "agent_id": 42,
+  "components": [
+    {
+      "id": "enhanced:kubectl_rollout",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:analyze_resource_usage",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "tests/production/test_pod_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "mcp-tool:get_troubleshooting_guide",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "CHANGELOG.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:finding_dedup",
+      "kind": "behavior",
+      "focus": "dedupe N findings for same root cause across resources"
+    },
+    {
+      "id": "GettingStarted.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "enhanced:helm_status",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "GETTING_STARTED.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:trading_ns_hardblock",
+      "kind": "behavior",
+      "focus": "enforce: ibkr-live-trader, daxxon-trading, brightflow-live \u2192 PR-only never auto"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/diagnostics_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:110-125 — results.update({\"status\": \"CrashLoopBackOff\", \"restart_count\": 5, \"issues\": [...], \"suggestions\": [...]}); lines 218-275 — _check_nodes/_check_pods/_check_services/_check_networking/_check_storage all return hardcoded static dicts with no k8s client call",
+    "diagnosis": "Every diagnostic method returns hardcoded fake data; no kubernetes client is imported or used, so the manager never contacts a real cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Import kubernetes client (e.g., from kubernetes import client, config). In __init__ call config.load_incluster_config() or load_kube_config(). Replace _check_nodes with v1.list_node(), _check_pods with v1.list_namespaced_pod(), troubleshoot_pod_issues with v1.read_namespaced_pod() + v1.read_namespaced_pod_log(), and check_network_connectivity with a kubectl exec ping/nslookup via stream API. Remove all hardcoded result dicts.",
+    "test_plan": "Unit test with a mocked CoreV1Api asserting the method calls list_node() / read_namespaced_pod_log(); integration test against a kind cluster verifying live pod status is returned."
+  },
+  {
+    "component_id": "behavior:analyzer_hpa",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No HPAAnalyzer class exists anywhere in src/; diagnostics_manager.py and mcp_server.py contain no HPA analysis logic beyond the stub test at tests/production/test_network_service_issues.py:553-636 which mocks the resolution entirely.",
+    "diagnosis": "HPAAnalyzer is completely unimplemented; there is no code that reads HPA objects, checks metrics-server availability, or detects the 'capped at max / never scaling' condition.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/hpa_analyzer.py: async def analyze(hpa_name, namespace) -> dict. Call autoscaling_v2.read_namespaced_horizontal_pod_autoscaler() to get current/desired replicas, scaling events, and metric sources. Call custom_metrics or metrics.k8s.io to read actual CPU/memory. Detect: (a) replicas == maxReplicas with CPU > threshold = 'capped'; (b) no ScaleUp events in last N minutes despite CPU > target = 'stalled'; (c) missing resource requests on target pods = 'metrics unavailable'. Return structured finding dict.",
+    "test_plan": "Mock autoscaling_v2 returning a capped HPA and assert analyzer returns severity=high with diagnosis='capped_at_max'. Mock stalled HPA and assert 'stalled_no_scale_event'. Integration test against kind cluster with a real HPA."
+  },
+  {
+    "component_id": "src/logger.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/logger.py:112-122 — get_logger returns logger.bind(name=name) where logger is the module-level loguru logger; type hint says -> logger (a module), not the actual return type (loguru.Logger). Line 93: logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True) sets root logging level to 0 (NOTSET), meaning ALL stdlib log records including debug noise from urllib3/kubernetes SDK will flow through loguru. Lines 105-107: per-logger handler assignment but propagate=False means InterceptHandler at root is bypassed anyway.",
+    "diagnosis": "Incorrect return type annotation, root log level of 0 enables extreme verbosity in production, and the InterceptHandler setup is logically inconsistent (root=0 but propagate=False on children defeats the intercept).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Fix return type to -> 'loguru.Logger'. Change basicConfig level=0 to level=logging.WARNING or read from config. Remove per-logger handler overrides and instead set propagate=True on children so root InterceptHandler fires, or set each child's level explicitly. Add a LoguruLogger TypeAlias for the return annotation.",
+    "test_plan": "Call get_logger('test') and assert the return type has .info/.error methods. Verify that after setup_logging(level='WARNING') a urllib3 DEBUG record does not appear in captured loguru output."
+  },
+  {
+    "component_id": "tests/production/test_network_service_issues.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/production/test_network_service_issues.py:82-85 — k8s_manager.resolve_service_no_endpoints = AsyncMock(return_value=mock_resolution); resolution = await k8s_manager.resolve_service_no_endpoints(service_context). Pattern repeated for every test (lines 157-160, 232-235, 310-314, 383-387, 459-462, 540-543, 626-629, 699-702). File also references fixtures k8s_manager, network_manager, service_mesh_manager, storage_manager with no conftest.py defining them.",
+    "diagnosis": "Every test mocks the exact method under test on the fixture and then calls the mock — this tests only AsyncMock, not any production code path; additionally missing fixture definitions will cause all tests to fail with fixture-not-found errors.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Create tests/production/conftest.py defining k8s_manager, network_manager, service_mesh_manager, storage_manager fixtures that instantiate real manager objects with a mocked kubernetes client. Re-write each test to call the real method (not assign AsyncMock to it) and assert on the behavior of the actual implementation. Remove mock_resolution dicts and derive expected values from the mocked k8s API response.",
+    "test_plan": "Run pytest tests/production/test_network_service_issues.py -v and confirm zero fixture errors; confirm at least one test exercises a non-mocked code path verified by coverage report showing >0% branch coverage in the relevant manager."
+  },
+  {
+    "component_id": "behavior:nim_backend_integration",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No LLM backend abstraction exists in src/; no file references 'nim', 'nvidia', 'llm_backend', or 'cache' in the context of inference. The server produces text recommendations from hardcoded dicts only.",
+    "diagnosis": "The pluggable LLM backend (NIM as default, cache by finding-hash) is entirely unimplemented; no interface, no NIM client, no caching layer exists.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/llm_backend.py: protocol class LLMBackend with async def complete(prompt: str, finding_hash: str) -> str. Implement NIMBackend(LLMBackend) using httpx to POST to NVIDIA NIM /v1/chat/completions. Add an in-process LRU cache keyed by sha256(finding_hash + prompt[:128]). Implement FallbackBackend that returns a static template string when NIM is unreachable. Wire into DiagnosticsManager so troubleshoot_pod_issues calls llm_backend.complete() with the finding dict as context.",
+    "test_plan": "Unit test NIMBackend with a mocked httpx client asserting the correct endpoint and payload. Test cache hit by calling complete() twice with same finding_hash and asserting httpx called only once. Test FallbackBackend returns non-empty string when NIM raises ConnectionError."
+  },
+  {
+    "component_id": "behavior:analyzer_service",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No ServiceAnalyzer class exists in src/. diagnostics_manager._check_services() at line 244-253 returns a hardcoded dict with 'issues': [] — it never queries endpoints or checks selector-to-pod label alignment.",
+    "diagnosis": "ServiceAnalyzer is unimplemented; no code inspects endpoint slices, compares service selector to pod labels, or detects selector mismatches.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/service_analyzer.py: async def analyze(service_name, namespace) -> dict. Call v1.read_namespaced_service() to get .spec.selector. Call v1.list_namespaced_endpoints() to get subsets. Call v1.list_namespaced_pod(label_selector=selector_string) to count matching pods. Detect: (a) endpoints.subsets is None/empty = 'no_endpoints'; (b) pod count > 0 but endpoints empty = 'selector_mismatch' (compare actual pod labels to service selector); (c) pods NotReady = 'pods_not_ready'. Return structured finding with diagnosis and remediation commands.",
+    "test_plan": "Mock CoreV1Api: service with selector app=foo, no endpoints, one pod with label app=bar -> assert diagnosis='selector_mismatch'. Mock endpoints with 0 subsets and no pods -> assert 'no_endpoints'. Integration test against kind with a deliberately mismatched service."
+  },
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:44-66 — kubectl_describe Tool schema defined. src/mcp_server.py lines 1-34 — no import of enhanced_tools. grep of mcp_server.py for 'enhanced_tools', 'kubectl_describe', 'get_enhanced' returns no output.",
+    "diagnosis": "kubectl_describe is a dead schema: the tool is defined in enhanced_tools.py but mcp_server.py never imports that module, never registers the tool in list_tools, and has no handler for it in call_tool.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add: from enhanced_tools import get_enhanced_kubectl_tools. In handle_list_tools extend the returned list with get_enhanced_kubectl_tools(). In handle_call_tool add an elif block for 'kubectl_describe' that calls self.kubectl_manager.describe(resource=arguments['resource'], name=arguments['name'], namespace=arguments.get('namespace')). Ensure KubectlManager.describe() calls kubectl_manager's underlying k8s client read method.",
+    "test_plan": "Assert 'kubectl_describe' appears in the list_tools response. Call the tool via MCP with resource='pod', name='test' and assert the handler returns non-error content. Confirm kubectl_manager.describe() is invoked (not a stub)."
+  },
+  {
+    "component_id": "tests/unit/test_issue_patterns.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/unit/test_issue_patterns.py:51-63 — github_issues_manager.analyze_issue_pattern = AsyncMock(return_value=mock_result); result = await github_issues_manager.analyze_issue_pattern(pattern). Repeated for every test (lines 93-94, 129-130, 160-161, 191-192, 221-222, etc.). No conftest.py for unit tests was found with a github_issues_manager fixture definition.",
+    "diagnosis": "All async tests overwrite the method under test with AsyncMock then call the mock — they never exercise real code; the github_issues_manager fixture is also likely undefined, causing collection errors.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Create tests/unit/conftest.py that provides a github_issues_manager fixture instantiating GitHubIssuesManager with a mock HTTP client. Rewrite each test to call the actual analyze_issue_pattern() method and assert on behavior of the real pattern-matching logic. Replace mock_result assignment with input variation testing. Synchronous helper tests (test_extract_key_terms, test_analyze_severity_critical, test_analyze_component_kubelet) already inline mock via monkey-patch on the fixture — acceptable, but need the fixture defined.",
+    "test_plan": "Run pytest tests/unit/test_issue_patterns.py -v with --tb=short; zero fixture errors expected. Code coverage on github_issues_manager.py must show >50% line coverage after rewrite."
+  },
+  {
+    "component_id": "mcp-port-forward.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "mcp-port-forward.sh:6 — set -euo pipefail (present, correct). Lines 56-57: kubectl port-forward ... & followed by sleep 3 (line 59) with no PID capture, no way to detect if kubectl exited immediately with error. Lines 100-101: curl called twice on health check — once for the -s /dev/null check and once to capture RESPONSE, doubling requests and creating a TOCTOU window. Lines 84-85: pgrep called twice to check then get PID, also a TOCTOU issue.",
+    "diagnosis": "Port-forward background process is launched without PID tracking making orphan cleanup unreliable; duplicate curl calls and double-pgrep create minor TOCTOU races; sleep 3 is an arbitrary wait with no retry loop.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Capture PID: kubectl port-forward ... & PF_PID=$!. Replace sleep 3 + test_connectivity with a poll loop: for i in $(seq 1 10); do sleep 1; curl -sf http://localhost:$LOCAL_PORT/health && break; done. Store PID to a file (echo $PF_PID > /tmp/mcp-pf.pid) so stop_port_forward can kill $(<\"/tmp/mcp-pf.pid\") reliably. Merge double curl in test_connectivity into a single call: RESPONSE=$(curl -sf ...) && echo \"healthy: $RESPONSE\".",
+    "test_plan": "Run ./mcp-port-forward.sh start against a live cluster and confirm PID file is created and port is reachable within 10s. Run stop and verify the process is gone and PID file is removed. Run start when already running and verify the idempotency message appears without starting a second process."
+  },
+  {
+    "component_id": "enhanced:kubectl_scale",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:162-191 — kubectl_scale Tool schema defined with resource/name/replicas required fields. src/mcp_server.py lines 1-34 — no import of enhanced_tools. grep of mcp_server.py for 'kubectl_scale', 'enhanced_tools', 'get_enhanced' returns no output.",
+    "diagnosis": "kubectl_scale is a dead schema: defined in enhanced_tools.py but never imported, registered in list_tools, or dispatched in call_tool by mcp_server.py.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same import as kubectl_describe fix (get_enhanced_kubectl_tools already returns both). Add elif in handle_call_tool for 'kubectl_scale': call self.kubectl_manager.scale(resource=arguments['resource'], name=arguments['name'], replicas=arguments['replicas'], namespace=arguments.get('namespace')). Implement kubectl_manager.scale() using AppsV1Api.patch_namespaced_deployment_scale() or equivalent for replicaset/statefulset. Respect non_destructive_mode flag (raise PermissionError if enabled).",
+    "test_plan": "Assert 'kubectl_scale' appears in list_tools. Call via MCP with replicas=3 and assert AppsV1Api.patch_namespaced_deployment_scale is invoked with the correct body. Assert PermissionError is returned when non_destructive_mode=True."
+  }
+]

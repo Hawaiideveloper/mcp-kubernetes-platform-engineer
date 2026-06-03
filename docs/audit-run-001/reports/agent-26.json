@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "helm_manager.py:125 — `repo_result = await self.add_helm_repository(repository, repository)` (passes URL as both name and URL)",
+    "diagnosis": "install_helm_chart passes the repository URL as both the name and URL arguments to add_helm_repository, producing invalid repo names like 'https://charts.example.com' which will always fail or pollute the helm repo list.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Extract a sanitized repo name from the URL before calling add_helm_repository:\n  repo_name = repository.rstrip('/').split('/')[-1].replace('.', '-')\n  repo_result = await self.add_helm_repository(repo_name, repository)\n  if not repo_result['success']:\n      return repo_result\n  chart = f'{repo_name}/{chart}'",
+    "test_plan": "Unit test: call install_helm_chart with repository='https://charts.bitnami.com/bitnami', verify that _run_helm is called with 'repo add bitnami https://charts.bitnami.com/bitnami' (not the URL as both args) and that the chart arg is prefixed with the sanitized name."
+  },
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "helm_manager.py:298-301 — `args.extend(['--password', password])` (plaintext password injected into subprocess args list)",
+    "diagnosis": "Helm repo credentials are passed as CLI arguments, which exposes them in /proc/<pid>/cmdline and process-listing output on Linux; should use environment variables or a credentials file instead.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Pass credentials via environment variables:\n  env = os.environ.copy()\n  if username: env['HELM_REPO_USERNAME'] = username\n  if password: env['HELM_REPO_PASSWORD'] = password\n  # use --username and --password only if helm doesn't support env-based auth;\n  # alternatively write a temporary netrc/credentials file and pass --password-stdin.",
+    "test_plan": "Verify that subprocess args list does not contain the raw password string; confirm the subprocess is invoked with the credential in env or via stdin only."
+  },
+  {
+    "component_id": "setup-vscode-nodeport.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "setup-vscode-nodeport.sh:1 — `#!/bin/bash` (no `set -euo pipefail`); line 13-14: kubectl invocations with no error handling for empty output",
+    "diagnosis": "The script lacks `set -euo pipefail`; if CLUSTER_IP or NODEPORT resolve to empty strings the script continues and writes a broken settings.json URL like 'http://:' without any error.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add immediately after shebang:\n  set -euo pipefail\nThen validate outputs:\n  [[ -z \"$CLUSTER_IP\" ]] && { echo 'ERROR: could not resolve cluster IP'; exit 1; }\n  [[ -z \"$NODEPORT\" ]] && { echo 'ERROR: NodePort not found'; exit 1; }",
+    "test_plan": "Run with a kubeconfig pointing to a non-existent cluster and confirm the script exits non-zero with a meaningful message rather than silently writing a broken settings.json."
+  },
+  {
+    "component_id": "stop.sh",
+    "kind": "shell",
+    "severity": "low",
+    "evidence": "stop.sh:2-4 — `docker stop k8s-mcp-server 2>/dev/null || true` (hardcoded container name, no `set -euo pipefail`, no verification of successful stop)",
+    "diagnosis": "stop.sh has no strict error mode, silently swallows all docker errors with `|| true`, and hardcodes the container name 'k8s-mcp-server' which will silently do nothing if the server is running under a different name or via docker-compose.",
+    "fix_class": "rewrite",
+    "proposed_fix": "#!/usr/bin/env bash\nset -euo pipefail\nCONTAINER=${K8S_MCP_CONTAINER:-k8s-mcp-server}\nif docker inspect \"$CONTAINER\" &>/dev/null; then\n  docker stop \"$CONTAINER\" && docker rm \"$CONTAINER\"\n  echo \"Stopped and removed $CONTAINER\"\nelse\n  echo \"Container $CONTAINER not running; nothing to stop\"\nfi",
+    "test_plan": "Run stop.sh when no container exists and verify exit code 0 with appropriate message; run when container is running and verify it is stopped and removed."
+  },
+  {
+    "component_id": "behavior:worklist_sqlite",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No implementation exists in the repo; behavior design task for PRD",
+    "diagnosis": "There is no SQLite-backed worklist to allow multiple auto-remediator agents to claim work items without collision; concurrent agents would race on the same resources.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: table `work_items(id TEXT PK, resource_kind TEXT, resource_name TEXT, namespace TEXT, issue_type TEXT, status TEXT CHECK(status IN('pending','claimed','done','failed')), claimed_by TEXT, claimed_at REAL, created_at REAL)`. Interface: `claim_item(agent_id, issue_type) -> WorkItem|None` using `BEGIN IMMEDIATE; UPDATE ... WHERE status='pending' LIMIT 1; COMMIT` for atomicity. `release_item(id, status)` sets done/failed. Edge cases: stale claims (claimed_at > 5 min old reset to pending), concurrent SQLite writers use WAL mode (`PRAGMA journal_mode=WAL`). Dependencies: Python `sqlite3` stdlib only.",
+    "test_plan": "Spawn 10 concurrent threads each calling claim_item; assert no item is claimed by more than one thread. Test stale-claim reaper by injecting a row with claimed_at=time()-600 and verifying it gets re-claimed."
+  },
+  {
+    "component_id": "behavior:safety_allowlist",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No implementation exists in the repo; behavior design task for PRD",
+    "diagnosis": "There is no allowlist mechanism preventing auto-remediator agents from merging changes into arbitrary namespaces; without it the agent could mutate production namespaces autonomously.",
+    "fix_class": "design",
+    "proposed_fix": "Config model: `safety_allowlist: list[str]` loaded from env var `ALLOW_NAMESPACES` (comma-separated) or config file. Interface: `is_auto_merge_allowed(namespace: str) -> bool` returns True only if namespace matches the allowlist (exact match or glob). All remediation paths call this guard before applying; if False, write a PR/issue instead. Default: allowlist is empty (all operations require PR). Edge cases: cluster-scoped resources (nodes, PVs) always require PR. Wildcard support for dev/staging patterns like 'dev-*'.",
+    "test_plan": "Unit test: ALLOW_NAMESPACES='dev,staging' — assert is_auto_merge_allowed('dev') is True, is_auto_merge_allowed('production') is False. Integration test: remediation action on 'production' namespace produces a PR object rather than a live kubectl apply."
+  },
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:1 — 'Production-Ready Test Suite'; line 19: '390 Total Tests'; line 58-59: 'Based on analysis of 45,720+ closed Kubernetes GitHub issues'",
+    "diagnosis": "The document makes sweeping production-ready claims that do not match reality: the actual test counts are 10+9+8+7+21=55 test functions across all files (not 390), the integration/performance/security test directories do not exist, and the '45,720+ issues' claim is unverifiable marketing language with no evidence of real issue data ingestion.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the summary with accurate counts derived from `grep -rc 'def test_' tests/`. Remove the '45,720+ issues' claim or cite the actual data source. Retitle the doc 'Test Suite Status' and list what is implemented vs planned. Remove the 'Production-Ready' label until integration and performance test directories exist.",
+    "test_plan": "Run `pytest --collect-only -q` and compare reported test count to what the doc claims; any discrepancy is evidence the doc is inaccurate."
+  },
+  {
+    "component_id": "k8s/service.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/service.yaml:44 — `nodePort: 30001` (hardcoded NodePort); no NetworkPolicy restricting ingress; NodePort service exposes port on all cluster nodes",
+    "diagnosis": "The NodePort service uses a hardcoded port 30001 with no NetworkPolicy limiting which source IPs can reach it, making the MCP server (which has cluster-admin-equivalent capability via its managers) reachable from any node-network client.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a NetworkPolicy to k8s/service.yaml:\n  kind: NetworkPolicy\n  spec:\n    podSelector: {matchLabels: {app.kubernetes.io/name: kubernetes-platform-engineer}}\n    ingress:\n    - from: [{namespaceSelector: {matchLabels: {name: mcp-clients}}}]\n      ports: [{port: 3001}]\nFor the NodePort service, remove the hardcoded nodePort (let Kubernetes assign) or document the firewall rule required to restrict node-level access.",
+    "test_plan": "Deploy with the NetworkPolicy and verify that a pod in an unlabeled namespace cannot reach port 3001; verify that a pod in the mcp-clients namespace can."
+  },
+  {
+    "component_id": "behavior:analyzer_pdb",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No PDBAnalyzer implementation exists in the repo; behavior design task for PRD",
+    "diagnosis": "There is no PodDisruptionBudget analyzer to detect when PDBs block evictions (e.g. minAvailable=replicas) or have selectors that don't match any pods.",
+    "fix_class": "design",
+    "proposed_fix": "Interface: `PDBAnalyzer.analyze(namespace: str | None) -> list[PDBFinding]`. For each PDB: (1) resolve its labelSelector against live pods via `CoreV1Api.list_namespaced_pod(label_selector=...)`; (2) if matched_pods==0, emit finding 'selector_mismatch'; (3) compute allowed_disruptions = min_available is set ? len(matched_pods) - min_available : max_unavailable; (4) if allowed_disruptions <= 0, emit 'eviction_blocked'. PDBFinding schema: {pdb_name, namespace, finding_type, matched_pod_count, allowed_disruptions, recommendation}. Dependencies: kubernetes-client CoreV1Api + PolicyV1Api. Edge cases: PDB referencing StatefulSet pods mid-rollout (transient block — add grace period before alerting).",
+    "test_plan": "Mock PolicyV1Api to return a PDB with minAvailable=3 matching 3 pods; assert analyze() returns finding type 'eviction_blocked'. Mock a PDB whose selector matches 0 pods; assert 'selector_mismatch' is returned."
+  },
+  {
+    "component_id": "enhanced:kubectl_get",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:15-42 defines Tool(name='kubectl_get',...); grep of src/mcp_server.py returns zero matches for 'enhanced_tools' or 'kubectl_get' handler — the module is never imported and the tool is never registered",
+    "diagnosis": "enhanced_tools.py defines 18 kubectl tools and 17 helm tools but mcp_server.py never imports enhanced_tools.py, so none of these tools are registered with the MCP server or callable by any client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py, add:\n  from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools\nIn handle_list_tools(), extend the tools list:\n  tools=[...existing..., *get_enhanced_kubectl_tools(), *get_enhanced_helm_tools()]\nIn handle_call_tool(), add dispatch branches for each enhanced tool name routing to self.kubectl_manager and self.helm_manager methods (which already exist and are instantiated at lines 73-74).",
+    "test_plan": "Call the MCP list_tools endpoint and assert 'kubectl_get', 'kubectl_logs', 'install_helm_chart' appear in the response; then call 'kubectl_get' with resource='pods' and assert the response contains output from kubectl_manager.get_resources, not an 'Unknown tool' error."
+  }
+]

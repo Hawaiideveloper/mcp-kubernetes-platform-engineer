@@ -1,0 +1,55 @@
+{
+  "agent_id": 23,
+  "components": [
+    {
+      "id": "behavior:restart_first_ladder",
+      "kind": "behavior",
+      "focus": "design the ladder: rollout restart -> wait 5m -> escalate. State machine."
+    },
+    {
+      "id": "behavior:iteration_state_machine",
+      "kind": "behavior",
+      "focus": "review\u2192PRD\u2192split\u2192implement\u2192verify loop with stop conditions"
+    },
+    {
+      "id": "deploy-k8s.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/ingress.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:get_troubleshooting_guide",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/security_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:done_definition",
+      "kind": "behavior",
+      "focus": "what \"proven with output\" means: green pytest + image build + clean events + empty failed pods"
+    },
+    {
+      "id": "src/kubectl_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "coming_soon.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:dpo_pair_extraction",
+      "kind": "behavior",
+      "focus": "given (rejected_actions, chosen_action, evidence), emit DPO issue body"
+    }
+  ]
+}

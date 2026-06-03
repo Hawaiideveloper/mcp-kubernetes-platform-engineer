@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:analyzer_node",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/k8s_manager.py:22-33 — self.client = None; self.api_client = None; initialize() contains only a comment 'Kubernetes client initialization would go here'",
+    "diagnosis": "No NodeAnalyzer class or method exists; the k8s_manager.py has null client fields and a stub initialize() that never calls kubernetes.client.CoreV1Api or reads node conditions, so NotReady/DiskPressure/MemoryPressure/PIDPressure detection cannot function.",
+    "fix_class": "implement",
+    "proposed_fix": "Add NodeAnalyzer class with method analyze_node(node_name: str) -> NodeFinding. In initialize(), call config.load_incluster_config() then CoreV1Api(). analyze_node() reads v1.read_node_status(node_name), inspects node.status.conditions filtering by type in [NotReady, MemoryPressure, DiskPressure, PIDPressure], returns structured NodeFinding(node=str, conditions=list[Condition], timestamp=datetime). Raise NodeNotFoundError if node absent.",
+    "test_plan": "Mock CoreV1Api.read_node_status() returning fixture nodes with each pressure condition set; assert NodeFinding.conditions contains the expected types and status. Test NodeNotFoundError path with ApiException(status=404)."
+  },
+  {
+    "component_id": "mcp-tool:execute_remediation",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:166-210 — execute_remediation() builds a result dict with hardcoded string lists like 'Analyzed pod events and logs' and 'Would restart kubelet service'; no kubernetes client call is made anywhere in this method",
+    "diagnosis": "execute_remediation() is a stub that returns canned action strings without issuing a single real Kubernetes API call, so callers receive false confirmation of remediation actions that were never performed.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub with real dispatch: for pod_restart_loop call CoreV1Api().delete_namespaced_pod(name=target, namespace=ns, body=V1DeleteOptions()) (skip when dry_run=True). For node_not_ready invoke subprocess(['kubectl','cordon',target]) then taint logic via CoreV1Api().patch_node(). Capture API exceptions, log, and surface in result['errors']. Always set dry_run=True as the default.",
+    "test_plan": "Mock CoreV1Api.delete_namespaced_pod; assert it is called exactly once when dry_run=False and not called when dry_run=True. Assert result['status'] == 'success' on happy path and result['status'] == 'error' on ApiException."
+  },
+  {
+    "component_id": "k8s/configmap.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/configmap.yaml:1-19 — the file carries no immutable: true field; MCP_HOST is set to 0.0.0.0 with no comment restricting bind scope; no SECRET_GITHUB_TOKEN or KUBECONFIG keys are present yet deployment.yaml line 50 sets KUBECONFIG to a directory path, not a kubeconfig file",
+    "diagnosis": "ConfigMap lacks immutability marking (allows silent hot-patching), exposes 0.0.0.0 bind without documentation of intent, and does not carry the KUBECONFIG value correction needed to match the broken env var in deployment.yaml.",
+    "fix_class": "document",
+    "proposed_fix": "Add 'immutable: true' under metadata to prevent in-place mutations. Add inline comment that MCP_HOST=0.0.0.0 is intentional for pod networking. Remove MCP_HOST from ConfigMap and bind it in code defaults if this is not meant to be operator-configurable. Add GITHUB_ISSUES_UPDATE_INTERVAL comment noting unit is seconds.",
+    "test_plan": "Run 'kubectl apply -f configmap.yaml' twice with a changed value and confirm the second apply is rejected due to immutability. Lint with kubeval or kube-score to verify no forbidden fields."
+  },
+  {
+    "component_id": "behavior:image_tag_migration_remediation",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest; k8s/kustomization.yaml:18 — newTag: latest; src/k8s_manager.py:54 — hardcoded 'version': 'v1.29.0'",
+    "diagnosis": "No automated remediation behavior exists for yanked-image scenarios (e.g., bitnami/kubectl:1.30 class of issues); the codebase also uses :latest tags in both manifests and kustomization, which reproduces the exact vulnerability class this behavior is meant to fix.",
+    "fix_class": "implement",
+    "proposed_fix": "Implement ImageTagRemediator(target_deployment, target_namespace, new_image_ref): (1) validate new_image_ref matches format registry/repo:sha256@digest or semver tag, (2) call AppsV1Api().patch_namespaced_deployment with strategic merge patch setting spec.template.spec.containers[*].image, (3) watch rollout via AppsV1Api().read_namespaced_deployment_status until ready replicas == desired, (4) rollback via rollout undo if readiness timeout exceeded. Data model: ImageMigrationRecord(old_ref, new_ref, deployment, namespace, status, timestamp).",
+    "test_plan": "Unit test: mock patch_namespaced_deployment and assert patch body contains correct image. Integration test: deploy a known :latest image, invoke remediator with pinned sha, confirm deployment.spec.template.spec.containers[0].image updated and pods reach Running."
+  },
+  {
+    "component_id": "mcp-tool:find_similar_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:593-597 — dispatches to github_issues_manager.find_similar_issues(); src/github_issues_manager.py:478-516 — queries local SQLite DB at self.db_path; the DB is only populated if _fetch_recent_issues() succeeded at startup, which requires live GitHub API access",
+    "diagnosis": "find_similar_issues() queries a local SQLite database that is empty on first run and will remain empty if GitHub API calls are rate-limited or the token is absent (self.github_token = None at line 56), so the tool silently returns [] with no indication that the database is unpopulated.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a db_ready: bool flag set True only after _fetch_recent_issues completes at least one successful insert. In find_similar_issues(), check db_ready and return a structured error {'error': 'issue_db_not_ready', 'message': 'GitHub issue database is empty; set GITHUB_TOKEN env var and restart'} instead of []. Expose db record count in get_issue_statistics() response.",
+    "test_plan": "Start manager without GITHUB_TOKEN and assert find_similar_issues returns error dict not empty list. Seed DB with 3 fixture issues; assert find_similar_issues returns matching entries for a query that matches title text."
+  },
+  {
+    "component_id": "behavior:backend_cache",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "src/ directory listing shows no cache.py or similar; grep across all src/*.py for 'cache' or 'TTL' yields zero hits in manager files",
+    "diagnosis": "No LLM explanation cache exists anywhere in the codebase; repeated calls for the same finding hash will re-invoke the LLM backend on every request, causing redundant latency and cost.",
+    "fix_class": "implement",
+    "proposed_fix": "Implement FindingCache(ttl_seconds=3600): dict[str, CacheEntry] where key = sha256(json.dumps(finding, sort_keys=True)), CacheEntry = dataclass(explanation: str, created_at: float). get(key) checks time.monotonic() - entry.created_at < ttl_seconds; set(key, explanation) evicts entries older than TTL. Wire into LLM backend call site: check cache before invoking LLM, store result after. Cache is in-process; no external store required for v1.",
+    "test_plan": "Unit test: insert entry, retrieve within TTL asserts hit, retrieve after TTL asserts miss. Integration test: call explanation endpoint twice with identical finding; assert LLM backend mock called exactly once."
+  },
+  {
+    "component_id": "behavior:nim_backend_integration",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/ listing shows no llm_backend.py or nim.py; no import of openai, httpx, or NIM SDK appears in any src file; the mcp_server.py imports only internal managers",
+    "diagnosis": "There is no pluggable LLM backend interface and no NIM integration; the server produces zero AI-generated explanations despite README claims of intelligent analysis, making the 'platform engineer' framing misleading.",
+    "fix_class": "implement",
+    "proposed_fix": "Define LLMBackend(Protocol): explain(finding: dict) -> str. Implement NIMBackend(LLMBackend) using openai.AsyncOpenAI(base_url=NIM_BASE_URL, api_key=NIM_API_KEY); call chat.completions.create(model='meta/llama-3.1-70b-instruct', messages=[system_prompt, user_prompt_with_finding_json]). Inject backend into relevant managers via constructor. Default backend = NIMBackend if NIM_API_KEY env var is set, else raise ConfigurationError.",
+    "test_plan": "Mock AsyncOpenAI.chat.completions.create; assert NIMBackend.explain passes finding JSON in user message and returns completion text. Test ConfigurationError raised when NIM_API_KEY absent."
+  },
+  {
+    "component_id": "behavior:finding_serialization",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "src/k8s_manager.py:181-206 — execute_remediation returns ad-hoc dict with no schema; src/security_manager.py:48-56 — security_scan returns untyped dict; no dataclass, TypedDict, or Pydantic model named Finding, Issue, or similar exists anywhere in src/",
+    "diagnosis": "All manager methods return untyped raw dicts with inconsistent keys, preventing reliable serialization to structured JSON for PRD generation, DPO training pairs, or downstream synthesis agents.",
+    "fix_class": "implement",
+    "proposed_fix": "Define in src/finding.py: @dataclass class Finding: component_id: str; kind: Literal['security','node','pod','network','resource']; severity: Literal['critical','high','medium','low','info']; evidence: str; diagnosis: str; fix_class: str; proposed_fix: str; test_plan: str; timestamp: datetime = field(default_factory=datetime.utcnow). Add Finding.to_dict() -> dict and Finding.from_dict(d: dict) -> Finding. All manager return types switch to List[Finding] or Dict[str, Any] containing findings: List[Finding].",
+    "test_plan": "Assert Finding.to_dict() round-trips through Finding.from_dict() with no data loss. Assert json.dumps(finding.to_dict()) produces valid JSON. Assert all severity values outside the Literal set raise ValueError."
+  },
+  {
+    "component_id": "mcp-tool:security_scan",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/security_manager.py:91-232 — all private scan methods (_scan_rbac, _scan_pod_security, _scan_network_policies, _scan_secrets, _scan_container_images) return hardcoded dicts with fabricated counts and named fake resources like 'debug-pod', 'old-api-key', 'nginx:1.18'; no kubernetes client import or call exists in the file",
+    "diagnosis": "security_scan() and all sub-scan methods return entirely fabricated data including fake CVE counts, fake resource names, and fake compliance scores, so every security report produced is fiction regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Import kubernetes.client; in SecurityManager.initialize() call config.load_incluster_config() then instantiate CoreV1Api, RbacAuthorizationV1Api. Replace _scan_rbac with real list_cluster_role_binding() traversal checking subjects for cluster-admin. Replace _scan_pod_security with list_pod_for_all_namespaces() checking spec.containers[*].securityContext.privileged. Replace _scan_secrets with list_secret_for_all_namespaces() checking type and annotation age.",
+    "test_plan": "Mock kubernetes API list calls returning fixture objects with known violations; assert each violation appears in the returned issues list. Assert no issues returned when fixture is clean. Assert severity_threshold filters lower-severity items correctly."
+  },
+  {
+    "component_id": "k8s/kustomization.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/kustomization.yaml:18 — newTag: latest; lines 29-35 — configMapGenerator and secretGenerator reference config.env and secrets.env which do not exist in k8s/ directory (confirmed by ls); line 24-25 — patchesStrategicMerge has a comment placeholder but no actual patches",
+    "diagnosis": "kustomization.yaml references two non-existent env files (config.env, secrets.env) causing 'kustomize build' to fail hard; it also pins the image to :latest (no digest), breaking reproducible deployments and enabling supply-chain attacks.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace 'newTag: latest' with 'newDigest: sha256:<pinned-digest>' or at minimum a semver tag. Remove configMapGenerator and secretGenerator blocks that reference missing .env files, or create stub config.env and secrets.env with documented required keys. Move mutable config into the existing configmap.yaml. Add a real patchesStrategicMerge entry or delete the empty comment block.",
+    "test_plan": "Run 'kustomize build k8s/' and assert exit code 0. Run 'kubectl apply --dry-run=client -k k8s/' against a local cluster and assert no errors. Verify the rendered Deployment image field contains a digest or explicit semver tag, not :latest."
+  }
+]

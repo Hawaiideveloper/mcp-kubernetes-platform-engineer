@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "VSCODE_SETUP.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "VSCODE_SETUP.md:161 — 'The MCP server will provide responses based on real GitHub issues and community solutions!'",
+    "diagnosis": "The doc claims responses are derived from 'real GitHub issues' but k8s_manager, diagnostics_manager, monitoring_manager, and security_manager all return hardcoded stub data with no real k8s client calls; only github_issues_manager uses aiohttp to fetch issues.",
+    "fix_class": "document",
+    "proposed_fix": "Replace line 161 and the Expected Behavior section to accurately state that cluster-management tools return stub data and only the GitHub-issues search tools query external data. Remove claims of 'real' Kubernetes troubleshooting steps until real k8s client is wired.",
+    "test_plan": "Review updated doc against the actual tool implementations; confirm no claim references live cluster data for tools backed by stub managers."
+  },
+  {
+    "component_id": "src/__init__.py",
+    "kind": "python",
+    "severity": "info",
+    "evidence": "src/__init__.py:5 — '__version__ = \"1.0.0\"'",
+    "diagnosis": "The package declares version 1.0.0 in __init__.py but the file is otherwise a no-op with no exports, re-exports, or public API surface; no real implementation gaps here, but version overclaims production-grade status consistent with the broader stub problem.",
+    "fix_class": "document",
+    "proposed_fix": "Change __version__ to '0.1.0-dev' or similar pre-release marker to signal the package is not yet production-ready, matching the actual stub state of all managers.",
+    "test_plan": "Verify importlib.metadata or package __version__ reflects the new value after change; no functional behavior to test."
+  },
+  {
+    "component_id": "functional_unit_test.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "functional_unit_test.md:57 — 'TOTAL: 390 COMPREHENSIVE TESTS'",
+    "diagnosis": "The doc claims 390 tests covering real Kubernetes API integration but every code snippet in the doc uses AsyncMock return values (e.g., manager.analyze_issue_pattern patched inline), meaning zero tests exercise any live code path; the count of 390 is unverifiable without a corresponding test file that runs them.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the 'TOTAL: 390 COMPREHENSIVE TESTS' claim with an accurate count of tests that actually exist on disk and pass. Add a 'Status' column per category showing which are implemented vs. planned. Remove or annotate all snippets that mock the very method under test.",
+    "test_plan": "Run pytest --collect-only from the repo root and compare collected test count to the doc's stated total; any discrepancy is a doc bug."
+  },
+  {
+    "component_id": "tests/production/test_security_compliance.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_security_compliance.py:127 — 'security_manager.resolve_privileged_pod_violation = AsyncMock(return_value=mock_resolution)'",
+    "diagnosis": "Every test in this file mocks the exact method it then calls (e.g., security_manager.resolve_privileged_pod_violation = AsyncMock(...) then calls security_manager.resolve_privileged_pod_violation()), so each test asserts against hand-crafted fixture data only; no production code path is exercised.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the per-test AsyncMock assignments. Implement the actual resolve_* methods on SecurityManager using the real k8s client, then write tests that call those methods with a MockKubernetesClient (already defined in conftest.py) and assert against real code output. Each test should mock only the k8s API layer, not the method under test.",
+    "test_plan": "After rewrite, run pytest tests/production/test_security_compliance.py with a MockKubernetesClient fixture; all tests must pass without any mock assignment on the method being tested."
+  },
+  {
+    "component_id": "src/k8s_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:29-30 — 'self.client = None\\n        self.api_client = None'; src/k8s_manager.py:29 — '# Kubernetes client initialization would go here\\n            # For now, we\\'ll use a stub implementation'",
+    "diagnosis": "KubernetesManager.initialize() never creates a real kubernetes-client object; self.client and self.api_client remain None throughout execution, so every method (get_cluster_info, get_recommendations, execute_remediation) returns hardcoded fake data regardless of what cluster is configured.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In initialize(), load kubeconfig via kubernetes.config.load_kube_config(context=self.config.context_name) or load_incluster_config(). Assign self.client = kubernetes.client.CoreV1Api() and self.apps_v1 = kubernetes.client.AppsV1Api(). Replace stub dicts in get_cluster_info with actual API calls: self.client.list_node(), self.client.list_namespace(), self.client.list_pod_for_all_namespaces().",
+    "test_plan": "Unit test with a patched kubernetes.client that returns mock API responses; integration test against a kind/minikube cluster asserting node count matches cluster state."
+  },
+  {
+    "component_id": "push-and-deploy.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "push-and-deploy.sh:3 — 'set -e' (only); push-and-deploy.sh:8 — 'docker tag k8s-platform-engineer-mcp:latest ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest'",
+    "diagnosis": "The script uses only 'set -e' rather than 'set -euo pipefail', so unset variables and pipeline failures are silently swallowed; there is no idempotency check before kubectl apply, no verification that the Docker image exists locally before tagging, and the hardcoded registry path 'hawaiideveloper' will fail in any other user's environment.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace line 3 with 'set -euo pipefail'. Add 'docker image inspect k8s-platform-engineer-mcp:latest > /dev/null 2>&1 || { echo \"Image not found. Run docker build first.\"; exit 1; }' before the tag step. Parameterise the registry owner: 'REGISTRY_OWNER=${REGISTRY_OWNER:-hawaiideveloper}' and use it throughout.",
+    "test_plan": "Run shellcheck push-and-deploy.sh and confirm zero warnings; test with REGISTRY_OWNER set to a test value and verify docker tag uses it; verify the script exits non-zero when the local image is absent."
+  },
+  {
+    "component_id": "mcp-tool:performance_analysis",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:539-542 — 'elif name == \"performance_analysis\":\\n                    result = await self.monitoring_manager.performance_analysis(...)'; src/monitoring_manager.py:174 — '# Stub implementation for different analysis types'",
+    "diagnosis": "The tool is registered and dispatched correctly but MonitoringManager.performance_analysis() and its sub-methods (_analyze_cluster_performance, _analyze_node_performance, etc.) are all stubs returning hardcoded metrics with a hardcoded timestamp of '2025-08-09T10:30:00Z'; no real metrics server, Prometheus, or kubectl top API is called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Implement _analyze_cluster_performance() using the Kubernetes metrics.k8s.io/v1beta1 API (kubectl top equivalent via kubernetes.client.CustomObjectsApi). For node/workload analysis, call self.client.list_node() and parse .status.allocatable vs .status.capacity. Replace the hardcoded timestamp with datetime.utcnow().isoformat() + 'Z'.",
+    "test_plan": "Mock CustomObjectsApi to return a known metrics response and assert performance_analysis returns the correct derived utilization percentages; integration-test against a metrics-server-enabled cluster."
+  },
+  {
+    "component_id": "tests/production/test_network_service_issues.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_network_service_issues.py:82 — 'k8s_manager.resolve_service_no_endpoints = AsyncMock(return_value=mock_resolution)'; tests/conftest.py — no 'network_manager', 'service_mesh_manager', or 'storage_manager' fixture defined",
+    "diagnosis": "All nine tests mock the exact method under test, making assertions circular; additionally, tests reference fixtures 'network_manager', 'service_mesh_manager', and 'storage_manager' (lines 96, 397, 472) that do not exist in conftest.py, so those tests would fail with a fixture-not-found error before reaching any assertion.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add missing fixtures to conftest.py: network_manager wrapping DiagnosticsManager (which handles network checks), service_mesh_manager and storage_manager as thin stubs or new manager classes. Implement the actual resolve_* methods and remove the per-test AsyncMock assignments, testing real code paths instead.",
+    "test_plan": "Run pytest tests/production/test_network_service_issues.py -v and confirm all 9 tests are collected without fixture errors; after implementation, confirm tests exercise real logic by asserting on known MockKubernetesClient responses."
+  },
+  {
+    "component_id": "src/enhanced_tools.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:10 — 'def get_enhanced_kubectl_tools() -> List[Tool]:'; grep of src/ confirms zero references to enhanced_tools outside the file itself",
+    "diagnosis": "enhanced_tools.py defines 18 kubectl tool schemas and 18 Helm tool schemas (36 total) via get_enhanced_kubectl_tools() and get_enhanced_helm_tools(), but neither function is imported or called anywhere in mcp_server.py or any other source file, so all 36 tools are dead code never exposed to any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, import get_enhanced_kubectl_tools, get_enhanced_helm_tools from enhanced_tools. In handle_list_tools(), append [...get_enhanced_kubectl_tools(), ...get_enhanced_helm_tools()] to the tools list. In handle_call_tool(), add dispatch branches for each new tool name delegating to self.kubectl_manager and self.helm_manager (both already instantiated at line 73-74).",
+    "test_plan": "Call the list_tools MCP endpoint and assert kubectl_get, kubectl_logs, install_helm_chart etc. appear in the response; call kubectl_get with a mocked KubectlManager and assert the correct method is invoked."
+  },
+  {
+    "component_id": "GettingStarted.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GettingStarted.md:34-37 — 'curl http://localhost:3001/health'; GettingStarted.md:68 — 'Enjoy your production-ready Kubernetes platform engineering assistant!'",
+    "diagnosis": "The guide instructs users to verify the server via 'curl http://localhost:3001/health' but mcp_server.py runs only a stdio MCP server with no HTTP listener on any port, so the health-check command will always fail with connection refused; the 'production-ready' claim is also false given all cluster-management tools return stub data.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the curl health-check step with instructions to verify the MCP stdio server is running via 'docker logs k8s-mcp-server | grep initialized' or 'python src/main.py --stdio < /dev/null'. Remove 'production-ready' from line 68 until real k8s client calls are implemented. Add a note that cluster-management tools currently return illustrative data.",
+    "test_plan": "Follow the updated Getting Started guide in a fresh environment; confirm the verification step succeeds and no misleading health endpoint is referenced."
+  }
+]

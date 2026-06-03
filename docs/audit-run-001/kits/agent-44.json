@@ -1,0 +1,55 @@
+{
+  "agent_id": 44,
+  "components": [
+    {
+      "id": "tests/production/test_security_compliance.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:five_min_watchdog",
+      "kind": "behavior",
+      "focus": "watchdog impl: how do we know it healed? readiness + zero new warnings"
+    },
+    {
+      "id": "VSCODE_K8S_INTEGRATION.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "tests/unit/test_issue_patterns.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:analyzer_pod",
+      "kind": "behavior",
+      "focus": "PodAnalyzer: ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures"
+    },
+    {
+      "id": "enhanced:kubectl_get",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:get_best_practices",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "mcp-tool:get_cluster_info",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:analyzer_network_policy",
+      "kind": "behavior",
+      "focus": "NetPolAnalyzer: orphan policies, denied flows"
+    },
+    {
+      "id": "behavior:probe_tuning_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for connection-refused on startup"
+    }
+  ]
+}

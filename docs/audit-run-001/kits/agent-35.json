@@ -1,0 +1,55 @@
+{
+  "agent_id": 35,
+  "components": [
+    {
+      "id": "mcp-tool:get_trending_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "k8s/deployment.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:find_similar_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:restart_first_ladder",
+      "kind": "behavior",
+      "focus": "design the ladder: rollout restart -> wait 5m -> escalate. State machine."
+    },
+    {
+      "id": "start.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:analyzer_pvc",
+      "kind": "behavior",
+      "focus": "PVCAnalyzer: pending, mount-failed, capacity"
+    },
+    {
+      "id": "src/kubectl_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:performance_analysis",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "coming_soon.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:rbac_split",
+      "kind": "behavior",
+      "focus": "separate ServiceAccounts: read-only for diagnosis, namespaced-write for apply"
+    }
+  ]
+}

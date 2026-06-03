@@ -1,0 +1,55 @@
+{
+  "agent_id": 1,
+  "components": [
+    {
+      "id": "security-scan-demo.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:rbac_split",
+      "kind": "behavior",
+      "focus": "separate ServiceAccounts: read-only for diagnosis, namespaced-write for apply"
+    },
+    {
+      "id": "mcp-tool:get_best_practices",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "enhanced:helm_install",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "push-and-deploy.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:trading_ns_hardblock",
+      "kind": "behavior",
+      "focus": "enforce: ibkr-live-trader, daxxon-trading, brightflow-live \u2192 PR-only never auto"
+    },
+    {
+      "id": "functional_unit_test.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "enhanced:helm_upgrade",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    },
+    {
+      "id": "mcp-tool:get_issue_statistics",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

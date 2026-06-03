@@ -1,0 +1,55 @@
+{
+  "agent_id": 9,
+  "components": [
+    {
+      "id": "mcp-tool:troubleshoot_pod_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:vcluster_sandbox",
+      "kind": "behavior",
+      "focus": "spin up vcluster, apply candidate fix, smoke test, tear down. Lifecycle ~10s"
+    },
+    {
+      "id": "behavior:analyzer_pod",
+      "kind": "behavior",
+      "focus": "PodAnalyzer: ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures"
+    },
+    {
+      "id": "src/diagnostics_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "tests/conftest.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "enhanced:kubectl_describe",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-port-forward.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/deployment.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "k8s/namespace.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "K8S_ANNOUNCEMENT.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    }
+  ]
+}

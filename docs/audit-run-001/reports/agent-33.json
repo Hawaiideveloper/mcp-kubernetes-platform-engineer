@@ -1,0 +1,103 @@
+[
+  {
+    "component_id": "mcp-tool:execute_remediation",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:189 — '# Stub implementation for common remediations' and lines 191-203 return canned action strings without calling any Kubernetes API; self.client is None (line 22) and never set",
+    "diagnosis": "execute_remediation dispatches to k8s_manager.execute_remediation which only generates hardcoded action strings, never touches a real cluster regardless of issue_type or dry_run value.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Initialize self.client via kubernetes.config.load_incluster_config()/load_kube_config() in KubernetesManager.initialize(). For pod_restart_loop: call CoreV1Api().delete_namespaced_pod(target, namespace) when not dry_run. For node_not_ready: exec SSH or use exec_command on a debug pod. Raise NotImplementedError for unknown issue_type instead of silently returning error status.",
+    "test_plan": "Unit-test with a mocked kubernetes client asserting delete_namespaced_pod is called for pod_restart_loop when dry_run=False, and NOT called when dry_run=True. Integration-test against a kind cluster using a known crashlooping pod."
+  },
+  {
+    "component_id": "tests/unit/test_issue_patterns.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/unit/test_issue_patterns.py:52 — 'github_issues_manager.analyze_issue_pattern = AsyncMock(return_value=mock_result)' — every async test replaces the method under test with an AsyncMock before calling it; the fixture (conftest.py:131-138) populates a real in-memory SQLite DB but analyze_issue_pattern does not exist on GitHubIssuesManager (grep returns no hits).",
+    "diagnosis": "Every pattern-recognition test mocks out the exact method it asserts on, so the tests verify only that AsyncMock returns what it was told to — zero real behavior is tested and the method being tested does not exist.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Implement GitHubIssuesManager.analyze_issue_pattern() using keyword matching against the SQLite issues DB. Rewrite tests to call the real method against the populated in-memory DB (conftest fixture already seeds it). Remove AsyncMock assignment before the call in each test case.",
+    "test_plan": "Run pytest tests/unit/test_issue_patterns.py --no-header -q; confirm >0 tests exercise real SQL queries and that CrashLoopBackOff pattern returns issue_type='CrashLoopBackOff' from seeded data."
+  },
+  {
+    "component_id": "functional_unit_test.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "functional_unit_test.md:57 — 'TOTAL: 390 COMPREHENSIVE TESTS'; functional_unit_test.md:31-36 — claims '75 Integration Tests' including 'Kubernetes API Integration — 15 tests'; functional_unit_test.md:5 — 'Based on analysis of 45,720+ closed Kubernetes GitHub issues'",
+    "diagnosis": "The document claims 390 tests covering real Kubernetes API integration and live data analysis; the actual test files contain mocked stubs that never call the k8s API, and the 45,720-issue claim is unverifiable from local data sources.",
+    "fix_class": "document",
+    "proposed_fix": "Replace inflated test counts with actual counts from pytest --collect-only. Remove the '45,720+ issues' claim or replace with the actual count from the local SQLite DB at runtime. Retitle integration tests that use mocks as 'mock-based unit tests'. Add a separate section for planned (not yet implemented) tests.",
+    "test_plan": "Run pytest --collect-only 2>&1 | tail -1 and compare reported count to document claim; assert the document's numbers match within 10%."
+  },
+  {
+    "component_id": "behavior:nim_backend_integration",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No LLM backend interface exists anywhere in src/; grep for 'nim', 'llm', 'openai', 'backend' returns nothing in src/",
+    "diagnosis": "Design task: a pluggable LLM backend interface with NIM as default and per-finding cache keyed by finding hash does not exist and needs to be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: LLMBackend ABC with async def complete(prompt: str) -> str. NIMBackend(LLMBackend) posts to NVIDIA NIM endpoint via aiohttp. Cache: Redis or dict[str, str] keyed by sha256(finding_json). Interface: AnalysisEngine(backend: LLMBackend, cache: Cache) with async def explain_finding(finding: dict) -> str. Edge cases: NIM rate-limit (retry with backoff), cache TTL expiry, fallback to rule-based explanation if NIM unreachable.",
+    "test_plan": "Unit-test NIMBackend with a mock aiohttp session; assert cache hit skips HTTP call; assert fallback returns non-empty string when NIM returns 503."
+  },
+  {
+    "component_id": "src/main.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/main.py:44-48 — CORS allows all origins with allow_credentials=True; src/main.py:108-139 — /k8s/diagnostics, /k8s/monitoring, /k8s/security return hardcoded stub dicts without calling any manager; src/main.py:219 — /stats endpoint documented in GETTING_STARTED.md does not exist in this file",
+    "evidence_secondary": "src/main.py:44 — 'allow_origins=[\"*\"]' combined with 'allow_credentials=True' is a security misconfiguration (CORS wildcard + credentials is rejected by browsers and is a spec violation)",
+    "diagnosis": "main.py's HTTP REST endpoints are dead stubs returning hardcoded strings, the /stats endpoint is missing entirely, and the CORS configuration is both insecure and non-functional for credentialed requests.",
+    "fix_class": "rewrite",
+    "proposed_fix": "REST handlers should delegate to the already-initialized manager instances (e.g., await self.mcp_server.k8s_manager.get_cluster_info()). Add GET /stats routing to github_issues_manager.get_issue_statistics(). Fix CORS to allow_origins=[os.getenv('ALLOWED_ORIGINS', 'http://localhost:3001')] and remove allow_credentials unless OAuth flow is intended.",
+    "test_plan": "Integration test: start HTTP server, curl /k8s/diagnostics, assert response contains real keys not the stub 'Available' string. Curl /stats and assert it returns JSON with issue count field."
+  },
+  {
+    "component_id": "enhanced:helm_upgrade",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:458 — Tool name='upgrade_helm_chart' defined in get_enhanced_helm_tools(); grep for 'from enhanced_tools' or 'get_enhanced_helm' in src/mcp_server.py returns zero results — the module is never imported",
+    "diagnosis": "upgrade_helm_chart schema is defined in enhanced_tools.py and a real implementation exists in helm_manager.py:141, but enhanced_tools.py is never imported by mcp_server.py so the tool is invisible to MCP clients.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py handle_list_tools(), append get_enhanced_helm_tools() and get_enhanced_kubectl_tools() to the tools list. In handle_call_tool(), add elif branches for 'upgrade_helm_chart', 'install_helm_chart', etc., delegating to self.helm_manager.<method>(**arguments). Add elif for kubectl tools delegating to self.kubectl_manager.",
+    "test_plan": "After wiring, call handle_list_tools() and assert 'upgrade_helm_chart' is present. Call handle_call_tool('upgrade_helm_chart', {...}) with a mocked helm_manager and assert the upgrade method was called with correct args."
+  },
+  {
+    "component_id": "GETTING_STARTED.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "GETTING_STARTED.md:7 — 'curl -fsSL https://raw.githubusercontent.com/your-org/mcp-kubernetes-platform-engineer/main/start.sh | bash' (placeholder org); GETTING_STARTED.md:141 — '45,720+ indexed Kubernetes GitHub issues'; GETTING_STARTED.md:149-152 — claims server 'automatically updates its knowledge base every hour' and 'Learns from community solutions'; GETTING_STARTED.md:219 — 'curl http://localhost:3001/stats | jq' (endpoint does not exist in main.py)",
+    "diagnosis": "GETTING_STARTED.md contains a placeholder GitHub org URL, overclaims about automatic learning, and references a /stats HTTP endpoint that is not implemented.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'your-org' with the actual AlbrightLaboratories org slug. Replace '45,720+ indexed' with 'up to N issues indexed on first run (requires GITHUB_TOKEN)'. Remove 'Learns from community solutions' — no ML is implemented. Remove the /stats curl example or note it as planned. Add a known-limitations section.",
+    "test_plan": "Review updated doc against actual code paths; confirm every curl example returns a real response from a running server."
+  },
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:55 — '# Stub implementation for different check types'; _check_nodes() at line 218 returns hardcoded node list ['master-1','worker-1','worker-2']; _check_pods() at line 231 returns hardcoded pod counts; no kubernetes client import or API call anywhere in diagnostics_manager.py",
+    "diagnosis": "diagnose_cluster_health routes through DiagnosticsManager which contains only hardcoded fake data; it never contacts a Kubernetes cluster regardless of configuration.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes.client.CoreV1Api instance (initialized from KubernetesManager). _check_nodes(): call list_node().items, map .status.conditions to ready/not-ready counts. _check_pods(namespace): call list_namespaced_pod or list_pod_for_all_namespaces, aggregate phase counts. _check_networking(): call list_namespaced_network_policy. Propagate k8s ApiException as structured errors.",
+    "test_plan": "Mock CoreV1Api.list_node() with a fixture returning 2 ready + 1 not-ready nodes; assert diagnose_cluster_health returns not_ready_nodes=1. Run against a kind cluster in CI to verify real output shape."
+  },
+  {
+    "component_id": "setup-vscode-nodeport.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "setup-vscode-nodeport.sh:6 — 'set -euo pipefail' present (good); line 13-14 — CLUSTER_IP and NODEPORT assigned via kubectl with no error check if kubectl is not installed or cluster unreachable; line 51-76 — heredoc embeds $CLUSTER_IP/$NODEPORT directly into JSON written to /tmp, leaking node IP in a world-readable temp file; line 79-102 — inline Python script merges JSON by overwriting top-level keys, silently discarding nested existing keys under same name",
+    "diagnosis": "The script has no guard for missing kubectl or empty CLUSTER_IP/NODEPORT, exposes the node IP in /tmp, and its JSON merge logic destroys existing nested settings under the same keys.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add: command -v kubectl >/dev/null || { echo 'kubectl not found'; exit 1; }. Validate CLUSTER_IP and NODEPORT are non-empty before use. Write config to a mktemp file with mode 600 instead of /tmp/mcp_nodeport_config.json. In the Python merge, use recursive dict merge (update nested dicts) rather than top-level assignment.",
+    "test_plan": "Run script with kubectl not in PATH; assert exit 1 and error message. Run with empty NODEPORT; assert exit 1. Verify /tmp does not contain node IP after cleanup."
+  },
+  {
+    "component_id": "behavior:analyzer_ingress",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No IngressAnalyzer class or ingress-related analysis method exists anywhere in src/; grep for 'ingress', 'tls_expiry', 'host_conflict' in src/ returns zero results",
+    "diagnosis": "Design task: IngressAnalyzer covering no-backend, TLS expiry, and host-conflict detection does not exist and needs to be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: IngressFinding(host: str, path: str, backend_service: str, backend_exists: bool, tls_expiry: datetime|None, conflicts: list[str]). Interface: async def analyze_ingress(namespace: str|None) -> list[IngressFinding] using NetworkingV1Api.list_namespaced_ingress + CoreV1Api.read_namespaced_service for backend existence. TLS expiry: load cert from associated Secret, parse NotAfter. Host conflict: group Ingresses by host+path, flag duplicates. Edge cases: wildcard hosts, cross-namespace backends, missing TLS secret.",
+    "test_plan": "Unit-test with mock ingress objects: one with missing backend service → backend_exists=False; one with expired cert → tls_expiry < now(); two ingresses with same host+path → conflicts populated. Integration test against kind cluster with known misconfigured ingress."
+  }
+]

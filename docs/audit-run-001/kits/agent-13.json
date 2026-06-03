@@ -1,0 +1,55 @@
+{
+  "agent_id": 13,
+  "components": [
+    {
+      "id": "behavior:analyzer_node",
+      "kind": "behavior",
+      "focus": "NodeAnalyzer: NotReady, disk pressure, memory pressure, PID pressure"
+    },
+    {
+      "id": "enhanced:helm_status",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "k8s/deployment.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "tests/production/test_network_service_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:orphan_job_cleanup",
+      "kind": "behavior",
+      "focus": "deterministic fix for \"saw a job the controller did not create\""
+    },
+    {
+      "id": "k8s/configmap.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "tests/production/test_pod_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "src/monitoring_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:analyzer_service",
+      "kind": "behavior",
+      "focus": "ServiceAnalyzer: no endpoints, selector mismatch"
+    },
+    {
+      "id": "K8S_ANNOUNCEMENT.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    }
+  ]
+}

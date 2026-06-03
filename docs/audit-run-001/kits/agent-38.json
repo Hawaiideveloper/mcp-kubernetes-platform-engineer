@@ -1,0 +1,55 @@
+{
+  "agent_id": 38,
+  "components": [
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    },
+    {
+      "id": "behavior:analyzer_cronjob",
+      "kind": "behavior",
+      "focus": "CronJobAnalyzer: missed schedules, orphaned jobs (saw the manual-cw5-003 thing)"
+    },
+    {
+      "id": "enhanced:kubectl_scale",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/__init__.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "src/k8s_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:kubectl_logs",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:finding_serialization",
+      "kind": "behavior",
+      "focus": "Finding type: structured JSON for issues, PRs, DPO pairs"
+    },
+    {
+      "id": "VSCODE_K8S_INTEGRATION.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "logs.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:iteration_state_machine",
+      "kind": "behavior",
+      "focus": "review\u2192PRD\u2192split\u2192implement\u2192verify loop with stop conditions"
+    }
+  ]
+}

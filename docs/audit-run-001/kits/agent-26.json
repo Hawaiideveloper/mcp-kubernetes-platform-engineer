@@ -1,0 +1,55 @@
+{
+  "agent_id": 26,
+  "components": [
+    {
+      "id": "src/helm_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "setup-vscode-nodeport.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "stop.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:worklist_sqlite",
+      "kind": "behavior",
+      "focus": "SQLite worklist for non-colliding agent claims; atomic claim/release"
+    },
+    {
+      "id": "behavior:safety_allowlist",
+      "kind": "behavior",
+      "focus": "allowlisted namespaces for auto-merge; everything else PR-only"
+    },
+    {
+      "id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "k8s/service.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:analyzer_pdb",
+      "kind": "behavior",
+      "focus": "PDBAnalyzer: blocking evictions, mismatched selectors"
+    },
+    {
+      "id": "enhanced:kubectl_get",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/mcp_server.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:five_min_watchdog",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No watchdog implementation exists anywhere in src/; monitoring_manager.py line 59 comment 'Stub implementation' confirms no real observability loop",
+    "diagnosis": "The five-minute watchdog behavior has no implementation design: there is no definition of what constitutes 'healed', no readiness probe integration, and no mechanism to count or suppress warnings post-remediation.",
+    "fix_class": "design",
+    "proposed_fix": "Implement WatchdogLoop(interval=300s): after each remediation call execute_remediation(), poll k8s_manager.get_cluster_info() for target resource readiness (all containers Ready, 0 restarts in window), then call monitoring_manager.analyze_logs(target, time_range='5m') and assert warning_count == 0 compared to pre-remediation baseline. Store WatchdogResult(healed: bool, readiness_achieved_at: datetime, new_warnings: int). Expose as MCP tool 'watch_remediation'. Edge cases: timeout after 10m, partial readiness (some pods ready), log flood from unrelated sources.",
+    "test_plan": "Unit-test WatchdogLoop with mocked k8s_manager that transitions from NotReady to Ready at t+2m and returns zero warnings; assert healed=True. Test timeout path by mocking k8s_manager to always return NotReady; assert healed=False after 10m. Integration test by applying a broken deployment, calling execute_remediation, then watch_remediation and asserting healed within 5m."
+  },
+  {
+    "component_id": "tests/production/test_security_compliance.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_security_compliance.py:127 — 'security_manager.resolve_privileged_pod_violation = AsyncMock(return_value=mock_resolution)'; identical pattern at lines 255, 376, 505, 652, 762, 898",
+    "diagnosis": "Every test in this file constructs a hand-crafted mock_resolution dict, assigns it directly to the method under test via AsyncMock, then asserts against the same dict it just created — the tests never exercise any real code path and cannot detect regressions.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove all AsyncMock assignments to the method under test. Instead mock only external I/O (kubernetes client, subprocess) and call the real security_manager methods. For each scenario assert on derived behavior (e.g., that scan_types='rbac' produces findings with 'apiGroups' keys), not on fields copied from a pre-baked dict. Add a conftest.py fixture that wires a real SecurityManager with a mock k8s client.",
+    "test_plan": "Run the rewritten tests against a SecurityManager whose k8s calls are mocked at the client level; confirm at least one test fails when a method returns an empty dict (proving assertions are live). Measure coverage with pytest-cov; target >80% branch coverage of security_manager.py."
+  },
+  {
+    "component_id": "mcp-tool:get_recommendations",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:547-549 — 'result = await self.k8s_manager.get_recommendations(...)'; k8s_manager.py:105-160 — entire method body constructs static dicts with no kubernetes client calls, comment 'Stub implementation for common remediations'",
+    "diagnosis": "get_recommendations is wired to a handler but the handler returns hardcoded text recommendations with no inspection of actual cluster state (no API call, no metrics query).",
+    "fix_class": "rewrite",
+    "proposed_fix": "In k8s_manager.get_recommendations(): call self.client.list_node() to get real node resource usage, call CoreV1Api().list_pod_for_all_namespaces() to detect pods missing resource limits or liveness probes, and build recommendations from actual findings. Signature stays identical. Add a data class Recommendation(title, severity, affected_resources, rationale). Return {'recommendations': [Recommendation.to_dict() ...]}.",
+    "test_plan": "Mock kubernetes CoreV1Api to return two nodes and three pods (one without resource limits); assert get_recommendations returns a recommendation referencing the actual pod name. Assert empty cluster returns empty recommendation list, not the hardcoded defaults."
+  },
+  {
+    "component_id": "src/monitoring_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "monitoring_manager.py:55 — '\"timestamp\": \"2025-08-09T10:30:00Z\"' (hardcoded date); line 59 — '# Stub implementation for different scopes'; lines 196-218 — _analyze_cluster_resources returns static dict with hardcoded values (total_cores: 12, used_cores: 5.4)",
+    "diagnosis": "All analysis methods in MonitoringManager are stubs returning hardcoded fictional data; no kubernetes metrics API or kubectl top calls are made anywhere in the file.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Initialize a kubernetes CustomObjectsApi client in __init__. In analyze_resource_usage() call the metrics.k8s.io/v1beta1 API (kubectl top equivalent) for real CPU/memory values. Replace hardcoded timestamp with datetime.utcnow().isoformat(). Replace _analyze_cluster_resources() private stubs with real calls to CoreV1Api().list_node() and aggregate container resource requests. Replace analyze_logs() stub with actual kubectl logs API call via CoreV1Api().read_namespaced_pod_log().",
+    "test_plan": "Mock kubernetes CustomObjectsApi to return a NodeMetricsList fixture; assert analyze_resource_usage(scope='cluster') returns cpu.total_cores matching the fixture node count. Assert the returned timestamp is within 5 seconds of datetime.utcnow(), not the hardcoded 2025-08-09 value."
+  },
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:515-521 — routes to diagnostics_manager.check_network_connectivity(); diagnostics_manager.py:185-210 — '# Stub implementation for different test types'; ping always returns 'status: success, latency_ms: 2.3'; http always returns 'status: failed, error: Connection timeout'",
+    "diagnosis": "check_network_connectivity returns predetermined pass/fail results regardless of actual cluster state; ping result is always success and http is always failure, making the tool useless and actively misleading.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the stub loop with kubectl exec calls via CoreV1Api().connect_get_namespaced_pod_exec() to run 'ping -c 3 <target>' and 'curl -s -o /dev/null -w \"%{http_code}\" <target>' inside source_pod. Parse real stdout for latency, packet_loss, http_code. For dns test, exec 'nslookup <target>' and parse the response. Wrap each exec in try/except ApiException and surface errors as test_results[test_type]['error'].",
+    "test_plan": "Mock CoreV1Api.connect_get_namespaced_pod_exec to return simulated ping output; assert ping result contains parsed latency matching the mock stdout. Test with mock returning non-zero exit code; assert overall_connectivity is 'failed'. Confirm no test result is ever hardcoded by ensuring any change to the mock output changes the returned result."
+  },
+  {
+    "component_id": "CHANGELOG.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "CHANGELOG.md:103-104 — 'Complete test infrastructure with 390 comprehensive tests' and 'Production-ready functional unit test suite covering all 45,720+ Kubernetes GitHub issues'; test_security_compliance.py only has ~6 test methods; monitoring_manager.py:59 comment 'Stub implementation'; k8s_manager.py:29-31 comment 'Kubernetes client initialization would go here / For now, we'll use a stub implementation'",
+    "diagnosis": "CHANGELOG claims 390 production-ready tests and real Kubernetes API integration; the actual code contains pervasive stub implementations returning hardcoded data with no kubernetes client calls, and test files use self-mocking that validates no real behavior.",
+    "fix_class": "document",
+    "proposed_fix": "In CHANGELOG.md [1.0.0] section: replace '390 comprehensive tests' with accurate count; replace 'Production-ready functional unit test suite covering all 45,720+ Kubernetes GitHub issues' with 'Test suite validates mock response structure only; real k8s integration not implemented'. Add a known-limitations entry: 'All manager methods return stub data; kubernetes client is not initialized'. Remove the 'PRODUCTION READY RELEASE' heading until real client calls are present.",
+    "test_plan": "Run 'grep -r \"Stub implementation\" src/' and confirm count matches the CHANGELOG's limitations section. Run pytest --collect-only and compare actual test count to claimed 390."
+  },
+  {
+    "component_id": "enhanced:helm_uninstall",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "enhanced_tools.py:503-526 defines Tool(name='uninstall_helm_chart', ...); grep of mcp_server.py for 'enhanced_tools' or 'from enhanced' returns no results — the module is never imported",
+    "diagnosis": "The helm_uninstall schema is defined in enhanced_tools.py but mcp_server.py never imports enhanced_tools, so the tool is never registered and is completely dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add 'from enhanced_tools import get_enhanced_helm_tools' and extend the ListToolsResult tools list with get_enhanced_helm_tools(). In handle_call_tool add elif branch: 'elif name == \"uninstall_helm_chart\": result = await self.helm_manager.uninstall_helm_chart(release_name=arguments[\"release_name\"], namespace=arguments.get(\"namespace\"), keep_history=arguments.get(\"keep_history\", False))'. The helm_manager.uninstall_helm_chart method already exists at helm_manager.py:171.",
+    "test_plan": "After wiring, call the MCP tool uninstall_helm_chart via a test client with a mock helm_manager.uninstall_helm_chart; assert the result passes through. Verify tool appears in ListToolsResult. Test non-destructive mode blocks the call by setting ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS=true."
+  },
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "helm_manager.py:125-127 — 'repo_result = await self.add_helm_repository(repository, repository)' passes repository URL as both name and URL; helm_manager.py:292-303 — add_helm_repository takes a 'name' and 'url' parameter but the caller at line 125 passes 'repository' (a URL) for both",
+    "diagnosis": "install_helm_chart passes the repository URL as the repository name when auto-adding repos, which will either create duplicate repos with URL-as-name or fail if helm rejects the URL as an invalid repo name; also _run_helm is synchronous but called with await in async methods.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In install_helm_chart(): derive a safe repo name by extracting the hostname from repository URL (e.g., 'stable' from 'https://charts.helm.sh/stable') before calling add_helm_repository(name=derived_name, url=repository). Also change _run_helm() to be async using asyncio.create_subprocess_exec instead of subprocess.run so it does not block the event loop during the 300-second timeout.",
+    "test_plan": "Unit test install_helm_chart with repository='https://charts.helm.sh/stable' and assert the add_helm_repository call receives name='charts.helm.sh' not the full URL. Test _run_helm with asyncio.run() in async context to confirm it does not block the loop. Test the 300s timeout path with a mocked process that never completes."
+  },
+  {
+    "component_id": "src/github_issues_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "github_issues_manager.py:488-492 — find_similar_issues() builds raw SQL using f-string: 'search_terms = \" OR \".join([f\"title LIKE \\'%{term}%\\' OR body LIKE \\'%{term}%\\'\" for term in key_terms])' then 'sql = f\"SELECT ...WHERE ({search_terms})\"' — key_terms come from user-supplied error_message via _extract_key_terms()",
+    "diagnosis": "find_similar_issues() constructs a SQL query by interpolating user-derived key_terms directly into an f-string, creating a SQL injection vulnerability; the parameterized query used in search_issues() is not applied here.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the f-string SQL construction in find_similar_issues() with a parameterized approach: build a list of '(title LIKE ? OR body LIKE ?)' placeholders equal to len(key_terms), join with ' OR ', and pass all values as a flat params list to db.execute(). Example: placeholders = ' OR '.join(['(title LIKE ? OR body LIKE ?)'] * len(key_terms)); params = [v for t in key_terms for v in (f'%{t}%', f'%{t}%')]; params.append(max_results).",
+    "test_plan": "Pass error_message=\"' OR '1'='1\" to find_similar_issues() and assert no rows from an unrelated table are returned and no SQL error is raised. Compare behavior with a benign query to confirm results are unchanged. Run with SQLite's trace callback enabled to assert the executed SQL uses ? placeholders."
+  },
+  {
+    "component_id": "behavior:analyzer_pdb",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No PDBAnalyzer class or pdb analysis exists in any src/ file; grep of diagnostics_manager.py, k8s_manager.py, and monitoring_manager.py finds no 'PodDisruptionBudget' or 'pdb' references",
+    "diagnosis": "A PDB analyzer that detects blocking evictions and mismatched selectors is entirely absent from the codebase and needs to be designed from scratch.",
+    "fix_class": "design",
+    "proposed_fix": "Implement PDBAnalyzer with method analyze_pdbs(namespace: Optional[str]) -> PDBAnalysisResult. Data model: PDBFinding(pdb_name, namespace, selector, matched_pods: List[str], disruptions_allowed: int, blocking_evictions: bool, selector_mismatch: bool, reason: str). Logic: (1) call PolicyV1Api().list_namespaced_pod_disruption_budget(); (2) for each PDB, label-select pods via CoreV1Api().list_namespaced_pod(label_selector=pdb.spec.selector.match_labels); (3) if matched_pods is empty flag selector_mismatch=True; (4) if disruptions_allowed==0 and any pod in matched_pods is in Evicting state flag blocking_evictions=True. Edge cases: PDB with matchExpressions (not just matchLabels), cluster-scoped call when namespace=None, PDB with maxUnavailable as percentage.",
+    "test_plan": "Unit test with mock PolicyV1Api returning a PDB whose selector matches zero pods; assert selector_mismatch=True. Test with a PDB where disruptions_allowed=0 and a pod in Evicting state; assert blocking_evictions=True. Test namespace=None calls list_pod_disruption_budget_for_all_namespaces(). Integration test against a kind cluster with a deliberately misconfigured PDB."
+  }
+]

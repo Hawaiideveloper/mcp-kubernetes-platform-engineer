@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:restart_first_ladder",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No implementation exists anywhere in the codebase; mcp_server.py dispatches to canned-data managers with no state-machine logic",
+    "diagnosis": "The remediation ladder (rollout restart -> wait 5 min -> escalate) is completely unimplemented; no state machine, no timer, no escalation path exists.",
+    "fix_class": "design",
+    "proposed_fix": "Model a 3-state machine: PENDING -> RESTARTING -> VERIFYING -> ESCALATED. Persist state in a dict keyed by (namespace, deployment). On entry to RESTARTING call `kubectl rollout restart deployment/<name>`; start asyncio.create_task with a 300-second sleep; on wakeup call `kubectl rollout status` — if success transition to VERIFIED, else transition to ESCALATED and emit an alert event. Edge cases: deployment not found, rollout already in progress, multiple concurrent ladders for the same target.",
+    "test_plan": "Unit-test each transition with a mock kubectl runner returning canned rollout-status output; integration-test against a real cluster by injecting a crashlooping deployment and asserting ESCALATED state fires within 310 seconds."
+  },
+  {
+    "component_id": "behavior:iteration_state_machine",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No such loop exists in the codebase; src/mcp_server.py is a single-pass tool-dispatch server with no iteration concept",
+    "diagnosis": "The review->PRD->split->implement->verify loop with stop conditions is entirely absent from the current design; there is no persistent iteration state, no stop condition evaluation, and no feedback between verify and the next review.",
+    "fix_class": "design",
+    "proposed_fix": "Define an IterationRecord dataclass: {id, phase: Literal[REVIEW,PRD,SPLIT,IMPLEMENT,VERIFY], stop_reason: Optional[str], created_at, updated_at}. Persist in SQLite or a JSON file. Transitions are driven by MCP tool calls (e.g. `start_iteration`, `advance_iteration`, `stop_iteration`). Stop conditions: MAX_ITERATIONS=10, all verify checks green, or explicit operator abort. Each VERIFY phase runs pytest and checks for empty failed-pods list; failure rewinds to IMPLEMENT.",
+    "test_plan": "Write a pytest fixture that drives the state machine through one full cycle using mock tool responses; assert stop condition fires at MAX_ITERATIONS; assert rewind from VERIFY->IMPLEMENT when tests fail."
+  },
+  {
+    "component_id": "deploy-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "deploy-k8s.sh:6 — `set -e` only; missing `-u` (unbound variables silently expand to empty) and `-o pipefail` (pipeline failures silently succeed); line 63: `CLUSTER_SERVER=$(kubectl cluster-info | grep ... | awk ...)` — pipeline failure in grep/awk is swallowed",
+    "diagnosis": "Script uses only `set -e`, leaving unbound-variable expansion and pipeline errors uncaught, which can silently produce wrong values for CLUSTER_SERVER and NODEPORT and cause incorrect deployment behavior.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change line 6 from `set -e` to `set -euo pipefail`. Quote all variable expansions (lines 69, 73, 75, 133, 136, 137). Replace the bare `read -p` prompt (line 106) with an explicit check of stdin being a tty. Validate that NODEPORT is non-empty before using it in output at line 164.",
+    "test_plan": "Run `bash -n deploy-k8s.sh` to catch syntax errors; then run with `bash -x` against a kind cluster and confirm no empty-variable substitutions appear in trace output."
+  },
+  {
+    "component_id": "k8s/ingress.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/ingress.yaml:11 — `nginx.ingress.kubernetes.io/ssl-redirect: \"false\"`; lines 15-19: TLS block commented out; no securityContext, no resource limits, no RBAC annotations, no rate-limiting annotations",
+    "diagnosis": "Ingress is intentionally configured with TLS disabled and SSL redirect off, exposing the MCP server (which may handle kubeconfig credentials) over plain HTTP with no rate limiting or auth annotations.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Set `ssl-redirect: \"true\"`. Uncomment the TLS block and wire a cert-manager ClusterIssuer. Add `nginx.ingress.kubernetes.io/limit-rps: \"10\"` and `nginx.ingress.kubernetes.io/auth-type: basic` (or equivalent OAuth2-proxy annotation). Add a `kubernetes.io/ingress.class` label for explicit controller binding. Document the cert-manager prerequisite in a comment.",
+    "test_plan": "Apply the manifest to a test cluster with cert-manager installed; assert the Certificate resource reaches Ready state; curl the HTTP endpoint and assert 301 redirect to HTTPS; curl HTTPS endpoint and assert 200."
+  },
+  {
+    "component_id": "mcp-tool:get_troubleshooting_guide",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:577-579 dispatches to `self.documentation_manager.get_troubleshooting_guide`; documentation_manager.py:401-413 iterates `self.documentation_db` which is populated only by live HTTP scraping of kubernetes.io at startup (documentation_manager.py:51-66); if startup HTTP calls fail or return no content, `documentation_db` is empty and the method returns `[]`",
+    "diagnosis": "get_troubleshooting_guide returns an empty list whenever the live kubernetes.io scrape fails at startup; there is no fallback, no offline cache, and no error surfaced to the caller — the tool silently returns no results.",
+    "fix_class": "implement",
+    "proposed_fix": "Bundle a minimal static troubleshooting index as a JSON file in the repo (data/troubleshooting_index.json). In `_build_documentation_index`, seed `documentation_db` from the static file before attempting live scrape. Wrap the live scrape in a try/except that logs a warning but does not raise. In `get_troubleshooting_guide`, return a structured error dict (not empty list) when results are empty so the MCP caller can surface it.",
+    "test_plan": "Unit-test with aiohttp mocked to raise ConnectionError; assert the method returns at least the static-index entries. Integration-test with real kubernetes.io reachable; assert at least one guide is returned for issue_type='pod'."
+  },
+  {
+    "component_id": "src/security_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "security_manager.py:93-116 (_scan_rbac), 118-150 (_scan_pod_security), 152-176 (_scan_network_policies), 178-201 (_scan_secrets), 203-232 (_scan_container_images) — every private scan method returns hardcoded dict literals with fabricated resource names ('debug-pod', 'nginx:1.18', 'db-credentials') and fixed counts; no kubernetes client import anywhere in the file",
+    "diagnosis": "All five security scan sub-methods return entirely fabricated data; the security_manager never imports or calls the kubernetes client, making every security result a lie regardless of the real cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Import `kubernetes.client` and `kubernetes.config`. In `initialize()`, call `kubernetes.config.load_incluster_config()` with fallback to `load_kube_config()`. Replace `_scan_rbac` to list ClusterRoleBindings via `RbacAuthorizationV1Api` and check for wildcard verbs. Replace `_scan_pod_security` to iterate pods via `CoreV1Api.list_pod_for_all_namespaces` and inspect securityContext. Replace `_scan_secrets` to list secrets and check for unencrypted data values. Replace `_scan_container_images` with a call to an external trivy or grype binary.",
+    "test_plan": "Unit-test each scan method with kubernetes client mocked to return a known resource set; assert findings match expected output. Integration-test against a real cluster with a known-misconfigured pod and assert it appears in results."
+  },
+  {
+    "component_id": "behavior:done_definition",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No done_definition check exists in any source file; security_manager, diagnostics_manager, and monitoring_manager all return hardcoded data so 'proven with output' cannot be verified against real cluster state",
+    "diagnosis": "There is no codified definition of DONE that can be automatically evaluated; the required conditions (green pytest, image build success, clean events, empty failed pods) are not checked anywhere programmatically.",
+    "fix_class": "design",
+    "proposed_fix": "Implement a `DoneChecker` class with four methods: `check_pytest()` runs `pytest --tb=short -q` and asserts returncode==0; `check_image_build()` runs `docker build --no-cache` and asserts returncode==0; `check_events()` calls CoreV1Api.list_event_for_all_namespaces filtering type=Warning and asserts count==0 for the target namespace; `check_failed_pods()` calls CoreV1Api.list_pod_for_all_namespaces filtering phase=Failed and asserts count==0. A `is_done()` method returns True only when all four pass and logs which check failed.",
+    "test_plan": "Unit-test each check method with mocked subprocess and kubernetes client; assert is_done() returns False when any single check fails; integration-test by deliberately failing a pod and asserting check_failed_pods() returns False."
+  },
+  {
+    "component_id": "src/kubectl_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "kubectl_manager.py:83-91 — `_mask_secrets` regex on line 87 uses a pattern that matches only a single base64 value per `data:` block and requires specific whitespace (`(?:\\s+\\w+:\\s+)`), so multi-key secret blocks are not fully masked; line 254 — `kubectl_generic` splits command by whitespace (`command.split()`) without shell-quote awareness, allowing arguments with spaces to be silently mangled",
+    "diagnosis": "The secret masking regex is brittle and incomplete, risking credential leakage in multi-key secrets, and the generic kubectl command splitter breaks on arguments containing spaces.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace `_mask_secrets` with a YAML-aware parser: load the output with `yaml.safe_load` and recursively replace all values under 'data' and 'stringData' keys with '<MASKED>' before re-serializing. Replace `command.split()` in `kubectl_generic` with `shlex.split(command)` to handle quoted arguments correctly.",
+    "test_plan": "Unit-test `_mask_secrets` with a multi-key secret YAML string and assert all values are masked; unit-test `kubectl_generic` with a command containing a label selector using spaces (e.g. `get pods -l 'app=foo,env=bar'`) and assert the subprocess receives the correct arg list."
+  },
+  {
+    "component_id": "coming_soon.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "coming_soon.md:195 — 'API response time under 2 seconds for 99% of requests'; coming_soon.md:179 — 'Test coverage maintained above 95%'; coming_soon.md:79 — 'Zero-trust architecture implementation guidance'; coming_soon.md:80 — 'Compliance automation for SOC2, PCI-DSS, HIPAA' — none of these are implemented; the document frames aspirational goals as current-state metrics under the heading 'Metrics & Success Criteria'",
+    "diagnosis": "coming_soon.md presents future aspirations as current success criteria without any caveats, creating false impressions about the server's current performance, compliance posture, and test coverage.",
+    "fix_class": "document",
+    "proposed_fix": "Rename the 'Metrics & Success Criteria' section to 'Target Metrics (Not Yet Measured)'. Add a one-line disclaimer at the top: 'All items in this document are planned features; none are implemented in the current release.' Prefix each metric bullet with 'Target:' to signal it is aspirational. Remove or caveat the compliance automation bullets (SOC2, PCI-DSS, HIPAA) until a compliance framework is actually wired.",
+    "test_plan": "Review the updated document and confirm no present-tense claims remain for unimplemented features; verify that a new contributor reading it cannot mistake roadmap items for shipped functionality."
+  },
+  {
+    "component_id": "behavior:dpo_pair_extraction",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No DPO pair extraction exists anywhere in the codebase; no rejected_actions or chosen_action data model is defined in any source file",
+    "diagnosis": "DPO pair extraction (rejected_actions, chosen_action, evidence) -> GitHub issue body is completely undesigned and unimplemented.",
+    "fix_class": "design",
+    "proposed_fix": "Define a dataclass: `DPOPair(rejected_actions: List[str], chosen_action: str, evidence: str, context: Dict[str, Any])`. Implement `emit_issue_body(pair: DPOPair) -> str` that produces a markdown GitHub issue body with sections: '## Context' (pair.context as a code block), '## Chosen Action' (pair.chosen_action), '## Rejected Alternatives' (bulleted list of pair.rejected_actions), '## Evidence' (pair.evidence). A `DPOCollector` class wraps tool-call execution, records the chosen tool invocation and any alternatives that were considered but skipped, and calls `emit_issue_body` when a session ends. Edge cases: empty rejected_actions list, evidence exceeding GitHub issue body limit (65536 chars), concurrent sessions.",
+    "test_plan": "Unit-test `emit_issue_body` with a known DPOPair and assert the output string contains all four sections with correct markdown; test with empty rejected_actions and assert the Rejected section renders gracefully; test with evidence >65000 chars and assert truncation with a '... (truncated)' notice."
+  }
+]

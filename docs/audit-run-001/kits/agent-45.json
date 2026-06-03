@@ -1,0 +1,55 @@
+{
+  "agent_id": 45,
+  "components": [
+    {
+      "id": "src/diagnostics_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:analyzer_hpa",
+      "kind": "behavior",
+      "focus": "HPAAnalyzer: no metrics, capped at max, never scaling"
+    },
+    {
+      "id": "src/logger.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "tests/production/test_network_service_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "behavior:nim_backend_integration",
+      "kind": "behavior",
+      "focus": "pluggable LLM backend interface; NIM as default; cache by finding-hash"
+    },
+    {
+      "id": "behavior:analyzer_service",
+      "kind": "behavior",
+      "focus": "ServiceAnalyzer: no endpoints, selector mismatch"
+    },
+    {
+      "id": "enhanced:kubectl_describe",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "tests/unit/test_issue_patterns.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "mcp-port-forward.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "enhanced:kubectl_scale",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    }
+  ]
+}

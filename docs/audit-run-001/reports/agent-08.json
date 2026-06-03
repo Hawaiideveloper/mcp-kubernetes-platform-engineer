@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/pvc.yaml:15 — storageClassName: local-path",
+    "diagnosis": "PVC hard-codes a non-standard storageClassName ('local-path') with no fallback annotation, no capacity expansion setting, and no volumeMode field; it will silently fail on clusters without that provisioner.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'volumeMode: Filesystem', add annotation 'volume.beta.kubernetes.io/storage-provisioner' guard comment, and parameterize storageClassName via a Helm value (default: standard) so the manifest is portable. Also add 'allowVolumeExpansion: true' reference comment pointing at the StorageClass requirement.",
+    "test_plan": "Deploy into a kind or minikube cluster with the default storageClass, confirm PVC reaches Bound state; then override storageClassName to 'local-path' and verify binding still works when the provisioner is present."
+  },
+  {
+    "component_id": "k8s/rbac.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/rbac.yaml:20 — resources: [..., \"secrets\", ...] verbs: [\"get\", \"list\", \"watch\"]",
+    "diagnosis": "ClusterRole grants cluster-wide read access to all Secrets and to RBAC clusterroles/clusterrolebindings; this violates least-privilege and allows the server SA to enumerate credentials across every namespace.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Split the ClusterRole into (1) a read-only ClusterRole that excludes 'secrets', and (2) a namespaced Role in 'mcp-kubernetes' only that grants 'secrets' get/list/watch. Remove the 'rbac.authorization.k8s.io' block entirely unless the security-scan feature is proven to be implemented. Bind the namespace-scoped Role via RoleBinding, not ClusterRoleBinding.",
+    "test_plan": "Apply the revised manifests, then run 'kubectl auth can-i list secrets --as=system:serviceaccount:mcp-kubernetes:kubernetes-mcp-server-sa -n kube-system' and verify it returns 'no'."
+  },
+  {
+    "component_id": "behavior:done_definition",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No DoD file exists in repo; src/health_check.py:13-30 only checks Python version, stdlib imports, and directory existence — no k8s API reachability, no pytest gate, no image build check.",
+    "diagnosis": "There is no machine-readable or enforced definition of 'done' for this service; health_check.py is a placeholder that will exit 0 even when the k8s client is unconfigured and all tools return canned data.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/done_check.py with four gates: (1) pytest exit-code 0 for tests/ directory, (2) docker build --no-cache exits 0, (3) 'kubectl get nodes' via the real KubernetesManager returns at least one node (not canned), (4) zero pods in Failed/CrashLoopBackOff state in mcp-kubernetes namespace. Expose as a CLI: 'python done_check.py --all'. Gate CI on it.",
+    "test_plan": "With a real cluster configured, run 'python done_check.py --all' and verify all four checks pass; then revoke kubeconfig and verify it exits non-zero with a clear error message for gate (3)."
+  },
+  {
+    "component_id": "behavior:trading_ns_hardblock",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:489-611 — no namespace guard anywhere in handle_call_tool; execute_remediation at line 552 accepts any 'target' without checking for trading namespaces.",
+    "diagnosis": "There is no enforcement preventing the MCP server from issuing remediation or mutation actions against ibkr-live-trader, daxxon-trading, or brightflow-live namespaces; any caller can pass those namespaces and the tool will attempt to act.",
+    "fix_class": "implement",
+    "proposed_fix": "Add TRADING_NS_BLOCKLIST = {'ibkr-live-trader', 'daxxon-trading', 'brightflow-live'} constant in config.py. In handle_call_tool, extract namespace from arguments before dispatch; if namespace in TRADING_NS_BLOCKLIST and tool is mutating (execute_remediation, kubectl_apply, kubectl_delete, kubectl_scale, kubectl_patch, kubectl_rollout, helm_*), raise a PolicyViolationError with message 'Manual PR required for trading namespace <ns>'. Log the attempted call. No bypass flag.",
+    "test_plan": "Unit-test that calling execute_remediation with target='ibkr-live-trader/some-pod' raises PolicyViolationError; integration-test that the same call over the MCP wire returns an error TextContent and does not reach the k8s API."
+  },
+  {
+    "component_id": "enhanced:kubectl_delete",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:106-128 — kubectl_delete schema defined; grep of src/mcp_server.py for 'kubectl_delete' returns no matches (confirmed no import of enhanced_tools).",
+    "diagnosis": "kubectl_delete schema is declared in enhanced_tools.py but mcp_server.py does not import enhanced_tools and has no handler for 'kubectl_delete', so the tool is completely dead and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Either: (a) import get_enhanced_kubectl_tools from enhanced_tools in mcp_server.py, extend the list_tools response to include them, and add dispatch branches in handle_call_tool that call self.kubectl_manager.delete_resource(resource, name, namespace, dry_run=(self.non_destructive_mode)); or (b) delete enhanced_tools.py and document that kubectl_manager handles all kubectl operations directly.",
+    "test_plan": "After wiring, call the kubectl_delete tool via the MCP wire with a test resource in a non-trading namespace in non-destructive mode and verify it returns a dry-run confirmation rather than unknown-tool error."
+  },
+  {
+    "component_id": "enhanced:kubectl_exec",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py — grep for 'kubectl_exec' returns no matches; the schema is not defined anywhere in the file. src/mcp_server.py also has no reference.",
+    "diagnosis": "kubectl_exec does not exist even as a dead schema — it was listed as a component to audit but was never authored, leaving a documented capability gap with no implementation path.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a kubectl_exec Tool schema in enhanced_tools.py with required fields: pod_name (string), command (array of string), namespace (string, default 'default'), container (string, optional). Implement handler in kubectl_manager.py using kubernetes.stream.stream(core_v1.connect_get_namespaced_pod_exec, ...) — block in non_destructive_mode. Wire dispatch in mcp_server.py. Block if namespace in TRADING_NS_BLOCKLIST.",
+    "test_plan": "Call kubectl_exec with a real pod running 'echo hello' and assert the response contains 'hello'; call in non-destructive mode and assert a policy-blocked error is returned."
+  },
+  {
+    "component_id": "mcp-tool:analyze_resource_usage",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:55 — timestamp: '2025-08-09T10:30:00Z' (hardcoded); lines 196-218 — all CPU/memory figures are hardcoded constants (total_cores: 12, used_cores: 5.4, etc.); no kubernetes client import anywhere in monitoring_manager.py.",
+    "diagnosis": "analyze_resource_usage returns entirely fabricated metrics with a hardcoded timestamp; no call to the kubernetes metrics API or any real data source is made.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes.client.CoreV1Api and CustomObjectsApi into MonitoringManager. For cluster scope, call custom_objects_api.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes') and aggregate. For pod scope, call custom_objects_api.list_namespaced_custom_object('metrics.k8s.io','v1beta1', namespace, 'pods'). Replace hardcoded timestamp with datetime.utcnow().isoformat()+'Z'. Raise NotImplementedError if metrics-server is absent rather than silently returning fake data.",
+    "test_plan": "Deploy to a cluster with metrics-server; call analyze_resource_usage with scope='cluster' and assert the returned cpu.total_cores matches 'kubectl top nodes' output. Mock the API in unit tests to verify error handling when metrics-server is absent."
+  },
+  {
+    "component_id": "mcp-tool:troubleshoot_pod_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:111-148 — status hardcoded to 'CrashLoopBackOff', restart_count hardcoded to 5, logs are static strings dated '2025-08-09', events are fabricated; no kubernetes client import in file.",
+    "diagnosis": "troubleshoot_pod_issues always returns the same canned CrashLoopBackOff scenario regardless of which pod is requested, making the tool actively misleading for any real cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject kubernetes.client.CoreV1Api. Call core_v1.read_namespaced_pod(pod_name, namespace) for status; call core_v1.read_namespaced_pod_log(pod_name, namespace, tail_lines=50) for logs; call core_v1.list_namespaced_event(namespace, field_selector=f'involvedObject.name={pod_name}') for events. Derive 'issues' list from actual pod.status.container_statuses[].state. Remove all hardcoded strings.",
+    "test_plan": "Point at a real cluster with a healthy pod and a crashing pod; assert troubleshoot_pod_issues returns status='Running' for the healthy pod and returns the actual exit code for the crashing one."
+  },
+  {
+    "component_id": "src/health_check.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/health_check.py:39-46 — check_imports() only verifies asyncio, json, logging (all stdlib); lines 49-55 — check_file_permissions() only verifies the app directory exists; no check for kubernetes client, kubeconfig, or server socket.",
+    "diagnosis": "health_check.py will return True even when the kubernetes client is unconfigured, no kubeconfig is present, and the MCP server has never successfully connected to any cluster, giving a false-positive health signal.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add check_k8s_client(): try 'from kubernetes import client, config; config.load_incluster_config() or config.load_kube_config(); client.VersionApi().get_code()' and return True only on success. Add check_mcp_imports(): verify 'from mcp.server import Server' imports cleanly. Update check() to call all four checks and log which one failed before returning False.",
+    "test_plan": "Run health_check.py with a valid kubeconfig and verify exit 0; run with KUBECONFIG pointing at a non-existent file and verify exit 1 with 'k8s client check failed' in output."
+  },
+  {
+    "component_id": "enhanced:kubectl_get",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:15-42 — kubectl_get schema defined; src/mcp_server.py — no import of enhanced_tools (confirmed by grep returning zero matches); no 'kubectl_get' dispatch branch in handle_call_tool.",
+    "diagnosis": "kubectl_get is defined as a schema in enhanced_tools.py but is unreachable because mcp_server.py never imports enhanced_tools and the tool name is not handled in the call_tool dispatcher, so any MCP client call returns 'Unknown tool: kubectl_get'.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add 'from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools' and extend the ListToolsResult tools list with both lists. In handle_call_tool add: 'elif name == \"kubectl_get\": result = await self.kubectl_manager.get_resource(arguments[\"resource\"], arguments.get(\"name\"), arguments.get(\"namespace\"), arguments.get(\"output_format\",\"yaml\"))'. Ensure kubectl_manager.get_resource calls the real k8s API.",
+    "test_plan": "After wiring, call kubectl_get with resource='pods' and namespace='kube-system' via the MCP wire; assert the response lists actual running pods rather than 'Unknown tool' error."
+  }
+]

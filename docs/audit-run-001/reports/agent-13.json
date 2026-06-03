@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:analyzer_node",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/monitoring_manager.py:220-230 — _analyze_node_resources returns hardcoded strings: 'cpu_usage': '42%', 'memory_usage': '58%', 'disk_usage': '65%', 'status': 'healthy' with no k8s client call",
+    "diagnosis": "NodeAnalyzer behavior does not exist; the closest method _analyze_node_resources returns static fixture data and never reads node conditions (NotReady, DiskPressure, MemoryPressure, PIDPressure) from the kubernetes client.",
+    "fix_class": "implement",
+    "proposed_fix": "Add NodeAnalyzer class with method analyze_node(node_name) -> NodeAnalysis. Inject CoreV1Api; call core_v1.read_node(node_name). Parse .status.conditions for type in [Ready, DiskPressure, MemoryPressure, PIDPressure]; map status=True/Unknown to severity enum. Return structured NodeAnalysis(node_name, conditions: list[NodeCondition], taint_list, allocatable_vs_capacity). Raise NodeNotFoundError for unknown nodes.",
+    "test_plan": "Mock CoreV1Api.read_node to return a V1Node with each pressure condition set to True in turn; assert analyzer returns the matching severity. Integration test against a real kubeconfig context with a node in DiskPressure."
+  },
+  {
+    "component_id": "enhanced:helm_status",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:604-627 — helm_status Tool schema defined. grep of src/mcp_server.py for 'enhanced_tools' returns zero matches; the file is never imported.",
+    "diagnosis": "The helm_status schema is declared in enhanced_tools.py but mcp_server.py does not import enhanced_tools at all, so the tool is never registered and is dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py add: from enhanced_tools import get_enhanced_helm_tools. In _register_handlers, extend the tools list with get_enhanced_helm_tools(). Add a dispatch case for 'helm_status' that calls self.helm_manager.get_status(release_name, namespace, output_format) and returns TextContent. Implement helm_manager.get_status() using subprocess(['helm','status',release_name,'-n',namespace,'-o',output_format]).",
+    "test_plan": "Unit test: mock helm_manager.get_status; invoke the MCP tool handler with name='helm_status'; assert dispatch calls get_status with correct args. Integration test: run helm_status against a real release and verify JSON output contains 'status' key."
+  },
+  {
+    "component_id": "k8s/deployment.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest; line 90 — readOnlyRootFilesystem: false; line 50 — KUBECONFIG value: '/var/run/secrets/kubernetes.io/serviceaccount' (a directory, not a file)",
+    "diagnosis": "Three security/correctness issues: (1) image pinned to :latest prevents reproducible deploys; (2) readOnlyRootFilesystem: false leaves the container filesystem writable; (3) KUBECONFIG env var points to the serviceaccount directory rather than the token file, so in-cluster auth will fail if the code tries to use KUBECONFIG.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 37: pin image to a SHA digest or semver tag (e.g. :1.0.0@sha256:...). Line 90: set readOnlyRootFilesystem: true and add emptyDir volume mounts for /tmp and any writable paths the app needs. Lines 49-50: remove the KUBECONFIG env var entirely; the python kubernetes client auto-detects in-cluster credentials from the serviceaccount projection without KUBECONFIG.",
+    "test_plan": "Run kubectl apply --dry-run=server against a test cluster; verify pod starts and /health probe returns 200. Run kubesec scan on the manifest and confirm score improves. Confirm python kubernetes client can list pods using in-cluster auth in a CI job."
+  },
+  {
+    "component_id": "tests/production/test_network_service_issues.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_network_service_issues.py:82-85 — k8s_manager.resolve_service_no_endpoints = AsyncMock(return_value=mock_resolution); resolution = await k8s_manager.resolve_service_no_endpoints(service_context). Identical pattern on lines 157-160, 233-235, 308-311, 384-387, 459-462, 540-543, 625-629, 700-703. Fixtures network_manager, service_mesh_manager, storage_manager are never defined in conftest.py (grep returns zero definitions).",
+    "diagnosis": "Every test patches the method under test with AsyncMock returning the expected dict, then asserts against that same dict — no production code path is exercised; additionally three fixture names (network_manager, service_mesh_manager, storage_manager) are undefined and will cause collection errors.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove AsyncMock self-return pattern; instead call the real manager method and mock only the kubernetes client layer (core_v1, apps_v1). Add conftest fixtures: network_manager returns a real NetworkManager (if it exists) or KubernetesManager with mocked client; likewise for service_mesh_manager and storage_manager. Tests should assert on behavior, not on the mock's own return value.",
+    "test_plan": "Run pytest tests/production/test_network_service_issues.py --collect-only and verify zero collection errors. Run with coverage; confirm each test exercises at least one non-trivial code branch in the manager under test."
+  },
+  {
+    "component_id": "behavior:orphan_job_cleanup",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No OrphanJobCleanup class or method exists anywhere in src/. grep -rn 'orphan\\|job.*cleanup\\|cleanup.*job' src/ returns no matches.",
+    "diagnosis": "The orphan-job-cleanup behavior is entirely unimplemented; there is no data model, controller watch loop, or ownership-check logic anywhere in the codebase.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: OrphanJob(name, namespace, uid, created_at, owner_references: list). Interface: async def find_orphan_jobs(namespace='') -> list[OrphanJob] — calls batch_v1.list_namespaced_job; filters jobs where ownerReferences is empty or references a deleted object (check core_v1.read_namespaced_pod_template raises 404). async def cleanup_orphan_jobs(jobs: list[OrphanJob], dry_run=True) -> CleanupResult. Edge cases: jobs with active pods must not be deleted; respect non-destructive_mode flag; emit audit log entry per deletion.",
+    "test_plan": "Unit: mock batch_v1.list_namespaced_job with a mix of owned and unowned jobs; assert find_orphan_jobs returns only unowned ones. Unit: assert cleanup_orphan_jobs with dry_run=True makes no delete calls. Integration: create a real orphan job in a test namespace and verify cleanup removes it."
+  },
+  {
+    "component_id": "k8s/configmap.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/configmap.yaml:15 — RBAC_ENABLED: 'true'; line 16 — POD_SECURITY_STANDARDS: 'true'; line 17 — NETWORK_POLICIES: 'true'. These flags are declared but no corresponding code in src/ reads or enforces them (grep -rn 'RBAC_ENABLED\\|POD_SECURITY_STANDARDS\\|NETWORK_POLICIES' src/ returns zero matches).",
+    "diagnosis": "The ConfigMap advertises security feature flags (RBAC_ENABLED, POD_SECURITY_STANDARDS, NETWORK_POLICIES) that are never consumed by application code, creating a false impression of enforced security controls.",
+    "fix_class": "implement",
+    "proposed_fix": "In config.py, add fields rbac_enabled, pod_security_standards, network_policies sourced from env vars. In security_manager.py, gate RBAC check logic on self.config.rbac_enabled. Remove or rename flags that have no enforcement path to avoid misleading operators. If enforcement is out of scope, replace with a comment documenting they are informational only.",
+    "test_plan": "Unit test: set RBAC_ENABLED=false in env; assert security_manager skips RBAC checks. Set RBAC_ENABLED=true; assert checks run. Confirm no test previously relying on the flag being a no-op breaks."
+  },
+  {
+    "component_id": "tests/production/test_pod_issues.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_pod_issues.py:70-74 — mcp_server.resolve_issue_end_to_end = AsyncMock(return_value=mock_pipeline_result); result = await mcp_server.resolve_issue_end_to_end(issue_context). KubernetesPlatformEngineerMCPServer has no resolve_issue_end_to_end method (grep returns zero matches in src/). Same self-mock pattern on lines 150-157, 220-223, 287-291, 355-358, 424-427, 503-505, 583-586, 673-675, 766-769.",
+    "diagnosis": "Every test in this file mocks a method that does not exist on the target class and asserts against its own fabricated return value, providing zero coverage of real production code while giving the appearance of a complete test suite.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the self-mock pattern with tests that call real methods (analyze_pod, diagnose_crashloop, etc.) on managers with only the kubernetes client mocked. For test_crashloopbackoff_complete_resolution, call diagnostics_manager.analyze_pod_issue('CrashLoopBackOff', pod_context) with mock apps_v1 returning a pod with restart_count=5; assert the returned dict contains 'solution_steps' and 'kubectl_commands' derived from actual logic.",
+    "test_plan": "Run pytest --collect-only and verify no AttributeError on undefined methods. Run with --cov=src and confirm branch coverage for DiagnosticsManager and KubernetesManager rises above 40% (currently near 0% from real code paths)."
+  },
+  {
+    "component_id": "src/monitoring_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:55-56 — hardcoded: 'timestamp': '2025-08-09T10:30:00Z'. Lines 99-100 — 'total_entries': 1247, 'filtered_entries': 156. Lines 107-113 — log_summary with static error_count=23, warning_count=67. Lines 197-217 — _analyze_cluster_resources returns static dict with 'total_cores': 12, 'used_cores': 5.4. Lines 220-230, 232-243, 244-254 — all private _analyze_* methods return fully static dicts with no kubernetes client calls.",
+    "diagnosis": "MonitoringManager contains zero real kubernetes client calls; all analysis methods return hardcoded fixture data, including a frozen timestamp from 2025-08-09, making every metric and log response fabricated.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject CoreV1Api and CustomObjectsApi (for metrics-server). In _analyze_cluster_resources, call custom_objects_api.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes') to get real CPU/memory. In analyze_logs, call core_v1.read_namespaced_pod_log with timestamps=True and since_seconds derived from time_range. Replace hardcoded timestamp with datetime.utcnow().isoformat()+'Z'. Add a feature flag to fall back to stub data when metrics-server is unavailable.",
+    "test_plan": "Mock CustomObjectsApi to return a realistic NodeMetrics response; assert _analyze_cluster_resources returns cpu.utilization_percent matching the mock data. Assert timestamp in result is within 5 seconds of test execution time."
+  },
+  {
+    "component_id": "behavior:analyzer_service",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No ServiceAnalyzer class or analyze_service method exists in src/. grep -rn 'ServiceAnalyzer\\|selector.*mismatch\\|no.*endpoint' src/ returns zero matches. k8s_manager.py has no endpoint-inspection logic.",
+    "diagnosis": "The ServiceAnalyzer behavior (detecting no-endpoints and selector mismatch conditions) is entirely absent from the codebase; there is no data model, no kubernetes client call, and no diagnostic output for service connectivity failures.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ServiceAnalysis(service_name, namespace, selector: dict, endpoint_count: int, matching_pod_count: int, issues: list[str]). Interface: async def analyze_service(name, namespace) -> ServiceAnalysis. Implementation: call core_v1.read_namespaced_service to get .spec.selector; call core_v1.read_namespaced_endpoints to get subset addresses; call core_v1.list_namespaced_pod with label_selector built from selector to count matching pods. Compare endpoint_count vs matching_pod_count to detect selector mismatch vs pod-not-ready issues. Edge cases: ExternalName services have no selector; headless services have clusterIP=None.",
+    "test_plan": "Unit: mock read_namespaced_service with selector app=foo; mock list_namespaced_pod returning 2 pods with label app=foo; mock read_namespaced_endpoints returning 0 addresses; assert issues contains 'pods not ready'. Unit: mock endpoints returning 2 addresses; assert issues is empty."
+  },
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "K8S_ANNOUNCEMENT.md:11 — 'Monitors 17+ major Kubernetes ecosystem repos... Automatically updates its knowledge base every hour'. K8S_ANNOUNCEMENT.md:18 — 'Production-Ready Kubernetes Deployment'. K8S_ANNOUNCEMENT.md:27 — 'Automated Remediation & Diagnostics: Deep cluster health checks, pod/network diagnostics, resource analysis'. src/monitoring_manager.py returns static hardcoded data; src/github_issues_manager.py (not assigned but confirmed by other agents) uses SQLite with no live GitHub polling confirmed. src/mcp_server.py has no import of enhanced_tools; 18+ tool schemas are dead.",
+    "diagnosis": "The announcement document makes at least three falsifiable production-grade claims — hourly repo monitoring, automated remediation, and deep real-time diagnostics — none of which are implemented; the underlying managers return hardcoded fixture data.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'Automatically updates its knowledge base every hour' with 'GitHub integration is scaffolded; polling loop is not yet implemented.' Replace 'Automated Remediation' with 'Diagnostic scaffolding with planned remediation workflows.' Add a 'Current status' section listing which features are implemented vs planned. Do not delete the document; correct the overclaims in place so the community is not misled.",
+    "test_plan": "After edit, have a second reviewer verify each bullet in the announcement maps to a real code path or is marked as planned. No automated test applies to a markdown doc, but a CI lint step (e.g. markdownlint) should be added to catch future overclaims."
+  }
+]

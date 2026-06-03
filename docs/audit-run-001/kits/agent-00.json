@@ -1,0 +1,55 @@
+{
+  "agent_id": 0,
+  "components": [
+    {
+      "id": "mcp-tool:execute_remediation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:iteration_state_machine",
+      "kind": "behavior",
+      "focus": "review\u2192PRD\u2192split\u2192implement\u2192verify loop with stop conditions"
+    },
+    {
+      "id": "mcp-tool:get_recommendations",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "setup-vscode-k8s.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:five_min_watchdog",
+      "kind": "behavior",
+      "focus": "watchdog impl: how do we know it healed? readiness + zero new warnings"
+    },
+    {
+      "id": "README.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:dpo_pair_extraction",
+      "kind": "behavior",
+      "focus": "given (rejected_actions, chosen_action, evidence), emit DPO issue body"
+    },
+    {
+      "id": "CHANGELOG.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "setup-vscode-nodeport.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "stop.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    }
+  ]
+}

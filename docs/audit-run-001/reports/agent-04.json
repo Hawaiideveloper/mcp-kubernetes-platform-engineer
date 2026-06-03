@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:performance_analysis",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:162-190 — entire performance_analysis method returns hardcoded dicts; src/monitoring_manager.py:55 — timestamp hardcoded to '2025-08-09T10:30:00Z'",
+    "diagnosis": "performance_analysis is registered and dispatched in mcp_server.py:540-544 but the underlying MonitoringManager.performance_analysis and all five _analyze_* helpers return static fabricated metrics with no kubernetes client call anywhere in the file.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject kubernetes.client (CoreV1Api, MetricsV1beta1Api) into MonitoringManager.__init__. In performance_analysis, call metrics_api.list_node_metrics() or metrics_api.list_namespaced_pod_metrics(namespace) based on analysis_type. Replace _analyze_cluster_performance and siblings with real API calls; raise a ValueError or return structured error if metrics-server is unavailable.",
+    "test_plan": "Unit-test with a mocked kubernetes client that returns known MetricNodeList fixtures; assert the output reflects the fixture values. Integration test: call the tool against a real cluster and verify avg_response_time field matches prometheus or metrics-server data."
+  },
+  {
+    "component_id": "GettingStarted.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GettingStarted.md:18 — 'curl -fsSL https://raw.githubusercontent.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/main/start.sh | bash'; GettingStarted.md:31-35 — 'curl http://localhost:3001/health'; GettingStarted.md:68 — 'Enjoy your production-ready Kubernetes platform engineering assistant!'",
+    "diagnosis": "The doc claims the server exposes a /health HTTP endpoint and is 'production-ready', but the server runs over stdio (mcp_server.py:640), has no HTTP listener, and all tool handlers return fabricated data — there is no /health route to curl.",
+    "fix_class": "document",
+    "proposed_fix": "Remove the curl /health steps entirely or add a note that health checks are not yet implemented. Replace 'production-ready' with 'prototype / stub implementation'. Document that connection is stdio-only and Cursor/VS Code Copilot connect via stdio protocol, not HTTP.",
+    "test_plan": "Smoke-check: run the server and confirm curl http://localhost:3001/health returns a connection error; update doc accordingly."
+  },
+  {
+    "component_id": "coming_soon.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "coming_soon.md:179 — 'Code coverage maintained above 95%'; coming_soon.md:200 — 'Bug resolution time under 24 hours for critical issues'; coming_soon.md:196 — 'API response time under 2 seconds for 99% of requests'",
+    "diagnosis": "The document presents aspirational targets (95% coverage, 24-hour SLA, 2s p99) as existing metrics/success criteria rather than goals, and lists dozens of unimplemented features with no indication that the current codebase is entirely stubbed out.",
+    "fix_class": "document",
+    "proposed_fix": "Rename section 'Metrics & Success Criteria' to 'Target Metrics (not yet measured)'. Add a top-of-file disclaimer: 'All features listed here are planned; current implementation is stub-only.' Remove or qualify the SLA claims that imply an operational system.",
+    "test_plan": "Review doc after edit to confirm no sentence presents a stub behavior as implemented; cross-check three randomly chosen feature claims against the source tree."
+  },
+  {
+    "component_id": "behavior:trading_ns_hardblock",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "No guard exists in any manager file; src/mcp_server.py:309-328 — execute_remediation accepts any issue_type/target with dry_run defaulting to True but no namespace denylist check.",
+    "diagnosis": "No enforcement layer exists to block auto-remediation against the namespaces ibkr-live-trader, daxxon-trading, and brightflow-live; any caller can pass those names to execute_remediation without restriction.",
+    "fix_class": "implement",
+    "proposed_fix": "Add TRADING_BLOCKED_NAMESPACES = {'ibkr-live-trader', 'daxxon-trading', 'brightflow-live'} constant. In KubernetesManager.execute_remediation (and KubectlManager destructive methods), extract namespace from target string; if it matches the set, raise PermissionError('Auto-remediation blocked for trading namespace; use PR workflow'). Log the attempt. Unit test: call execute_remediation with target='ibkr-live-trader/some-pod' and assert PermissionError is raised.",
+    "test_plan": "Parameterized unit tests for all three blocked namespaces across execute_remediation, kubectl_delete, kubectl_scale; assert each raises PermissionError. Assert a non-trading namespace passes through."
+  },
+  {
+    "component_id": "behavior:image_tag_migration_remediation",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — 'image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest' — pinned to 'latest', illustrating the class of issue to be remediated; no remediation logic exists in any manager.",
+    "diagnosis": "No automated detection or fix exists for yanked/mutable image tags (e.g., bitnami/kubectl:1.30 removal); the design task is to implement a deterministic remediator that detects ImagePullBackOff caused by missing tags and proposes a concrete replacement.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ImageTagIssue(namespace, pod, container, current_image, reason). Detection: poll pods in ImagePullBackOff; parse event message for 'not found' or 'manifest unknown'. Remediation: query registry API or known-good tag table for nearest semver; emit a patch command. Interface: async def remediate_image_tag(pod: str, namespace: str, dry_run: bool) -> RemediationResult. Edge cases: private registry auth, multi-container pods, digest-pinned images. Test plan: mock a pod with ImagePullBackOff and a registry stub returning 404; verify the remediator emits the correct patch with the fallback tag.",
+    "test_plan": "Unit test with mocked CoreV1Api returning a pod with ImagePullBackOff condition; verify remediate_image_tag returns a non-empty patch command referencing a valid replacement tag."
+  },
+  {
+    "component_id": "k8s/kustomization.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/kustomization.yaml:17-18 — 'name: k8s-platform-engineer-mcp / newTag: latest'; k8s/kustomization.yaml:27-30 — configMapGenerator uses 'config.env' file that does not exist in the repo; k8s/kustomization.yaml:32-35 — secretGenerator uses 'secrets.env' file that does not exist in the repo",
+    "diagnosis": "The image tag is pinned to 'latest' (mutable, non-reproducible), and both configMapGenerator and secretGenerator reference .env files absent from the repo, causing kustomize build to fail on a fresh checkout.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Pin newTag to a specific semver digest (e.g., 'v1.0.0' or a sha256). Add config.env.template and secrets.env.template to the repo with placeholder values, and document that ops must copy them before deployment. Alternatively, replace the generators with explicit ConfigMap/Secret manifests that are safe to commit.",
+    "test_plan": "Run 'kustomize build k8s/' on a clean clone (without .env files) and verify it no longer errors. Run again after adding .env files from templates and verify all resources render."
+  },
+  {
+    "component_id": "behavior:finding_serialization",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No Finding dataclass or schema exists in the src/ tree; grep of src/ for 'Finding\\|finding_id\\|dpo_pair' returns no matches.",
+    "diagnosis": "There is no structured Finding type for surfacing issues, generating PR descriptions, or producing DPO training pairs; the design task is to create a canonical serialization contract used by the remediator and audit agents.",
+    "fix_class": "design",
+    "proposed_fix": "Define dataclass Finding with fields: id (uuid), component (str), kind (Literal['bug','security','stub','overclaim']), severity (Literal['critical','high','medium','low','info']), evidence (str), diagnosis (str), fix_class (str), proposed_fix (str), status (Literal['open','in_pr','resolved']). Add to_dict/from_dict. DPO pair: {'prompt': diagnosis+evidence, 'chosen': proposed_fix, 'rejected': ''}. Store in findings.jsonl, one object per line. Interface: FindingStore.add(finding), FindingStore.list(filter_fn), FindingStore.export_dpo().",
+    "test_plan": "Unit test: create a Finding, serialize to dict, deserialize back, assert round-trip equality. Test export_dpo produces valid JSONL with 'prompt' and 'chosen' keys for each finding."
+  },
+  {
+    "component_id": "k8s/ingress.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/ingress.yaml:11 — 'nginx.ingress.kubernetes.io/ssl-redirect: \"false\"'; k8s/ingress.yaml:12-13 — TLS block commented out; k8s/ingress.yaml:21 — 'host: mcp-server.local'; k8s/ingress.yaml:29-31 — backend routes to port 3001 but server is stdio-only with no HTTP listener",
+    "diagnosis": "The ingress disables TLS redirect, has no TLS configuration, uses a placeholder hostname, and routes to a port that the stdio-only MCP server never binds — making the ingress non-functional and insecure by default.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Either delete ingress.yaml entirely (since the server is stdio-only and not HTTP-accessible) or, if an HTTP health/metrics endpoint is added later: enable ssl-redirect: 'true', uncomment the TLS block with a real cert-manager issuer annotation, replace mcp-server.local with a required variable, and route only to the metrics port (8080), not the MCP port.",
+    "test_plan": "Validate with 'kubectl apply --dry-run=client -f k8s/ingress.yaml' and confirm no warnings. If TLS is enabled, verify cert-manager issues a certificate in a staging cluster."
+  },
+  {
+    "component_id": "push-and-deploy.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "push-and-deploy.sh:1 — only 'set -e', not 'set -euo pipefail'; push-and-deploy.sh:8 — hardcodes 'ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest' (mutable tag, no digest); push-and-deploy.sh:17 — 'kubectl apply -f k8s/deployment.yaml' applies only deployment, skipping namespace/rbac/configmap/secret ordering issues; push-and-deploy.sh — no check that docker login / GHCR token is set before push",
+    "diagnosis": "The script lacks pipefail and nounset, pushes a mutable :latest tag without digest verification, applies only one manifest instead of the full kustomize stack, and silently succeeds if GHCR credentials are absent.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' at line 1. Require VERSION env var and tag as ghcr.io/.../:${VERSION}. Replace single kubectl apply with 'kustomize build k8s/ | kubectl apply -f -'. Add a pre-flight check: 'docker manifest inspect ghcr.io/.../...latest || { echo \"login required\"; exit 1; }'.  Remove hardcoded org/image path; read from .env or env vars.",
+    "test_plan": "Run with an unset GITHUB_TOKEN and verify the script exits non-zero. Run with VERSION unset and verify exit. Run with a valid VERSION against a test cluster and verify all kustomize resources are applied in correct order."
+  },
+  {
+    "component_id": "enhanced:kubectl_delete",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:106-128 — kubectl_delete Tool schema defined; grep of src/mcp_server.py for 'enhanced_tools' returns no matches (no import); grep of src/mcp_server.py for 'kubectl_delete' returns no matches (no dispatch case)",
+    "diagnosis": "The kubectl_delete schema is defined in enhanced_tools.py and the handler exists in kubectl_manager.py:152, but enhanced_tools.py is never imported in mcp_server.py, so the tool is never registered and the handler is never reachable.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add 'from enhanced_tools import get_enhanced_kubectl_tools' and extend the tools list returned by handle_list_tools with get_enhanced_kubectl_tools(). In handle_call_tool, add an elif branch: 'elif name == \"kubectl_delete\": result = await self.kubectl_manager.kubectl_delete(arguments[\"resource\"], arguments[\"name\"], arguments.get(\"namespace\"))'. Apply the trading-ns hardblock guard before delegating.",
+    "test_plan": "After wiring, call kubectl_delete via the MCP protocol with a non-trading namespace resource and assert a success response. Call with a trading namespace and assert the hardblock PermissionError is returned."
+  }
+]

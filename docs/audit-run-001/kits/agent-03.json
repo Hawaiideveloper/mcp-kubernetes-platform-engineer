@@ -1,0 +1,55 @@
+{
+  "agent_id": 3,
+  "components": [
+    {
+      "id": "behavior:finding_dedup",
+      "kind": "behavior",
+      "focus": "dedupe N findings for same root cause across resources"
+    },
+    {
+      "id": "mcp-port-forward.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:analyzer_pvc",
+      "kind": "behavior",
+      "focus": "PVCAnalyzer: pending, mount-failed, capacity"
+    },
+    {
+      "id": "mcp-tool:diagnose_cluster_health",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:safety_allowlist",
+      "kind": "behavior",
+      "focus": "allowlisted namespaces for auto-merge; everything else PR-only"
+    },
+    {
+      "id": "behavior:analyzer_pod",
+      "kind": "behavior",
+      "focus": "PodAnalyzer: ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures"
+    },
+    {
+      "id": "enhanced:helm_status",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "GETTING_STARTED.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "src/enhanced_tools.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:event_stream_watcher",
+      "kind": "behavior",
+      "focus": "watch k8s events stream, classify, route to remediation queue"
+    }
+  ]
+}

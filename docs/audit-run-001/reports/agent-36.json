@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/k8s_manager.py:22-23 — self.client = None; self.api_client = None (never populated); no ServiceAccount split exists anywhere in the codebase",
+    "diagnosis": "No RBAC split between read-only and namespaced-write ServiceAccounts is implemented or even scaffolded anywhere in the repo.",
+    "fix_class": "design",
+    "proposed_fix": "Create two ServiceAccount manifests: k8s/sa-readonly.yaml (ClusterRole: get/list/watch on all core resources) and k8s/sa-write.yaml (Role scoped per namespace: create/update/patch/delete on pods, deployments, configmaps). KubernetesManager.__init__ accepts an rbac_mode='read'|'write' param and loads the matching kubeconfig context or in-cluster token path at initialize() time. Default mode is 'read'; execute_remediation switches to 'write' only after caller passes dry_run=False.",
+    "test_plan": "Unit test: mock kubernetes.client.CoreV1Api, assert that get_cluster_info() only invokes list_* verbs; assert execute_remediation(dry_run=False) builds a client from the write token path. Integration test: deploy both SAs into a kind cluster, verify the read SA cannot patch a deployment and the write SA can."
+  },
+  {
+    "component_id": "enhanced:kubectl_logs",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py — grep for 'enhanced_tools' returns no matches; src/enhanced_tools.py:129-159 defines kubectl_logs Tool schema; mcp_server.py handle_call_tool has no elif for 'kubectl_logs'",
+    "diagnosis": "The kubectl_logs schema is defined in enhanced_tools.py but enhanced_tools.py is never imported in mcp_server.py, so the tool is never registered or dispatched; it is dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: (1) add 'from enhanced_tools import get_enhanced_kubectl_tools'; (2) extend handle_list_tools to append get_enhanced_kubectl_tools(); (3) add elif branch: 'elif name == \"kubectl_logs\": result = await self.kubectl_manager.get_logs(pod_name=arguments[\"pod_name\"], namespace=arguments.get(\"namespace\",\"default\"), container=arguments.get(\"container\"), tail=arguments.get(\"tail\"))'.",
+    "test_plan": "After wiring, call the tool via MCP with a valid pod name against a kind cluster and assert the response contains non-empty log lines; also confirm the tool appears in list_tools output."
+  },
+  {
+    "component_id": "logs.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "logs.sh:1-3 — '#!/bin/bash' with no 'set -euo pipefail'; entire script is two lines with no error handling; relies on hardcoded container name 'k8s-mcp-server' with no validation",
+    "diagnosis": "logs.sh has no error-guard directives, no existence check for the container name, and will silently succeed (exit 0) even if docker is absent or the container does not exist.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' after shebang. Add existence check: 'docker inspect k8s-mcp-server >/dev/null 2>&1 || { echo \"Container k8s-mcp-server not found\" >&2; exit 1; }'. Optionally accept container name as first arg with a default: 'CONTAINER=${1:-k8s-mcp-server}'.",
+    "test_plan": "Run the script when the container does not exist and verify it exits non-zero with a clear error message; run it when the container exists and verify log streaming begins."
+  },
+  {
+    "component_id": "push-and-deploy.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "push-and-deploy.sh:3 — 'set -e' only (no -u or -o pipefail); line 7 hardcodes 'ghcr.io/hawaiideveloper/...' registry path; no check that GITHUB_TOKEN or docker credentials are set before push; no rollback if kubectl wait fails",
+    "diagnosis": "The deploy script uses only 'set -e', omits pipefail and nounset, hardcodes a personal registry path, and has no rollback logic if the deployment wait times out — a failed push could leave the cluster with a broken image reference.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace 'set -e' with 'set -euo pipefail'. Parameterize registry: 'REGISTRY=${REGISTRY:-ghcr.io/hawaiideveloper}'. Add credential check: '[[ -n \"${GITHUB_TOKEN:-}\" ]] || { echo \"GITHUB_TOKEN not set\" >&2; exit 1; }'. After kubectl wait failure, emit 'kubectl rollout undo deployment/kubernetes-mcp-server -n mcp-kubernetes' as a recovery step.",
+    "test_plan": "Run with GITHUB_TOKEN unset and verify early exit; mock a failed kubectl wait and verify rollout undo is attempted; run end-to-end against a kind cluster to confirm deploy and rollback paths."
+  },
+  {
+    "component_id": "mcp-tool:execute_remediation",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:189 — '# Stub implementation for common remediations'; lines 191-203 build a static string list; no kubernetes client call is made; self.client is None (line 22) throughout",
+    "diagnosis": "execute_remediation returns a fabricated action list with no real API calls; it never restarts a pod, checks kubelet, or makes any cluster state change even when dry_run=False.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Initialize self.client in initialize() via kubernetes.config.load_incluster_config() or load_kube_config(). For 'pod_restart_loop': call CoreV1Api().delete_namespaced_pod(target, namespace) when dry_run=False, or CoreV1Api().read_namespaced_pod(target, namespace) as a preflight when dry_run=True. Return actual API response fields. Raise a typed exception for unknown issue_type instead of returning status='error' silently.",
+    "test_plan": "Mock kubernetes.client.CoreV1Api, assert delete_namespaced_pod is called when dry_run=False and NOT called when dry_run=True; confirm unknown issue_type raises ValueError rather than returning a silent error dict."
+  },
+  {
+    "component_id": "enhanced:helm_install",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py — no import of enhanced_tools (grep confirms zero matches); src/enhanced_tools.py:406-455 defines install_helm_chart Tool schema; mcp_server.py has no elif for 'install_helm_chart'",
+    "diagnosis": "The install_helm_chart schema in enhanced_tools.py is never imported, registered, or dispatched; it is dead code invisible to any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: (1) 'from enhanced_tools import get_enhanced_helm_tools'; (2) extend handle_list_tools to append get_enhanced_helm_tools(); (3) add elif for 'install_helm_chart' that delegates to self.helm_manager.install_chart(...) passing all arguments from the schema. Confirm helm_manager.install_chart executes 'helm install' via subprocess or the Python helm SDK.",
+    "test_plan": "Verify install_helm_chart appears in list_tools; call it with a known public chart against a kind cluster and confirm the release is created; confirm non-destructive mode blocks the call before subprocess execution."
+  },
+  {
+    "component_id": "src/k8s_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:29 — '# Kubernetes client initialization would go here / # For now, we\\'ll use a stub implementation'; lines 22-23: self.client = None; self.api_client = None; get_cluster_info lines 50-74 return fully hardcoded dict with version 'v1.29.0', nodes.total=3, pods.total=45",
+    "diagnosis": "KubernetesManager.initialize() is a no-op stub; self.client and self.api_client are never assigned a real kubernetes client object; every method returns hardcoded fake data with no real API interaction.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In initialize(): call kubernetes.config.load_incluster_config() with fallback to load_kube_config(config.kubeconfig_path); assign self.core_v1 = kubernetes.client.CoreV1Api() and self.apps_v1 = kubernetes.client.AppsV1Api(). In get_cluster_info(): replace hardcoded dict with calls to self.core_v1.list_node(), list_namespace(), list_pod_for_all_namespaces() and extract actual status fields. In get_recommendations(): base advice on real resource data fetched from metrics-server or resource quota APIs.",
+    "test_plan": "Unit test with kubernetes client mocked: assert list_node() is called and its response is reflected in the returned dict. Integration test against kind cluster: call get_cluster_info() and assert returned version matches 'kubectl version --short'."
+  },
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:55 — '# Stub implementation for different check types'; _check_nodes (lines 217-228), _check_pods (lines 230-242), _check_networking (lines 255-264) all return hardcoded static dicts with fabricated node names 'master-1', 'worker-1', fixed percentages",
+    "diagnosis": "diagnose_cluster_health dispatches to private _check_* helpers that each return hardcoded fake data; no kubernetes API calls are made and no real cluster state is ever observed.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes CoreV1Api client into DiagnosticsManager at init. In _check_nodes(): call core_v1.list_node() and derive ready/not_ready counts from .status.conditions. In _check_pods(): call core_v1.list_namespaced_pod() and count by .status.phase. In _check_networking(): call core_v1.read_namespaces_status('kube-system') to verify DNS pods are running. Remove all hardcoded strings.",
+    "test_plan": "Mock kubernetes CoreV1Api; assert list_node() is called; assert the returned dict's ready_nodes count matches the number of mock Node objects with Ready=True condition. Run against kind cluster and verify output changes when a node is cordoned."
+  },
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py — grep for 'enhanced_tools' yields zero results; src/enhanced_tools.py:43-66 defines kubectl_describe Tool schema; no elif for 'kubectl_describe' in handle_call_tool",
+    "diagnosis": "The kubectl_describe schema exists in enhanced_tools.py but the file is never imported in mcp_server.py; the tool is unregistered and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "As part of the single enhanced_tools wire-up commit: import get_enhanced_kubectl_tools in mcp_server.py, append its result to handle_list_tools, and add: 'elif name == \"kubectl_describe\": result = await self.kubectl_manager.describe(resource=arguments[\"resource\"], name=arguments[\"name\"], namespace=arguments.get(\"namespace\",\"default\"))'.",
+    "test_plan": "After wiring, verify kubectl_describe appears in list_tools; call it with resource='pod' and a valid pod name against kind cluster; assert response contains 'Events:' section from actual kubectl describe output."
+  },
+  {
+    "component_id": "enhanced:kubectl_apply",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py — no import of enhanced_tools (confirmed by grep); src/enhanced_tools.py:86-104 defines kubectl_apply Tool schema; mcp_server.py has no elif for 'kubectl_apply'",
+    "diagnosis": "kubectl_apply schema in enhanced_tools.py is dead code: never imported, never registered, never dispatched; an MCP client calling this tool will receive 'Unknown tool: kubectl_apply'.",
+    "fix_class": "wire-up",
+    "proposed_fix": "As part of the single enhanced_tools wire-up commit: add 'elif name == \"kubectl_apply\": if self.non_destructive_mode: return CallToolResult(content=[TextContent(type=\"text\", text=\"Blocked: non-destructive mode\")]); result = await self.kubectl_manager.apply(resource_yaml=arguments[\"resource_yaml\"], namespace=arguments.get(\"namespace\"))'.",
+    "test_plan": "Call kubectl_apply in non-destructive mode and assert it returns the blocked message without executing. Call it normally against a kind cluster with a valid Deployment YAML and assert the deployment is created; verify the manifest is validated before subprocess call to prevent YAML injection."
+  }
+]

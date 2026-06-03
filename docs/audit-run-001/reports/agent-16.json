@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/health_check.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "health_check.py:43-45 — `import asyncio; import json; import logging; return True`",
+    "diagnosis": "check_imports() only verifies stdlib modules that cannot fail to import, so the health check never detects missing critical dependencies like `kubernetes`, `mcp`, `aiohttp`, or `beautifulsoup4`.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace check_imports with: try: import kubernetes; import mcp; import aiohttp; from bs4 import BeautifulSoup; return True except ImportError as e: logger.error(f'Missing dependency: {e}'); return False. Also add a k8s connectivity probe: attempt kubernetes.config.load_incluster_config() or load_kube_config() and call CoreV1Api().list_namespace(limit=1) to confirm live cluster access.",
+    "test_plan": "Run health_check.check() in a venv missing the `kubernetes` package and assert it returns False. Run it in a fully-wired environment with a live cluster and assert True. Verify sys.exit codes match."
+  },
+  {
+    "component_id": "src/kubectl_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "kubectl_manager.py:45-81 — `_run_kubectl` is synchronous `subprocess.run` called from async methods like `kubectl_get` (line 119) without `asyncio.to_thread` or `loop.run_in_executor`.",
+    "diagnosis": "All kubectl operations block the asyncio event loop because `subprocess.run` is called directly from coroutines, which will stall every other MCP tool call for up to 60 seconds (the timeout).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change `_run_kubectl` to an async method: `async def _run_kubectl(self, args, input_data=None)` and replace `subprocess.run(...)` with `await asyncio.to_thread(subprocess.run, cmd, ...)`. All callers already use `await`, so no signature changes are needed for public methods.",
+    "test_plan": "Write an async test that fires two concurrent kubectl_get calls against a mock that sleeps 0.5 s; measure wall time — it should be ~0.5 s not ~1.0 s. Assert return type is still Dict[str, Any]."
+  },
+  {
+    "component_id": "status.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "status.sh:1 — `#!/bin/bash` with no `set -euo pipefail`; status.sh:3 — relies solely on `docker ps | grep -q k8s-mcp-server` for health assessment.",
+    "diagnosis": "The script lacks `set -euo pipefail` so errors in any pipeline step are silently swallowed; it also reports a fixed 'Health: OK' string (line 4) regardless of actual application health, providing false confidence.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` on line 2. Replace the hardcoded 'Health: OK' on line 4 with an actual health probe: `docker exec k8s-mcp-server python src/health_check.py 2>&1 && echo '\\u2713 Health: OK' || echo '\\u2717 Health: FAILED'`. Add exit code propagation so CI can detect failures.",
+    "test_plan": "Run the script when the container is absent and assert exit code is non-zero. Run it with a running but unhealthy container (health_check.py returns 1) and assert 'Health: FAILED' appears in output."
+  },
+  {
+    "component_id": "src/github_issues_manager.py",
+    "kind": "python",
+    "severity": "low",
+    "evidence": "github_issues_manager.py:56 — `self.github_token = None`; github_issues_manager.py:154-155 — `if self.github_token: headers['Authorization'] = f'token {self.github_token}'`",
+    "diagnosis": "The GitHub token is always None (never read from config or environment), so every request runs unauthenticated at GitHub's 60 req/hr rate limit, causing rate-limit failures (403) that are silently swallowed during the background scrape of 17 repos.",
+    "fix_class": "implement",
+    "proposed_fix": "In `__init__`, replace `self.github_token = None` with `self.github_token = getattr(config, 'github_token', None) or os.getenv('GITHUB_TOKEN')`. Add `github_token: Optional[str] = None` to `ServerConfig`. Document in README that GITHUB_TOKEN env var is required for reliable operation.",
+    "test_plan": "Mock aiohttp.ClientSession and assert the Authorization header is set when GITHUB_TOKEN env var is present. Assert requests succeed and issues are stored in SQLite. Verify 403 responses log a warning and do not raise."
+  },
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:515-521 — dispatches to `self.diagnostics_manager.check_network_connectivity`; diagnostics_manager.py:185-210 — `# Stub implementation for different test types` returns hardcoded latency/IP values (latency_ms: 2.3, resolved_ip: '10.96.0.1') regardless of inputs.",
+    "diagnosis": "The tool handler exists and routes correctly, but the implementation is an explicit stub that returns fabricated connectivity data instead of executing any real probe (kubectl exec, nslookup, curl) against the cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub branches with real kubectl exec calls: `kubectl exec <source_pod> -n <namespace> -- ping -c 3 <target>` for ping, `kubectl exec ... -- nslookup <target>` for dns, `kubectl exec ... -- curl -sI <target>` for http. Parse stdout/stderr into the result dict. Return actual exit codes and timings.",
+    "test_plan": "Integration test against a real cluster: assert resolved_ip matches actual CoreDNS response, not the hardcoded '10.96.0.1'. Unit test: mock subprocess output and verify parser produces correct status/latency fields."
+  },
+  {
+    "component_id": "tests/unit/test_issue_patterns.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "test_issue_patterns.py:52-53 — `github_issues_manager.analyze_issue_pattern = AsyncMock(return_value=mock_result)` then line 55 — `result = await github_issues_manager.analyze_issue_pattern(pattern)` — every async test in the file sets the mock and immediately calls it.",
+    "diagnosis": "All 18 async tests are tautological: each test overwrites the method with an AsyncMock that returns a hardcoded dict, then asserts fields from that same dict — no real code path in GitHubIssuesManager is exercised.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the AsyncMock overwrite pattern. Tests for `_analyze_severity` and `_analyze_component` (lines 370-431) are sync and call the real methods — replicate that pattern for all tests. For `analyze_issue_pattern` (which does not yet exist on the real class), add a conftest fixture that prepopulates the SQLite DB with known issues, then call the real `search_issues` or `find_similar_issues` methods and assert on actual returned data.",
+    "test_plan": "After rewrite, run pytest with `--no-header -q`; confirm no test passes solely because it mocks its own subject. Measure coverage with `pytest --cov=src/github_issues_manager` and require >60% line coverage."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "documentation_manager.py:36 — `self.documentation_db = {}` initialized empty; documentation_manager.py:328-373 — `search_documentation` iterates `self.documentation_db` which is populated only if the live HTTP scrape in `_build_documentation_index` succeeds at startup.",
+    "diagnosis": "The in-memory `documentation_db` dict is not persisted, so every server restart triggers a full live scrape of kubernetes.io; if the scrape fails or the server starts offline, all search and command-lookup tools silently return empty lists.",
+    "fix_class": "implement",
+    "proposed_fix": "Add an SQLite or JSON-file cache (analogous to github_issues_manager). On `initialize()`, check if cache is fresh (< 24 h old) and load from disk; only re-scrape when stale. Fall back to the hardcoded `best_practices` dict when `documentation_db` is empty so tools remain functional offline.",
+    "test_plan": "Unit test: pre-populate the cache file with a synthetic doc entry, call `search_documentation('pod')` without network, and assert results are returned. Integration test: run `initialize()` with mocked aiohttp and verify cache file is written."
+  },
+  {
+    "component_id": "behavior:backend_cache",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No cache module exists in src/; LLM explanation calls (if added) would re-invoke the model on every identical finding.",
+    "diagnosis": "Design task: specify a finding-hash-to-LLM-explanation cache with TTL so repeated identical findings are served from cache rather than re-invoking the LLM.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: SQLite table `explanation_cache(hash TEXT PRIMARY KEY, finding_json TEXT, explanation TEXT, created_at TEXT, expires_at TEXT)`. Hash key: SHA-256 of normalized finding dict (sorted keys, stripped whitespace). Interface: `async def get_or_generate(finding: dict, ttl_seconds: int = 86400) -> str` in a new `src/explanation_cache.py`. TTL enforced at read time: if `expires_at < now` treat as miss. Edge cases: concurrent cache misses for same hash (use asyncio.Lock keyed by hash to prevent thundering herd); cache invalidation on model version bump (store model_id in row, reject hits on mismatch).",
+    "test_plan": "Test 1: call get_or_generate twice with same finding dict, assert LLM stub called exactly once. Test 2: insert a row with expires_at in the past, assert cache miss and re-generation. Test 3: two concurrent coroutines request same hash, assert LLM stub called exactly once (lock test)."
+  },
+  {
+    "component_id": "mcp-tool:get_recommendations",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:546-549 — dispatches to `self.k8s_manager.get_recommendations`; k8s_manager.py:105-160 — returns a static dict of hardcoded recommendation strings; no k8s API call is made; `cluster_context` parameter (line 91) is accepted but never used.",
+    "diagnosis": "The tool routes correctly but the handler returns canned generic advice that is not derived from actual cluster state, making the tool useless for real cluster optimization.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Implement real analysis: call `CoreV1Api().list_pod_for_all_namespaces()` and `AppsV1Api().list_deployment_for_all_namespaces()`, then inspect `.spec.containers[].resources` for missing limits/requests (performance focus), `.spec.securityContext` for missing runAsNonRoot (security focus), and `.spec.replicas` == 1 with no PDB (reliability focus). Build recommendations from actual findings rather than hardcoded strings. Pass `cluster_context` through as filter criteria.",
+    "test_plan": "Mock kubernetes client to return a deployment with no resource limits; assert the returned recommendations list contains a resource-limits entry. Mock a deployment with runAsRoot=True; assert a security recommendation is returned. Assert empty recommendations when cluster is fully compliant."
+  },
+  {
+    "component_id": "src/security_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "security_manager.py:92-116 (_scan_rbac), 118-150 (_scan_pod_security), 152-176 (_scan_network_policies), 178-201 (_scan_secrets), 203-232 (_scan_container_images) — every private scan method is a hardcoded return dict with fabricated counts (e.g., `'total_pods': 45`, `'total_secrets': 12`, specific CVE strings like `'CVE-2021-23017'`) and never calls any k8s API or image scanner.",
+    "diagnosis": "The entire security_scan surface (5 scan types) returns plausible-looking but entirely fabricated data, meaning users acting on security scan results may believe their cluster is secure when it is not.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace each stub with real k8s API calls: `_scan_rbac` -> list ClusterRoleBindings via `RbacAuthorizationV1Api` and flag subjects with cluster-admin. `_scan_pod_security` -> iterate pods via `CoreV1Api().list_pod_for_all_namespaces()`, check `.spec.containers[].securityContext.privileged`. `_scan_secrets` -> list secrets and flag those with no associated serviceaccount reference. `_scan_container_images` -> extract image names and call an external scanner (Trivy HTTP API or subprocess). `_scan_network_policies` -> list NetworkPolicy objects per namespace.",
+    "test_plan": "Mock kubernetes client returning a pod with `privileged: true`; assert `_scan_pod_security` returns that pod in issues list with severity=high. Mock an empty NetworkPolicy list for a namespace; assert `_scan_network_policies` flags it as missing_network_policy. Confirm no hardcoded resource names appear in output."
+  }
+]

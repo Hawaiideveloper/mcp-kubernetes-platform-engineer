@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:5 — '390 Total Tests'; TEST_SUITE_IMPLEMENTATION_SUMMARY.md:37 — 'Test directories: unit/, integration/, performance/, security/, production/'; actual counts: tests/unit/test_issue_patterns.py:21, tests/production/ files total 34; integration/, performance/, security/ subdirs do not exist",
+    "diagnosis": "Summary overclaims 390 tests across 5 categories — actual count is 55 test functions across 2 categories; 3 of 5 claimed test directories (integration, performance, security) are absent.",
+    "fix_class": "document",
+    "proposed_fix": "Update summary to reflect actual counts (55 tests, 2 directories). Remove claims for integration/, performance/, security/ test directories until they are created. Add a 'Status: INCOMPLETE' section listing the missing categories.",
+    "test_plan": "Run `find tests/ -name '*.py' | xargs grep -c 'def test_'` and compare to documented counts; verify all 5 listed directories exist under tests/."
+  },
+  {
+    "component_id": "deploy-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "deploy-k8s.sh:6 — 'set -e' (only); deploy-k8s.sh:106 — 'read -p \"Deploy Ingress for external access? (y/n): \" -n 1 -r'; deploy-k8s.sh:132 — 'kubectl get service mcp-server-service' vs k8s/service.yaml:4 — 'name: kubernetes-mcp-server-service'",
+    "diagnosis": "Script has three distinct defects: missing `set -uo pipefail` allows silent failures on unset variables and broken pipes; interactive `read` breaks CI/non-TTY execution; hardcoded service name 'mcp-server-service' does not match the YAML-defined name 'kubernetes-mcp-server-service', so NodePort and ClusterIP lookups silently return empty strings.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 6: change `set -e` to `set -euo pipefail`. Line 106-112: replace interactive read with a CLI flag `--ingress` defaulting to false. Lines 132-137: change 'mcp-server-service' to 'kubernetes-mcp-server-service' to match k8s/service.yaml. Add `|| true` guard only on the port-forward kill at line 158.",
+    "test_plan": "Run `bash -n deploy-k8s.sh` for syntax; in a kind cluster run the full script with the service name fix and assert NodePort var is non-empty; confirm CI execution with no TTY does not hang."
+  },
+  {
+    "component_id": "GettingStarted.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "GettingStarted.md:40 — 'kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001'; deploy-k8s.sh:141 — 'kubectl port-forward -n mcp-kubernetes service/mcp-server-service 3001:3001'; GettingStarted.md:17 — 'curl -fsSL .../start.sh | bash' — start.sh exists but the guide makes no mention of kubeconfig requirement for the Copilot integration to work against a real cluster",
+    "diagnosis": "GettingStarted.md references the correct service name 'kubernetes-mcp-server-service' while deploy-k8s.sh uses a mismatched name, creating a user-facing inconsistency; the guide also omits the kubeconfig pre-requisite for cluster-connected Copilot queries.",
+    "fix_class": "document",
+    "proposed_fix": "Add a prerequisites section noting KUBECONFIG must point to a reachable cluster before running Copilot queries. Align service name references across GettingStarted.md and deploy-k8s.sh to the canonical 'kubernetes-mcp-server-service' used in k8s/service.yaml.",
+    "test_plan": "Follow the guide verbatim on a fresh machine; verify port-forward succeeds and `curl localhost:3001/health` returns 200."
+  },
+  {
+    "component_id": "stop.sh",
+    "kind": "shell",
+    "severity": "low",
+    "evidence": "stop.sh:1 — '#!/bin/bash' with no `set -euo pipefail`; stop.sh:3-4 — errors suppressed via '2>/dev/null || true' on both docker stop and docker rm",
+    "diagnosis": "stop.sh lacks `set -euo pipefail` and uses blanket error suppression, making it impossible to distinguish a successful stop from a failed one; no logging of which container was stopped.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` after the shebang. Use explicit checks: `if docker ps -q -f name=k8s-mcp-server | grep -q .; then docker stop k8s-mcp-server; docker rm k8s-mcp-server; echo 'Stopped'; else echo 'Container not running'; fi`. Remove blanket `2>/dev/null || true`.",
+    "test_plan": "Run stop.sh when no container exists and verify exit code is 0 with a clear message. Run when container is running and verify it is removed."
+  },
+  {
+    "component_id": "behavior:analyzer_hpa",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "grep across all src/*.py finds zero calls to autoscaling API (list_namespaced_horizontal_pod_autoscaler, AutoscalingV1Api, AutoscalingV2Api); k8s_manager.py:122 mentions HPA only in a static best-practice string, not in live analysis code",
+    "diagnosis": "No HPAAnalyzer component exists; no code queries the Kubernetes autoscaling API, so no analysis of HPA metrics exhaustion, maxReplicas cap saturation, or scaling inhibition is possible.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/hpa_analyzer.py with HPAAnalyzer class. Data model: HPAStatus(name, namespace, current_replicas, desired_replicas, max_replicas, min_replicas, metrics_available, conditions). Interface: `async def analyze(namespace='all') -> List[HPAStatus]`. Uses kubernetes.client.AutoscalingV2Api.list_namespaced_horizontal_pod_autoscaler(). Edge cases: HPA with no metrics source (MetricsUnavailable condition), HPA capped at maxReplicas with pending desired > max, HPA with zero current due to scaledown-cooldown. Emit findings with severity 'critical' when desired==max for >N minutes.",
+    "test_plan": "Unit test with mocked AutoscalingV2Api returning a capped HPA; assert analyze() returns HPAStatus with a 'capped_at_max' finding. Integration test against a kind cluster with a deployed HPA."
+  },
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "K8S_ANNOUNCEMENT.md:12 — 'Monitors 17+ major Kubernetes ecosystem repos...Automatically updates its knowledge base every hour'; K8S_ANNOUNCEMENT.md:26 — '1,029+ official Kubernetes reference docs integrated for live search'; src/k8s_manager.py:29-31 — 'Kubernetes client initialization would go here / For now, we'll use a stub implementation'; src/documentation_manager.py:documentation_db is populated only from live HTTP crawls with no persistence, meaning it is empty on startup and lost on restart",
+    "diagnosis": "The announcement claims production-grade continuous learning, hourly GitHub issue ingestion, and 1,029+ pre-indexed docs, but the underlying code is either stubbed (k8s_manager) or depends on transient HTTP scraping with no on-disk persistence; the 1,029 doc count is unverifiable and the hourly update claim exists only as a sleep loop, not a verified dataset.",
+    "fix_class": "document",
+    "proposed_fix": "Replace marketing claims with accurate capability statements: 'Attempts hourly GitHub issue ingestion via aiohttp (no persistence; data lost on restart)', 'Documentation index populated at startup from live kubernetes.io scraping (no bundled corpus)', 'Cluster operations return stub data pending kubernetes-client wiring'. Add a roadmap section for production readiness.",
+    "test_plan": "Restart the server and immediately query search_documentation(); assert documentation_db is empty until _build_documentation_index completes, confirming no pre-seeded corpus exists."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "documentation_manager.py:51-66 — _build_documentation_index() crawls live URLs at startup with no caching or persistence; documentation_manager.py:269 — 'links[:10]' hard-caps crawl to 10 links per page with no explanation; documentation_manager.py:280-326 — _load_best_practices() populates self.best_practices with hardcoded static strings, not live documentation; documentation_manager.py:40-49 — initialize() raises on any fetch error, crashing the whole server if kubernetes.io is unreachable",
+    "diagnosis": "The documentation manager has three gaps: crawled data is never persisted so it resets on restart; the 10-link cap silently limits coverage far below the claimed 1,029 docs; best_practices is hardcoded and never updated from actual crawl results.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a SQLite/JSON cache (similar to github_issues_manager) for crawled docs with a TTL. Remove the links[:10] hard cap or make it configurable. Separate best_practices loading from the hardcoded dict into a method that enriches from crawled content. Wrap initialize() errors in a degraded-mode path that logs a warning rather than raising, so the server starts without live docs.",
+    "test_plan": "Confirm that after initialize() with network mocked to fail, search_documentation() returns [] instead of raising. Confirm that after a successful crawl, documentation_db persists across a simulated restart."
+  },
+  {
+    "component_id": "src/logger.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "logger.py:12 — 'from rich.console import Console'; logger.py:39 — 'console = Console()' — Console object is constructed but never used (no console.print calls); logger.py:112 — 'def get_logger(name: str) -> logger' — return type annotation is loguru.logger (module), not Logger; main.py:55 — 'self.logger = logging.getLogger(__name__)' bypasses get_logger() and uses stdlib logging directly",
+    "diagnosis": "logger.py has a dead import+instantiation of Rich Console, an incorrect return type annotation, and main.py does not use get_logger() — meaning stdlib logging and loguru run in parallel with inconsistent formatting.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the unused `console = Console()` at line 39. Fix return type annotation: `def get_logger(name: str) -> 'loguru.Logger'`. Update main.py lines 55 and 192 to use `from logger import get_logger` and `self.logger = get_logger(__name__)` to enforce a single log path.",
+    "test_plan": "Run the server and verify all log lines share the same format; assert `isinstance(get_logger('test'), type(loguru.logger))` passes; grep src/ for `logging.getLogger` and confirm only InterceptHandler uses it."
+  },
+  {
+    "component_id": "src/main.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "main.py:44 — 'allow_origins=[\"*\"]'; main.py:45 — 'allow_credentials=True'; main.py:107-114 — /k8s/diagnostics returns hardcoded '{\"status\": \"healthy\", \"cluster_info\": \"Available\", \"nodes\": \"Ready\", \"pods\": \"Running\"}'; main.py:117-126 — /k8s/monitoring returns hardcoded '{\"status\": \"monitoring_active\", \"metrics\": \"Available\", \"alerts\": \"None\"}'; main.py:129-138 — /k8s/security returns hardcoded '{\"status\": \"secure\", \"vulnerabilities\": \"None\"}'",
+    "diagnosis": "main.py exposes three HTTP endpoints that return hardcoded fake data rather than calling any manager method, and simultaneously sets allow_credentials=True with a wildcard CORS origin — a configuration that browsers reject as invalid and that, if accepted, would allow any origin to send credentialed cross-site requests.",
+    "fix_class": "rewrite",
+    "proposed_fix": "CORS: set allow_origins to an explicit list (configurable via env var), remove allow_credentials=True or restrict to known origins. Diagnostics endpoint: replace hardcoded dict with `await app_instance.mcp_server.k8s_manager.get_cluster_info()`. Monitoring endpoint: delegate to monitoring_manager. Security endpoint: delegate to security_manager. Add app_instance to FastAPI app state at startup.",
+    "test_plan": "Confirm browser CORS preflight for a cross-origin credentialed request is rejected before fix, then returns correct headers after fix. Integration test: call /k8s/diagnostics against a live cluster and assert response contains real node count."
+  },
+  {
+    "component_id": "behavior:safety_allowlist",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "grep across all src/*.py finds no allowlist, namespace whitelist, or auto-merge gate; src/k8s_manager.py:166-210 — execute_remediation() accepts any issue_type and target with only a dry_run flag; no namespace filtering exists",
+    "diagnosis": "No safety allowlist is implemented; execute_remediation() will attempt destructive operations on any namespace including kube-system, making automated remediation unsafe for production use.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a RemediationPolicy dataclass with fields: auto_merge_namespaces: List[str], pr_only_namespaces: List[str], blocked_operations: List[str]. Load from config (env var K8S_AUTO_MERGE_NS, default ['dev','staging']). In execute_remediation(): if namespace in auto_merge_namespaces and operation not in blocked_operations: execute directly; elif namespace in pr_only_namespaces: return a RemediationProposal object with the planned kubectl commands for human review; else: raise PermissionError. Edge cases: namespace=None (cluster-scoped resources), wildcard namespace patterns, operations that span multiple namespaces.",
+    "test_plan": "Unit test: call execute_remediation with namespace='kube-system' and assert PermissionError is raised. Call with namespace='dev' (allowlisted) and assert the operation proceeds. Call with namespace='production' (PR-only) and assert a RemediationProposal is returned without executing."
+  }
+]

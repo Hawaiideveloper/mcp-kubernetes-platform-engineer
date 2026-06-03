@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:44-66 — Tool(name=\"kubectl_describe\", ...) defined; grep of src/mcp_server.py for 'enhanced_tools' returns zero matches",
+    "diagnosis": "The kubectl_describe tool schema exists in enhanced_tools.py but enhanced_tools.py is never imported into mcp_server.py, so the tool is never registered or callable.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add: from enhanced_tools import get_enhanced_kubectl_tools. In handle_list_tools, extend the returned list with get_enhanced_kubectl_tools(). Add an elif branch for 'kubectl_describe' that dispatches to self.kubectl_manager.describe(resource, name, namespace). Confirm KubectlManager has a describe() method that calls the real k8s API.",
+    "test_plan": "Start the server, call list_tools, confirm 'kubectl_describe' appears; call the tool with a real resource and assert the response contains actual cluster data, not a stub or error."
+  },
+  {
+    "component_id": "behavior:analyzer_base",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No BaseAnalyzer class or Finding dataclass found anywhere in src/",
+    "diagnosis": "There is no abstract BaseAnalyzer class in the codebase; it must be designed from scratch for the auto-remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/analysis/base.py. Define @dataclass Finding(id: str, severity: Literal['critical','high','medium','low'], resource_ref: str, namespace: str, message: str, evidence: dict, suggested_fix: str). Define abstract class BaseAnalyzer with async def analyze(self, state: ClusterState) -> list[Finding] and a required class-level ANALYZER_ID: str. Subclasses (NodeAnalyzer, PodAnalyzer, etc.) implement analyze(). Registry pattern: ANALYZER_REGISTRY: dict[str, type[BaseAnalyzer]] populated via decorator.",
+    "test_plan": "Unit-test a concrete stub subclass that returns a known Finding; assert the Finding fields validate correctly. Integration-test by injecting a synthetic ClusterState and verifying the analyzer emits the expected severity."
+  },
+  {
+    "component_id": "enhanced:kubectl_delete",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:105-128 — Tool(name=\"kubectl_delete\", ...) defined; grep of src/mcp_server.py for 'enhanced_tools' returns zero matches",
+    "diagnosis": "kubectl_delete schema exists in enhanced_tools.py but is unreachable because enhanced_tools.py is never imported into mcp_server.py.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same import fix as kubectl_describe. Add an elif 'kubectl_delete' branch that checks self.non_destructive_mode first (return error if True), then calls self.kubectl_manager.delete(resource, name, namespace). This preserves the existing non-destructive mode guard already described in the tool's description string.",
+    "test_plan": "In non-destructive mode, assert calling kubectl_delete returns a clear rejection message without touching the cluster. In normal mode with a test namespace resource, assert the resource is actually deleted and the API response is returned."
+  },
+  {
+    "component_id": "mcp-tool:get_trending_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:599-603 — elif name == 'get_trending_issues': result = await self.github_issues_manager.get_trending_issues(...); src/github_issues_manager.py:541-571 — queries local SQLite table github_issues",
+    "diagnosis": "The handler exists and dispatches correctly, but results depend entirely on data previously fetched from the GitHub API and stored in a local SQLite database; if the database is empty (cold start, rate-limited, or no network), the method silently returns an empty list with no indication to the caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In get_trending_issues, after the query returns an empty list, add a fallback branch: if not issues: return {'error': 'knowledge_base_empty', 'message': 'No issues indexed yet; GitHub fetch may be in progress or rate-limited', 'retry_after': self.update_interval}. Expose db row count in get_issue_statistics so callers can distinguish 'no trending' from 'db empty'.",
+    "test_plan": "Delete or mock the SQLite DB to simulate a cold start; assert get_trending_issues returns a structured error dict rather than an empty list. After injecting fixture rows, assert correct trend_score ordering."
+  },
+  {
+    "component_id": "behavior:gitops_pr_generation",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No PR generation code exists in the repo; no github PR client, no PR body template found in any src/ file.",
+    "diagnosis": "GitOps PR generation is entirely absent and must be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/gitops/pr_generator.py. Interface: async def generate_pr(finding: Finding, sandbox_log: str, repo: str, base_branch: str) -> str (returns PR URL). Title format: 'fix(<namespace>/<resource>): <finding.id> — <finding.message[:60]>'. Body sections: ## Finding (finding_id, severity, resource_ref), ## Evidence (finding.evidence as YAML block), ## Sandbox Log (fenced code block, truncated to 4000 chars), ## Proposed Fix (finding.suggested_fix). Labels: auto-apply severity label and 'mcp-auto-remediation'. Use PyGitHub or gh CLI subprocess. Edge cases: existing open PR for same finding_id (skip duplicate), rate limit (retry with backoff).",
+    "test_plan": "Mock the GitHub API; assert the generated PR title matches the format regex, body contains all three required sections, and duplicate calls do not create a second PR."
+  },
+  {
+    "component_id": "src/logger.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/logger.py:112 — def get_logger(name: str) -> logger: — return type annotation is the loguru module object, not the bound logger type; src/logger.py:39 — console = Console() created but never used (Rich handler added to loguru directly via sys.stderr, not via console)",
+    "diagnosis": "get_logger has an incorrect return type annotation (-> logger is the module, not the type), and the Console() object on line 39 is instantiated but never referenced, constituting dead code.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change return type to -> 'loguru.Logger'. Remove the unused console = Console() on line 39 and the from rich.console import Console import on line 9 (RichHandler is not actually used either; logs go to sys.stderr via loguru). Confirm the rich and loguru dual-handler setup does not write duplicate lines to stderr in production.",
+    "test_plan": "Run mypy on logger.py after the type fix; assert zero type errors. Write a test that calls setup_logging() then get_logger('test') and emits a message; assert exactly one log line appears on stderr with no duplication."
+  },
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "k8s/rbac.yaml:1-69 — single ServiceAccount 'kubernetes-mcp-server-sa' with a single ClusterRole granting only get/list/watch — no write verbs present",
+    "diagnosis": "The current RBAC is read-only (correct for diagnosis) but there is no separate write-scoped ServiceAccount for apply operations; the design for a split must be specified for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Keep existing SA 'kubernetes-mcp-server-sa' as the read-only identity. Add SA 'kubernetes-mcp-remediator-sa' in same namespace. Create a namespaced Role (not ClusterRole) 'mcp-remediator-role' granting create/update/patch/delete on pods, deployments, configmaps only in targeted namespaces. Bind via RoleBinding per namespace rather than ClusterRoleBinding. MCP server switches k8s client context based on operation type: diagnostic tools use the read SA token; execute_remediation uses the write SA token, loaded from a separate mounted secret. Edge case: if the write SA token is absent, execute_remediation must fail closed with a clear error.",
+    "test_plan": "Deploy both SAs; confirm kubectl auth can-i list pods --as=system:serviceaccount:mcp-kubernetes:kubernetes-mcp-server-sa succeeds and kubectl auth can-i delete pods --as same SA fails. Confirm remediator SA can patch a deployment in the target namespace but cannot read secrets."
+  },
+  {
+    "component_id": "GETTING_STARTED.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GETTING_STARTED.md:141 — '45,720+ indexed Kubernetes GitHub issues'; GETTING_STARTED.md:147 — 'Real-time cluster analysis (if kubectl configured)'; GETTING_STARTED.md:163 — 'Learns from community solutions'",
+    "diagnosis": "The '45,720+' issue count is a hardcoded marketing claim with no basis in code; the database is populated at runtime from the GitHub API and starts empty. 'Real-time cluster analysis' is overclaimed: most managers return hardcoded stub data rather than live k8s API calls. 'Learns from community solutions' implies ML/NLP that does not exist.",
+    "fix_class": "document",
+    "proposed_fix": "Replace line 141 with: 'Indexes Kubernetes GitHub issues on first run (count depends on API availability and rate limits). Remove the '45,720+' claim entirely. Replace 'Real-time cluster analysis' with 'Cluster analysis requires kubectl configured and reachable; some operations return stubbed data in this release.' Remove the 'Learns from community solutions' bullet or replace with an accurate description of keyword-based matching.",
+    "test_plan": "Manual review: verify each remaining claim in GETTING_STARTED.md against the actual code behavior. No claim should reference a specific numeric count or imply ML without implementation evidence."
+  },
+  {
+    "component_id": "start.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "start.sh:1 — #!/bin/bash; no 'set -u' or 'set -o pipefail'; start.sh:97-98 — ENV_ARGS=\"$ENV_ARGS -e GITHUB_TOKEN=$GITHUB_TOKEN\"; start.sh:228 — echo \"$EXISTING_SETTINGS\" | jq \". * $MCP_CONFIG\" > \"$VSCODE_SETTINGS\"",
+    "diagnosis": "The script uses set -e but omits set -u (unbound variables silently expand to empty string) and set -o pipefail (pipe failures are silent). GITHUB_TOKEN is interpolated directly into a docker run argument without quoting, risking word-splitting or shell injection if the token contains special characters. The jq merge clobbers nested VS Code settings keys rather than doing a deep merge.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' on line 3. Quote the token: ENV_ARGS=\"$ENV_ARGS -e GITHUB_TOKEN='${GITHUB_TOKEN}'\". Pass token via --env-file instead of inline to avoid shell exposure. Replace the jq '. * $MCP_CONFIG' (shallow merge) with a recursive merge: jq --argjson new \"$MCP_CONFIG\" '. * $new' or use a dedicated merge function for nested objects.",
+    "test_plan": "Run shellcheck start.sh and assert zero SC2086/SC2039 warnings. Test with a GITHUB_TOKEN containing a space or $ character and verify docker run receives the correct value. Test with an existing settings.json containing nested keys and verify they are preserved after merge."
+  },
+  {
+    "component_id": "k8s/secret.yaml",
+    "kind": "manifest",
+    "severity": "critical",
+    "evidence": "k8s/secret.yaml:13 — GITHUB_TOKEN: \"\" — empty string value committed to repo; no secretGenerator, no ExternalSecret, no sealed-secret reference",
+    "diagnosis": "The Secret manifest commits an empty placeholder for GITHUB_TOKEN directly to source control with no mechanism to inject the real value at deploy time, meaning either the token is never set (silently degraded functionality) or operators paste the real token into this file and commit it, creating a secret-leak risk.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the inline GITHUB_TOKEN: \"\" field. Replace with a kustomize secretGenerator in kustomization.yaml: secretGenerator: [{name: kubernetes-mcp-server-secrets, envs: [.env.secret]}] and add .env.secret to .gitignore. Alternatively, reference an ExternalSecret CR if the org uses external-secrets-operator. Add a comment in secret.yaml documenting the expected injection method.",
+    "test_plan": "Run git grep 'GITHUB_TOKEN' in k8s/ and assert no raw token value is present. Deploy to a test namespace using the kustomize secretGenerator path and confirm the Secret is created with the correct value from the .env.secret file."
+  }
+]

@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/mcp_server.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:484 — `async def handle_call_tool(name: str, arguments: Optional[Dict[str, Any]])` — arguments is typed Optional but lines 502, 510, 517-518, 525, 541, 554-555, 562, 579, 585, 595 all use direct key indexing `arguments[\"key\"]` with no None-guard",
+    "diagnosis": "handle_call_tool accepts arguments as Optional but never checks for None before indexing, causing AttributeError/TypeError on any tool call with missing or null arguments.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a guard at the top of the try block: `if arguments is None: arguments = {}`. Then replace all bare `arguments[\"key\"]` with `arguments.get(\"key\")` for optional fields; for required fields raise a descriptive ValueError if missing rather than letting Python raise KeyError.",
+    "test_plan": "Call each tool with arguments=None and with an empty dict; assert CallToolResult returns an error message string, not an uncaught exception. Call with all required args present and assert success path returns JSON."
+  },
+  {
+    "component_id": "src/mcp_server.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:73-74 — `self.kubectl_manager = KubectlManager(...)` and `self.helm_manager = HelmManager(...)` are initialised in __init__ but no tool names from enhanced_tools.py (kubectl_get, kubectl_describe, kubectl_rollout, port_forward, k8s_diagnose, etc.) appear anywhere in handle_call_tool; grep of mcp_server.py for 'kubectl_get|kubectl_describe|kubectl_rollout|port_forward|k8s_diagnose' returns zero hits",
+    "diagnosis": "kubectl_manager and helm_manager are instantiated but their methods are never reachable via any registered tool handler, making the entire enhanced kubectl/helm surface dead code at runtime.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Import get_enhanced_kubectl_tools and get_enhanced_helm_tools from enhanced_tools.py. In handle_list_tools extend the tools list with both. In handle_call_tool add elif branches that dispatch to self.kubectl_manager and self.helm_manager methods for each tool name (kubectl_get, kubectl_describe, kubectl_rollout, kubectl_logs, port_forward, k8s_diagnose, install_helm_chart, etc.).",
+    "test_plan": "Call list_tools and assert kubectl_get and install_helm_chart are present. Call kubectl_get with resource='pods' and assert a real kubectl invocation is attempted (mock subprocess.run and verify it is called with ['kubectl','get','pods'])."
+  },
+  {
+    "component_id": "VSCODE_SETUP.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "VSCODE_SETUP.md:38-50 — config snippet points to `src/main.py --stdio`; VSCODE_SETUP.md:64 — claims pressing Tab triggers Copilot suggestions powered by MCP; VSCODE_SETUP.md:161 — 'The MCP server will provide responses based on real GitHub issues and community solutions'",
+    "diagnosis": "The VS Code config snippet references src/main.py which runs an HTTP server (main.py:75-150), not an stdio MCP server; the stdio entrypoint is mcp_server.py. The claim that Copilot tab-completion is powered by MCP is unsupported by any code path. The 'real GitHub issues' claim is overclaimed (data is from a static local JSON index).",
+    "fix_class": "document",
+    "proposed_fix": "Replace the docker args block to point to `src/mcp_server.py` (the actual stdio MCP server). Remove the Tab/Copilot autocomplete claim; replace with factual description that Copilot Chat can invoke MCP tools. Qualify the GitHub issues statement to say 'pre-indexed snapshot of GitHub issues'.",
+    "test_plan": "Run `docker exec -i k8s-mcp-server python src/main.py --stdio` and verify it fails or produces no stdio MCP handshake; run with mcp_server.py entrypoint and verify MCP handshake succeeds. Doc review confirms no false claims remain."
+  },
+  {
+    "component_id": "mcp-tool:get_best_practices",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:566-569 — `elif name == 'get_best_practices': result = await self.documentation_manager.get_best_practices(category=arguments.get('category'))` dispatches to documentation_manager.py:376-380 which returns `self.best_practices` dict populated entirely from a hardcoded static dict at documentation_manager.py:282-326, not from any live Kubernetes API or dynamically fetched documentation",
+    "diagnosis": "get_best_practices returns a static hardcoded dict embedded in source code; no real K8s API is consulted and the data never changes at runtime.",
+    "fix_class": "implement",
+    "proposed_fix": "Replace the static dict in _load_best_practices with a fetch from the documentation_db built by _build_documentation_index (which scrapes kubernetes.io). If the scrape fails or documentation_db is empty, fall back to the static dict but log a warning. Add a cache-refresh mechanism so the data is periodically updated.",
+    "test_plan": "Mock aiohttp to return a known kubernetes.io HTML fixture; assert get_best_practices('security') returns at least one item derived from the scraped content, not the hardcoded list. Test fallback by making the scrape raise an exception and assert the static dict is returned."
+  },
+  {
+    "component_id": "behavior:five_min_watchdog",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No watchdog implementation exists anywhere in the repo (grep for 'watchdog|heal|auto_remediat' returns zero hits in src/)",
+    "diagnosis": "Design task: implement a five-minute watchdog that detects degraded cluster state, attempts remediation, and confirms healing via readiness checks and absence of new warnings.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: WatchdogRun(run_id, started_at, checks: List[CheckResult], remediation_actions: List[RemediationAction], healed: bool, warnings_before: int, warnings_after: int). Interface: `async def run_watchdog_cycle(namespace: Optional[str]) -> WatchdogRun`. Logic: (1) call diagnostics_manager.diagnose_cluster_health to count warnings/errors, (2) for each issue call k8s_manager.execute_remediation with dry_run=False if confidence >= threshold, (3) wait up to 5 min polling readiness probes, (4) re-run diagnostics and compare warning counts. Healed=True iff all targeted resources are Ready and warnings_after <= warnings_before. Edge cases: partial heal, new unrelated warnings introduced during remediation window, executor timeout.",
+    "test_plan": "Unit-test with a mock cluster that has one CrashLoopBackOff pod: assert watchdog calls execute_remediation, then after mock pod transitions to Running, healed=True and warnings_after < warnings_before. Test timeout path where pod never recovers; assert healed=False and run completes within 5min+10s margin."
+  },
+  {
+    "component_id": "VSCODE_K8S_INTEGRATION.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "VSCODE_K8S_INTEGRATION.md:55 — `curl http://172.100.10.107:30001/health`; VSCODE_K8S_INTEGRATION.md:121 — same IP again; VSCODE_K8S_INTEGRATION.md:166 — same IP again; VSCODE_K8S_INTEGRATION.md:255 — same IP again. Also line 244: '1. Health endpoint responds: {\"status\":\"healthy\",...}'",
+    "diagnosis": "The document hardcodes a private lab IP address (172.100.10.107) as if it were a generic instruction, and claims /health endpoint existence which is only present in src/main.py (HTTP mode), not in the stdio MCP server run by mcp_server.py.",
+    "fix_class": "document",
+    "proposed_fix": "Replace every occurrence of `http://172.100.10.107:30001` with a placeholder such as `http://<NODE_IP>:<NODE_PORT>`. Add a note explaining that the /health endpoint is only available when running src/main.py in HTTP mode (not the default stdio MCP mode). Remove the Success Indicator claiming health endpoint responds, or qualify it as only applicable in HTTP deployment mode.",
+    "test_plan": "Grep the updated doc for '172.100.10.107' and assert zero hits. Verify the health endpoint claim is qualified with the correct deployment mode."
+  },
+  {
+    "component_id": "coming_soon.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "coming_soon.md:178-180 — 'Test coverage maintained above 95%'; coming_soon.md:196 — 'API response time under 2 seconds for 99% of requests'; coming_soon.md:199 — 'Bug resolution time under 24 hours for critical issues'. These are presented as current metrics under '📈 Metrics & Success Criteria' not as future targets.",
+    "diagnosis": "coming_soon.md presents aspirational future metrics in a section titled 'Metrics & Success Criteria' without making clear these are targets rather than current state, constituting a misleading overclaim about current product quality.",
+    "fix_class": "document",
+    "proposed_fix": "Rename the section to 'Target Metrics & Success Criteria (Future State)'. Add a preamble: 'The following metrics represent goals for the v2.0 production release; current coverage and latency figures are not yet measured.' Append a separate 'Current State' subsection with honest baseline (e.g., test coverage unknown, latency not benchmarked).",
+    "test_plan": "Doc review confirms future vs. current state is unambiguous. CI step running grep for claims like 'maintained above 95%' without a future-state qualifier fails the build."
+  },
+  {
+    "component_id": "enhanced:kubectl_rollout",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:227-257 — Tool named 'kubectl_rollout' with full inputSchema defined. grep of src/mcp_server.py for 'kubectl_rollout' returns zero hits. grep of src/mcp_server.py for 'import enhanced_tools' and 'from enhanced_tools' also returns zero hits.",
+    "diagnosis": "The kubectl_rollout tool schema is defined in enhanced_tools.py but mcp_server.py never imports enhanced_tools.py and never registers or dispatches the tool, making it completely unreachable by MCP clients.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py _register_handlers, extend handle_list_tools to include `get_enhanced_kubectl_tools()` from enhanced_tools.py. In handle_call_tool add: `elif name == 'kubectl_rollout': result = await self.kubectl_manager.kubectl_rollout(action=arguments['action'], resource=arguments['resource'], name=arguments['name'], namespace=arguments.get('namespace'))`. Ensure kubectl_manager is already initialized (it is, at line 73).",
+    "test_plan": "Call list_tools and assert 'kubectl_rollout' is in the response. Call kubectl_rollout with action='status', resource='deployment', name='my-app' and mock subprocess.run; assert it is called with ['kubectl','rollout','status','deployment/my-app']."
+  },
+  {
+    "component_id": "src/kubectl_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/kubectl_manager.py:45-81 — `def _run_kubectl(self, args, input_data=None)` calls `subprocess.run(...)` synchronously (blocking). All callers are async methods (kubectl_get at line 106, kubectl_describe at 125, kubectl_logs at 170, etc.) that call `self._run_kubectl(args)` without `await` or `asyncio.get_event_loop().run_in_executor`.",
+    "diagnosis": "Every kubectl method runs subprocess.run synchronously inside an async method, blocking the entire asyncio event loop for up to 60 seconds (the subprocess timeout), preventing concurrent MCP request handling.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Convert _run_kubectl to an async method using asyncio.create_subprocess_exec: `proc = await asyncio.create_subprocess_exec(*cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)` followed by `stdout, stderr = await asyncio.wait_for(proc.communicate(input_data), timeout=60)`. Remove the synchronous subprocess.run call entirely.",
+    "test_plan": "Run two concurrent kubectl_get calls against a mock that sleeps 2s each; assert total wall time < 3s (parallelism). Assert TimeoutError is raised correctly when the process exceeds 60s."
+  },
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:43-66 — Tool named 'kubectl_describe' with full inputSchema defined. grep of src/mcp_server.py for 'kubectl_describe' returns zero hits. grep of src/mcp_server.py for 'from enhanced_tools' and 'import enhanced_tools' returns zero hits.",
+    "diagnosis": "The kubectl_describe tool schema is defined in enhanced_tools.py but mcp_server.py never imports or registers it, making it completely dead and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same wire-up as kubectl_rollout (import enhanced_tools in mcp_server.py and extend handle_list_tools). In handle_call_tool add: `elif name == 'kubectl_describe': result = await self.kubectl_manager.kubectl_describe(resource=arguments['resource'], name=arguments['name'], namespace=arguments.get('namespace'))`. The kubectl_manager.kubectl_describe method already exists at kubectl_manager.py:125.",
+    "test_plan": "Call list_tools and assert 'kubectl_describe' is in the response. Call kubectl_describe with resource='pod', name='my-pod', namespace='default' and mock subprocess.run; assert it is called with ['kubectl','describe','pod','my-pod','-n','default']."
+  }
+]
