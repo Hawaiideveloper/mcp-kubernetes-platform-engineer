@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:analyze_logs",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:99-141 — 'total_entries': 1247, 'filtered_entries': 156, ... 'error_count': 23, ... 'message': 'Failed to connect to database'",
+    "diagnosis": "analyze_logs is wired in mcp_server.py line 523-530 and calls monitoring_manager.analyze_logs, but that method returns entirely hardcoded fake log counts, error messages, and timestamps — no kubernetes client call or log aggregation is performed.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub body with real implementation: (1) use kubernetes.client.CoreV1Api().read_namespaced_pod_log() to fetch logs for pod targets; (2) parse log lines by level and match search_pattern via re.search; (3) compute real counts from actual log stream; (4) remove hardcoded 'total_entries', 'error_count', and canned error message strings.",
+    "test_plan": "Deploy a test pod that emits known error/warn/info lines; call analyze_logs targeting that pod and assert returned counts match actual log line counts; assert hardcoded string 'Failed to connect to database' is absent from output when logs do not contain it."
+  },
+  {
+    "component_id": "tests/production/test_pod_issues.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/production/test_pod_issues.py:70 — 'mcp_server.resolve_issue_end_to_end = AsyncMock(return_value=mock_pipeline_result)'; line 150 — 'github_issues_manager.find_similar_issues = AsyncMock(return_value=mock_similar_issues)'; every test replaces the method under test with AsyncMock before calling it.",
+    "diagnosis": "Every test in this file mocks the exact function being tested and then asserts on the mock return value, meaning no real code path is exercised — all 10 tests are self-validating stubs that cannot catch regressions.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove AsyncMock replacement of production methods; instead mock only external dependencies (kubernetes client, GitHub API). Wire tests to real manager instances via dependency injection. Use a fake k8s client (e.g., kubernetes-fake) to supply controlled pod/event data so assertions reflect actual code logic.",
+    "test_plan": "After rewrite, introduce a deliberate bug in one manager method (e.g., swap 'CrashLoopBackOff' check) and verify the corresponding test fails; confirm tests pass against correct implementation."
+  },
+  {
+    "component_id": "enhanced:kubectl_scale",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:161-191 defines kubectl_scale Tool schema; grep of src/mcp_server.py returns no match for 'enhanced_tools' or 'get_enhanced_kubectl_tools' — the module is never imported.",
+    "diagnosis": "kubectl_scale (and all other enhanced tool schemas in enhanced_tools.py) are defined but never registered with the MCP server because mcp_server.py does not import enhanced_tools, making the entire file dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add: 'from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools'; in handle_list_tools extend the tools list with get_enhanced_kubectl_tools() + get_enhanced_helm_tools(); add dispatch branches in handle_call_tool for 'kubectl_scale' routing to self.kubectl_manager.scale_resource(resource, name, replicas, namespace).",
+    "test_plan": "After wiring, call list_tools via MCP and assert kubectl_scale appears in the response; invoke kubectl_scale with a known deployment name and assert the kubectl_manager.scale_resource method is called with correct arguments."
+  },
+  {
+    "component_id": "mcp-tool:get_cluster_info",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:29-31 — '# Kubernetes client initialization would go here\\n            # For now, we'll use a stub implementation'; lines 50-83 — hardcoded dict with 'version': 'v1.29.0', 'total': 3, 'ready': 3, 'api_server': 'https://kubernetes.default.svc.cluster.local'",
+    "diagnosis": "get_cluster_info returns a completely hardcoded dictionary; the Kubernetes client (self.client) is never initialized or called, so every caller receives fabricated cluster state regardless of the actual cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In initialize(), call config.load_incluster_config() or config.load_kube_config(); set self.client = kubernetes.client.CoreV1Api() and self.apps_client = kubernetes.client.AppsV1Api(). In get_cluster_info(), replace hardcoded dict with: nodes via self.client.list_node(), pods via self.client.list_pod_for_all_namespaces(), services via self.client.list_service_for_all_namespaces(), and version via kubernetes.client.VersionApi().get_code().",
+    "test_plan": "Using kubernetes-fake client, pre-populate 2 nodes and 5 pods; call get_cluster_info and assert nodes.total==2, pods.total==5, and version matches the fake server version; confirm no hardcoded 'v1.29.0' string is returned."
+  },
+  {
+    "component_id": "behavior:probe_tuning_remediation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "N/A — design task; current execute_remediation stub (k8s_manager.py:166-210) has no probe_tuning case.",
+    "diagnosis": "No implementation exists for deterministic probe tuning remediation; a real auto-remediator needs a concrete data model, interface, and edge case handling to fix connection-refused startup failures.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ProbeTuningSpec(pod_name, namespace, container_name, current_initial_delay_seconds, recommended_initial_delay_seconds, probe_type: Literal['liveness','readiness','startup']). Interface: async def tune_probe(spec: ProbeTuningSpec, dry_run: bool) -> ProbeTuningResult. Implementation: (1) fetch pod spec via read_namespaced_pod; (2) detect connection-refused pattern in recent events (reason=Unhealthy, message contains 'connection refused'); (3) compute new initialDelaySeconds = max(current+10, observed_startup_time+5); (4) patch pod's owning Deployment via strategic merge patch. Edge cases: pod not owned by Deployment (abort), initial_delay already > 120s (flag for manual review), multiple containers (require explicit container_name).",
+    "test_plan": "Unit test with fake k8s client: create deployment with initialDelaySeconds=5, inject Unhealthy events, call tune_probe, assert patch is issued with initialDelaySeconds>=15; assert dry_run=True produces no patch call; assert unowned pod raises ValueError."
+  },
+  {
+    "component_id": "deploy-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "deploy-k8s.sh:6 — 'set -e' (missing -u and -o pipefail); line 63 — 'CLUSTER_SERVER=$(kubectl cluster-info | grep \"control plane\" | awk ...)' (pipe drops exit codes); line 146 — 'kubectl port-forward ... &' backgrounded process whose PID is killed at line 158 without checking if tests passed; no idempotency guard before 'docker build'.",
+    "diagnosis": "deploy-k8s.sh uses only 'set -e', leaving unbound variable references and broken pipes silently ignored; piped commands on line 63 can silently produce empty variables; the background port-forward and unconditional kill pattern can mask real test failures.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change line 6 to 'set -euo pipefail'. On line 63 replace the awk pipe chain with: 'CLUSTER_SERVER=$(kubectl cluster-info --short 2>/dev/null | grep \"control plane\" | awk \"{print \\$NF}\")'. Wrap the port-forward test block in a function that propagates the curl exit code before killing the port-forward PID. Add idempotency for docker build: 'docker build -t k8s-platform-engineer-mcp:latest .' only when explicitly requested.",
+    "test_plan": "Run shellcheck against the updated script and confirm zero SC2086/SC2039/SC2069 errors; run with an intentionally missing kubeconfig and verify the script exits non-zero with an explicit error message rather than continuing silently."
+  },
+  {
+    "component_id": "setup-vscode-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "setup-vscode-k8s.sh:77 — hardcoded path '/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json' (missing @ in email); line 89 — same hardcoded path used for write; line 7 — 'VSCODE_SETTINGS_DIR' set via $HOME but Python block ignores it and uses a literal path.",
+    "diagnosis": "The embedded Python block hardcodes a malformed user path ('/Users/hawaiidevelopergmail.com') that is almost certainly wrong on any real machine, meaning the VS Code settings merge silently fails or corrupts another user's settings on any machine except the original developer's.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the hardcoded path from the heredoc Python block. Pass the settings file path as an environment variable: 'SETTINGS_FILE_PATH=\"$SETTINGS_FILE\" python3 - <<EOF' and inside the Python block use 'import os; settings_file = os.environ[\"SETTINGS_FILE_PATH\"]'. This makes the script work for any user whose $HOME is correctly set by the shell.",
+    "test_plan": "Run the script as a test user with HOME=/tmp/testuser and verify settings.json is created/merged at /tmp/testuser/Library/Application Support/Code/User/settings.json, not at any hardcoded path; confirm the backup file is also created at the correct path."
+  },
+  {
+    "component_id": "setup-vscode-nodeport.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "setup-vscode-nodeport.sh:13-14 — 'CLUSTER_IP=$(kubectl get nodes ...)' and 'NODEPORT=$(kubectl get svc ...)' run before any cluster connectivity check; line 30 — 'exit 1' if health check fails, but the NodePort variables could already be empty strings if kubectl commands failed silently; line 6 — 'set -euo pipefail' is present (good), but empty CLUSTER_IP/NODEPORT on kubectl failure means errexit may not fire if kubectl exits 0 with empty output.",
+    "diagnosis": "NodePort and cluster IP extraction happens before any connectivity guard; if kubectl returns empty output (e.g., service not yet deployed), CLUSTER_IP and NODEPORT are empty strings and the script proceeds to write a broken MCP config URL ('http://:') before reaching the health check that would abort it.",
+    "fix_class": "rewrite",
+    "proposed_fix": "After lines 13-14, add explicit guards: '[[ -z \"$CLUSTER_IP\" ]] && { echo \"ERROR: could not determine cluster IP\"; exit 1; }' and '[[ -z \"$NODEPORT\" ]] && { echo \"ERROR: could not determine NodePort\"; exit 1; }'. Move the kubectl prereq check (kubectl cluster-info) to before the variable extraction block so failures are caught with clear messages.",
+    "test_plan": "Run the script against a context with no matching service and verify it exits non-zero before writing any config file; verify that when CLUSTER_IP is empty the exit message is 'ERROR: could not determine cluster IP'."
+  },
+  {
+    "component_id": "src/mcp_server.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:484 — 'async def handle_call_tool(name: str, arguments: Optional[Dict[str, Any]])'; line 491 — 'arguments.get(\"include_details\", True)' called without None-guard; line 608-611 — unknown tool name returns success-shaped CallToolResult with 'Unknown tool:' text instead of an MCP error; line 617-621 — bare except Exception swallows all errors and returns error text as a successful tool result (HTTP 200 equivalent), preventing MCP clients from detecting failures.",
+    "diagnosis": "handle_call_tool has three critical gaps: (1) arguments can be None (optional) but is dereferenced without a None check causing AttributeError on tools with no arguments; (2) unknown tool names return a success response, not an MCP error; (3) all exceptions are caught and returned as success-shaped text, making failures invisible to MCP clients.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 484: add 'arguments = arguments or {}' at start of handler. Lines 608-611: raise MCPError or return CallToolResult with isError=True for unknown tools. Lines 617-621: re-raise or return CallToolResult(isError=True, content=[TextContent(...)]) so MCP clients can detect failures. Also add input validation against each Tool's inputSchema before dispatch.",
+    "test_plan": "Call handle_call_tool with name='get_cluster_info' and arguments=None; assert no AttributeError. Call with name='nonexistent_tool'; assert the returned CallToolResult has isError=True. Inject an exception in k8s_manager.get_cluster_info and assert the error result has isError=True."
+  },
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:217-275 — all private methods (_check_nodes, _check_pods, _check_services, _check_networking, _check_storage) return hardcoded dicts: 'total_nodes': 3, 'ready_nodes': 3, node names 'master-1'/'worker-1'/'worker-2', 'cni_plugin': 'calico', 'pod_cidr': '172.100.10.0/24'",
+    "diagnosis": "diagnose_cluster_health dispatches to five private methods that all return static hardcoded data with no Kubernetes API calls, so the tool always reports a healthy 3-node calico cluster regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In DiagnosticsManager.initialize(), accept and store a CoreV1Api client reference. In _check_nodes(): call self.core_v1.list_node() and derive ready/not-ready counts from node conditions. In _check_pods(namespace): call list_pod_for_all_namespaces() or list_namespaced_pod() and count by phase. In _check_networking(): read ConfigMap kube-system/kubeadm-config or inspect network plugin DaemonSet to derive real CNI and CIDR values. Remove all hardcoded node names and IP ranges.",
+    "test_plan": "Using kubernetes-fake, pre-populate 1 NotReady node and 2 Failed pods; call diagnose_cluster_health and assert not_ready_nodes==1, failed_pods==2, and overall_status is not 'healthy'; confirm no hardcoded node name 'master-1' appears in output."
+  }
+]

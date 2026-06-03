@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "security-scan-demo.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "security-scan-demo.sh:1 — #!/bin/bash (no set -euo pipefail); security-scan-demo.sh:150 — hardcoded conclusion '✅ Your MCP server follows security best practices!'",
+    "diagnosis": "Script lacks set -euo pipefail so any kubectl or jq failure is silently swallowed, and it unconditionally emits a passing verdict regardless of scan results.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' on line 2. Replace the hardcoded line 150 with a computed EXIT_CODE that is non-zero when any check emits WARNING or CRITICAL, and replace the hardcoded praise with a conditional summary: 'if [ \"$ISSUES\" -gt 0 ]; then echo \"FAIL: $ISSUES issues found\"; exit 1; else echo \"PASS\"; fi'.",
+    "test_plan": "Run script against a cluster with a known privileged pod; verify exit code is non-zero and no 'best practices' praise is printed. Run against a clean cluster; verify exit 0 and PASS message."
+  },
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:65-74 — single KubernetesManager, KubectlManager, HelmManager all instantiated with same config; no ServiceAccount separation exists anywhere in src/",
+    "diagnosis": "There is no RBAC split implemented: all operations — read-only diagnosis and write/apply — share one identity with no least-privilege separation.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: add 'read_sa_name', 'write_sa_name', 'read_kubeconfig_path', 'write_kubeconfig_path' to KubernetesConfig. Interface: KubernetesManager.get_read_client() / get_write_client() return separate kubernetes.client.ApiClient instances loaded from respective kubeconfigs. Dispatch: mcp_server.py routes all 'get_*', 'diagnose_*', 'search_*' tools to read_client; 'execute_remediation', 'kubectl_apply', 'helm_install' to write_client. Edge cases: write_client raises PermissionError if namespace is in PROTECTED_NAMESPACES list (ibkr-live-trader, daxxon-trading, brightflow-live).",
+    "test_plan": "Unit test: mock two distinct ApiClient instances, assert get_cluster_info calls read_client only. Integration test: deploy read-only SA with no write perms; verify execute_remediation raises PermissionError when using read client. Verify write_client triggers for apply operations."
+  },
+  {
+    "component_id": "mcp-tool:get_best_practices",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:566-568 — 'elif name == \"get_best_practices\": result = await self.documentation_manager.get_best_practices(category=arguments.get(\"category\"))'; src/documentation_manager.py:376-380 — 'async def get_best_practices(self, category: str = None) -> Dict[str, List[str]]: if category and category in self.best_practices: return {category: self.best_practices[category]}; return self.best_practices'",
+    "diagnosis": "get_best_practices returns only hardcoded in-memory strings from _load_best_practices(), never data fetched from the live kubernetes.io docs scraper — the real Kubernetes documentation index (documentation_db) is not consulted.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In get_best_practices, after returning the hardcoded dict, augment with results from search_documentation(query=category, max_results=5) — extract the 'best_practices' list from each doc entry. Merge and deduplicate. Return combined dict. This wires the scraper output into the tool response.",
+    "test_plan": "Mock documentation_db with a fake entry containing a best_practices list for 'security'; call get_best_practices('security'); assert the returned list includes both hardcoded and scraped entries."
+  },
+  {
+    "component_id": "enhanced:helm_install",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:408 — Tool named 'install_helm_chart' defined; grep across all src/*.py for 'import enhanced_tools' and 'get_enhanced' returns zero results — confirmed by: grep -rn 'import enhanced_tools|from enhanced_tools|get_enhanced' src/ → no output",
+    "diagnosis": "The install_helm_chart schema defined in enhanced_tools.py is dead code: mcp_server.py never imports enhanced_tools and never registers or dispatches this tool.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py: add 'from enhanced_tools import get_enhanced_helm_tools' at top. In handle_list_tools, extend the tools list with get_enhanced_helm_tools(). In handle_call_tool, add dispatch branch: 'elif name == \"install_helm_chart\": result = await self.helm_manager.install_chart(**arguments)'. Ensure HelmManager.install_chart signature matches the schema's required fields (release_name, chart).",
+    "test_plan": "Call list_tools via MCP protocol; assert 'install_helm_chart' appears in the response. Call install_helm_chart with dry_run=True; assert helm_manager.install_chart is invoked and returns non-error output."
+  },
+  {
+    "component_id": "push-and-deploy.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "push-and-deploy.sh:1 — '#!/bin/bash'; push-and-deploy.sh:3 — 'set -e' (only -e, no -u or -o pipefail); push-and-deploy.sh:8 — hardcoded 'ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest'",
+    "diagnosis": "Script uses only 'set -e', missing '-u' (unbound variable protection) and '-o pipefail' (pipeline failure propagation), and hardcodes the registry path and :latest tag making it non-portable and non-idempotent across environments.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change line 3 to 'set -euo pipefail'. Add configurable variables at top: 'REGISTRY=${REGISTRY:-ghcr.io/hawaiideveloper}; IMAGE_TAG=${IMAGE_TAG:-latest}'. Replace hardcoded image refs on lines 8 and 11 with '${REGISTRY}/mcp-kubernetes-platform-engineer:${IMAGE_TAG}'. Add rollback step after failed kubectl wait: 'kubectl rollout undo deployment/kubernetes-mcp-server -n mcp-kubernetes'.",
+    "test_plan": "Run with REGISTRY and IMAGE_TAG overrides; verify correct docker tag/push commands. Simulate kubectl wait timeout; verify rollback command executes. Run with an unset variable to confirm -u triggers exit."
+  },
+  {
+    "component_id": "behavior:trading_ns_hardblock",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:60-61 — 'self.non_destructive_mode = os.getenv(\"ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS\", \"false\").lower() == \"true\"'; no mention of ibkr-live-trader, daxxon-trading, or brightflow-live anywhere in src/",
+    "diagnosis": "There is no namespace-level hardblock for trading namespaces: the only guard is a global non_destructive_mode flag, meaning auto-remediation could apply changes to live trading namespaces if that env var is not set.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: add PROTECTED_NAMESPACES = {'ibkr-live-trader', 'daxxon-trading', 'brightflow-live'} constant in config.py. Interface: add check_namespace_allowed(namespace: str, operation: str) -> None — raises ProtectedNamespaceError(f'{namespace} requires PR approval; auto-remediation blocked') if namespace in PROTECTED_NAMESPACES and operation in WRITE_OPERATIONS. Wiring: call check_namespace_allowed at the top of execute_remediation, kubectl_apply, helm_install, helm_upgrade handlers before any action. Edge cases: namespace=None or namespace='default' must still pass; wildcard -A (all-namespaces) kubectl calls must fail-safe to blocked.",
+    "test_plan": "Unit test: call execute_remediation with namespace='ibkr-live-trader'; assert ProtectedNamespaceError is raised. Call with namespace='staging'; assert no error. Integration test: deploy to cluster with non_destructive_mode=false; verify apply to ibkr-live-trader is blocked with audit-log entry."
+  },
+  {
+    "component_id": "functional_unit_test.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "functional_unit_test.md:57 — 'TOTAL: 390 COMPREHENSIVE TESTS'; functional_unit_test.md:67-85 — test_crashloopbackoff_pattern_recognition calls 'manager.analyze_issue_pattern(pattern)'; src/github_issues_manager.py — no method named analyze_issue_pattern exists; tests/unit/test_issue_patterns.py:52 — 'github_issues_manager.analyze_issue_pattern = AsyncMock(return_value=mock_result)' (method is mocked, not real)",
+    "diagnosis": "The document claims 390 tests covering a real analyze_issue_pattern API, but that method does not exist in GitHubIssuesManager; every unit test that calls it mocks the method onto the object at test time, making all pattern-recognition tests vacuous — they test the mock, not the code.",
+    "fix_class": "implement",
+    "proposed_fix": "Either: (a) implement analyze_issue_pattern(text: str) -> Dict in GitHubIssuesManager that does real keyword/regex classification and returns {issue_type, component, severity, solutions}, then remove the AsyncMock lines from tests; or (b) if the method is out of scope, update functional_unit_test.md to remove the 50 pattern-recognition test claims and correct the total count. Option (a) is preferred for production honesty.",
+    "test_plan": "After implementing: run tests/unit/test_issue_patterns.py without any mock; all 50 pattern tests must pass against the real method. Check coverage shows analyze_issue_pattern is exercised, not mocked."
+  },
+  {
+    "component_id": "enhanced:helm_upgrade",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:458 — Tool named 'upgrade_helm_chart' defined; grep across all src/*.py for 'upgrade_helm_chart' returns zero matches in mcp_server.py — confirmed unwired",
+    "diagnosis": "The upgrade_helm_chart schema defined in enhanced_tools.py is dead code: mcp_server.py never imports enhanced_tools and never registers or dispatches this tool.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same import as helm_install fix: include get_enhanced_helm_tools() in handle_list_tools. In handle_call_tool add: 'elif name == \"upgrade_helm_chart\": result = await self.helm_manager.upgrade_chart(release_name=arguments[\"release_name\"], chart=arguments[\"chart\"], namespace=arguments.get(\"namespace\"), values=arguments.get(\"values\"), install=arguments.get(\"install\", True), dry_run=arguments.get(\"dry_run\", False))'. Ensure HelmManager.upgrade_chart exists with matching signature.",
+    "test_plan": "Call list_tools; assert 'upgrade_helm_chart' is present. Call upgrade_helm_chart with dry_run=True for a release that does not exist and install=True; assert it falls through to install path. Verify non-destructive_mode blocks the call when set."
+  },
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:487 — 'self.logger.info(f\"Tool called: {name} with arguments: {arguments}\")'; no structured audit log, no who/what/when/evidence record, no persistent log store referenced anywhere in src/",
+    "diagnosis": "All write actions are logged only to the application logger at INFO level; there is no tamper-evident, persistent audit log recording actor identity, action taken, target resource, evidence used, and outcome.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: AuditEntry(timestamp: str, actor: str, tool_name: str, arguments: dict, target_namespace: str, outcome: Literal['success','failure','blocked'], evidence: str). Store: append-only JSONL file at /var/log/mcp-k8s/audit.log (or configurable path). Interface: AuditLogger.record(entry: AuditEntry) -> None — opens file in append mode, writes json.dumps(entry) + newline, flushes. Wiring: call AuditLogger.record() in handle_call_tool after every tool invocation, capturing the outcome and any exception message as evidence. Edge cases: file write failure must not mask the original tool error; use try/except around AuditLogger.record().",
+    "test_plan": "After a tool call, assert the audit JSONL file contains exactly one entry with correct tool_name and outcome. After a ProtectedNamespaceError, assert entry shows outcome='blocked'. Verify file is append-only across multiple calls."
+  },
+  {
+    "component_id": "mcp-tool:get_issue_statistics",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:605-606 — 'elif name == \"get_issue_statistics\": result = await self.github_issues_manager.get_issue_statistics()'; src/github_issues_manager.py:573-618 — method runs real SQLite queries against self.db_path; db is populated only if _fetch_recent_issues() succeeds against live GitHub API without a token (line 56: 'self.github_token = None')",
+    "diagnosis": "get_issue_statistics queries a real SQLite database, but the database is populated by unauthenticated GitHub API calls that will fail silently with HTTP 403 rate-limiting on startup, leaving the DB empty and all statistics returning zeros.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In get_issue_statistics, check if total_issues == 0 and return a structured warning: {'status': 'empty', 'reason': 'GitHub API fetch may have failed due to rate limiting; set GITHUB_TOKEN env var', 'total_issues': 0}. In initialize(), read GITHUB_TOKEN from os.environ and set self.github_token. Log a startup warning if token is absent. Add a min-retry-backoff in _fetch_issues_page for 403 responses instead of silent skip.",
+    "test_plan": "Set GITHUB_TOKEN=invalid; verify 403 path logs a warning and returns the structured empty-warning dict from get_issue_statistics. Set a valid token in integration test; verify total_issues > 0 after initialization."
+  }
+]

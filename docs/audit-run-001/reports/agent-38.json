@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/k8s_manager.py:179-210 — execute_remediation returns a canned result dict with no persistence; src/mcp_server.py:616-621 — errors are logged but there is no durable audit trail",
+    "diagnosis": "No audit log exists anywhere in the codebase; every remediation action is ephemeral and leaves no who/what/when/evidence record.",
+    "fix_class": "implement",
+    "proposed_fix": "Add an AuditLogger class (src/audit_logger.py) with append_entry(actor, tool_name, arguments, result, timestamp). Call it from handle_call_tool after every non-read tool invocation. Persist entries to a JSON Lines file (path from env AUDIT_LOG_PATH, default /var/log/mcp-k8s/audit.jsonl). Include ISO-8601 timestamp, tool name, redacted arguments (strip Secret values), and success/error outcome.",
+    "test_plan": "Call execute_remediation twice with different issue_type values, then assert two lines appended to the audit file with correct fields; call a read tool and assert audit file length unchanged."
+  },
+  {
+    "component_id": "behavior:analyzer_cronjob",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/k8s_manager.py — no CronJob-related method exists; src/diagnostics_manager.py — no missed-schedule or orphaned-job detection present (confirmed by grep returning zero hits for 'cronjob' or 'missed')",
+    "diagnosis": "CronJobAnalyzer is entirely unimplemented; missed schedules and orphaned jobs are never detected despite the remediator depending on this signal.",
+    "fix_class": "implement",
+    "proposed_fix": "Add CronJobAnalyzer.analyze(namespace=None) to diagnostics_manager.py: (1) list CronJobs via batch/v1 API, compare lastScheduleTime + schedule interval against now to flag missed windows; (2) list Jobs with ownerReference pointing to deleted CronJob UID to find orphans; (3) return structured list of {name, namespace, issue_type, last_schedule, expected_schedule}. Raise ValueError on API error, not silent return.",
+    "test_plan": "Unit-test with a mock k8s client returning a CronJob whose lastScheduleTime is 3x the schedule interval in the past; assert the finding list contains one missed-schedule entry. Test orphan detection by injecting a Job with a dangling ownerReference UID."
+  },
+  {
+    "component_id": "enhanced:kubectl_scale",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:162-191 — kubectl_scale Tool schema defined; grep of src/mcp_server.py for 'enhanced_tools', 'kubectl_scale' returns zero hits — file is never imported and tool is not registered",
+    "diagnosis": "kubectl_scale schema exists in enhanced_tools.py but mcp_server.py never imports or registers it, making the tool completely unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py _register_handlers, add the enhanced kubectl/helm tools from enhanced_tools.get_enhanced_kubectl_tools() to the ListToolsResult. In handle_call_tool add: elif name == 'kubectl_scale': result = await self.kubectl_manager.kubectl_scale(resource=arguments['resource'], name=arguments['name'], replicas=arguments['replicas'], namespace=arguments.get('namespace')). The backing method already exists at kubectl_manager.py:187.",
+    "test_plan": "Start server, call list_tools and assert 'kubectl_scale' appears; call kubectl_scale with a mock kubectl returning exit 0, assert result['success'] is True."
+  },
+  {
+    "component_id": "src/__init__.py",
+    "kind": "python",
+    "severity": "low",
+    "evidence": "src/__init__.py:1-7 — entire file is three metadata constants; no __all__, no package-level imports, no version guard",
+    "diagnosis": "Package init provides only cosmetic metadata; it is not actively harmful but gives no protection against accidental wildcard imports or version mismatch.",
+    "fix_class": "document",
+    "proposed_fix": "Add __all__ = [] to prevent wildcard import leakage, and a runtime Python version guard: import sys; assert sys.version_info >= (3, 10), 'Python 3.10+ required'. No other changes needed.",
+    "test_plan": "Import the package in a Python 3.9 environment and assert ImportError is raised; import in 3.10+ and assert no error."
+  },
+  {
+    "component_id": "src/k8s_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:22-23 — 'self.client = None; self.api_client = None'; line 29 — '# Kubernetes client initialization would go here / # For now, we\\'ll use a stub implementation'; lines 49-88 — get_cluster_info returns hardcoded dict with 'v1.29.0', nodes:3, pods:45 regardless of any real cluster",
+    "diagnosis": "KubernetesManager never initializes a real kubernetes-client and all three public methods return entirely hardcoded data, making every MCP tool response fabricated.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In initialize(), call kubernetes.config.load_incluster_config() with fallback to load_kube_config(); assign self.client = kubernetes.client.CoreV1Api() and self.apps_client = kubernetes.client.AppsV1Api(). Rewrite get_cluster_info to call self.client.list_node(), list_namespace(), list_pod_for_all_namespaces(). Rewrite execute_remediation to call the actual API (e.g., delete_namespaced_pod for pod_restart_loop). Remove all hardcoded literals.",
+    "test_plan": "Mock the kubernetes client in unit tests; assert get_cluster_info returns values derived from mock node list, not the literal '3'. Integration test against a real cluster (kind) verifies node count matches kubectl get nodes."
+  },
+  {
+    "component_id": "enhanced:kubectl_logs",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:130-160 — kubectl_logs Tool schema defined; grep of src/mcp_server.py for 'kubectl_logs' returns zero hits — never imported or registered",
+    "diagnosis": "kubectl_logs schema exists in enhanced_tools.py but is not wired into mcp_server.py, so MCP clients cannot call it even though the backing method kubectl_manager.kubectl_logs exists at kubectl_manager.py:170.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Mirror the kubectl_scale wire-up: include enhanced kubectl tools in ListToolsResult and add elif name == 'kubectl_logs': result = await self.kubectl_manager.kubectl_logs(pod_name=arguments['pod_name'], namespace=arguments.get('namespace'), container=arguments.get('container'), follow=arguments.get('follow', False), tail=arguments.get('tail')) to handle_call_tool.",
+    "test_plan": "Call list_tools and assert 'kubectl_logs' present; call kubectl_logs with a mocked kubectl returning sample log lines, assert response contains those lines."
+  },
+  {
+    "component_id": "behavior:finding_serialization",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "Entire src/ directory has no Finding dataclass or serialization module (grep for 'Finding', 'DPO', 'pydantic', 'dataclass' returns zero hits in src/); remediation results are untyped dicts",
+    "diagnosis": "No structured Finding type exists; issues, PRD entries, and DPO pairs cannot be reliably serialized, compared, or consumed downstream.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/finding.py with a dataclass Finding(id: str, component: str, severity: Literal['critical','high','medium','low','info'], title: str, evidence: str, diagnosis: str, fix_class: str, proposed_fix: str, test_plan: str, created_at: datetime). Add to_dict() / from_dict() and to_jsonl_line() methods. All managers should return List[Finding] instead of untyped dicts. Add a DPOPair(prompt: str, chosen: str, rejected: str) dataclass alongside.",
+    "test_plan": "Instantiate a Finding with all fields, call to_dict() and assert all keys present; call from_dict(to_dict(f)) and assert equality. Verify JSON serialization round-trips without loss."
+  },
+  {
+    "component_id": "VSCODE_K8S_INTEGRATION.md",
+    "kind": "doc",
+    "severity": "medium",
+    "evidence": "VSCODE_K8S_INTEGRATION.md:55 — 'curl http://172.100.10.107:30001/health' (hardcoded private IP); line 244 — '{\"status\":\"healthy\",...}' (claimed health response); line 102 — '@kubernetes-platform-engineer diagnose my cluster health' (implied real cluster data); src/k8s_manager.py:49-88 — all cluster data is hardcoded stubs",
+    "diagnosis": "VSCODE_K8S_INTEGRATION.md claims a working production-grade MCP server that returns real cluster insights and a live health endpoint, but the underlying implementation is entirely stubbed.",
+    "fix_class": "document",
+    "proposed_fix": "Add a prominently placed WARNING section at the top of the doc: 'IMPORTANT: The current server returns stub/hardcoded data. Real cluster integration is under development. Commands shown will succeed technically but cluster values are not live.' Remove or annotate the hardcoded IP 172.100.10.107 as a placeholder. Update 'Success Indicators' item 4 to reflect stub status.",
+    "test_plan": "Review pass: confirm the WARNING block is present and no claim of live cluster data remains unqualified."
+  },
+  {
+    "component_id": "logs.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "logs.sh:1-3 — no 'set -euo pipefail'; no shebang validation; hardcoded container name 'k8s-mcp-server' with no fallback if container is absent; no error handling if docker is not installed",
+    "diagnosis": "logs.sh is a one-liner with no error handling, no pipefail guard, and a hardcoded container name that will silently fail with a confusing docker error if the container does not exist.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace file content with: #!/bin/bash\\nset -euo pipefail\\nCONTAINER=${MCP_CONTAINER:-k8s-mcp-server}\\nif ! docker ps -q --filter \"name=${CONTAINER}\" | grep -q .; then\\n  echo \"ERROR: container ${CONTAINER} not running\" >&2; exit 1\\nfi\\ndocker logs \"${CONTAINER}\" -f",
+    "test_plan": "Run with a non-existent container name and verify exit code 1 with a clear error message; run with container name set via env and verify logs stream correctly."
+  },
+  {
+    "component_id": "behavior:iteration_state_machine",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "Entire src/ directory has no state machine, no review/PRD/split/implement/verify loop, no stop-condition logic (grep for 'state_machine', 'iteration', 'PRD', 'stop_condition' returns zero hits)",
+    "diagnosis": "The review->PRD->split->implement->verify iteration loop does not exist anywhere in the codebase; the auto-remediator has no way to manage multi-step repair cycles or stop safely.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/iteration_engine.py with IterationStateMachine. States: IDLE, REVIEWING, PRD_GENERATION, TASK_SPLIT, IMPLEMENTING, VERIFYING, STOPPED. Transitions: REVIEWING->PRD_GENERATION (findings >0), PRD_GENERATION->TASK_SPLIT (PRD approved), TASK_SPLIT->IMPLEMENTING (tasks assigned), IMPLEMENTING->VERIFYING (all tasks done), VERIFYING->IDLE (all tests pass) or VERIFYING->IMPLEMENTING (regressions found, max_retries not exceeded). Stop conditions: max_iterations exceeded, no findings remain, operator STOP signal. Persist state to state.json for crash recovery.",
+    "test_plan": "Unit-test each transition with mock finding lists; assert IMPLEMENTING->VERIFYING only fires when all tasks in DONE state; assert STOPPED is reached when max_iterations=2 and iteration counter hits 2."
+  }
+]

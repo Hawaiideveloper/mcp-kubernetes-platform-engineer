@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/config.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/config.py:60 — \"PodSecurityPolicy\" in default admission_controllers list; also config is never validated or used to actually initialise a kubernetes client anywhere in the file",
+    "diagnosis": "SecurityConfig defaults include PodSecurityPolicy (removed from Kubernetes in 1.25), and KubernetesConfig fields like kubeconfig_path and context are read from env vars but are never wired to an actual kubernetes-client initialisation call — the class is a pure data structure with no enforcement.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove 'PodSecurityPolicy' from the default admission_controllers list (replace with 'NodeRestriction'). Add a validate() method to KubernetesConfig that raises ValueError for nonsensical inputs (negative timeout, non-existent kubeconfig path). Wire kubeconfig_path and context into a kubernetes.config.load_kube_config() call inside KubernetesManager.initialize() rather than leaving them as dead env-var reads.",
+    "test_plan": "Unit test validate() raises on negative timeout and missing kubeconfig. Integration test that KubernetesManager.initialize() uses the kubeconfig_path and context values from config rather than ignoring them."
+  },
+  {
+    "component_id": "enhanced:kubectl_apply",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:86-104 — kubectl_apply Tool schema defined; grep across src/mcp_server.py returns zero hits for 'enhanced_tools', 'kubectl_apply', or 'from enhanced'",
+    "diagnosis": "The kubectl_apply schema is declared in enhanced_tools.py but mcp_server.py never imports enhanced_tools and has no handler for the kubectl_apply tool name, so the tool is dead and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: (1) add 'from enhanced_tools import get_enhanced_kubectl_tools'; (2) extend handle_list_tools() to include get_enhanced_kubectl_tools(); (3) add an elif branch in handle_call_tool() for 'kubectl_apply' that calls self.kubectl_manager.apply_resource(resource_yaml=arguments['resource_yaml'], namespace=arguments.get('namespace')). Implement kubectl_manager.apply_resource() using the kubernetes Python client's DynamicClient.apply().",
+    "test_plan": "Call the 'kubectl_apply' tool via the MCP protocol with a minimal valid Deployment YAML against a test cluster; assert the resource is created and the response contains a success status."
+  },
+  {
+    "component_id": "behavior:done_definition",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No existing file — design task",
+    "diagnosis": "There is no codified 'done' definition; the auto-remediator needs a machine-checkable contract so it does not declare victory on partial fixes.",
+    "fix_class": "design",
+    "proposed_fix": "Implement a DoneChecker dataclass with fields: pytest_exit_code: int (must be 0), image_build_digest: Optional[str] (non-None if a build was triggered), event_warnings: List[str] (must be empty), failed_pods: List[str] (must be empty). Expose async def is_done(ctx: RemediationContext) -> DoneResult that populates each field by calling: subprocess.run(['pytest', ...]) for exit code, the Docker/OCI registry API for image digest, kubernetes CoreV1Api.list_namespaced_event(field_selector='type=Warning') for warnings, and CoreV1Api.list_namespaced_pod(field_selector='status.phase=Failed') for failed pods. Return DoneResult(passed=all checks green, details=dict).",
+    "test_plan": "Inject a synthetic failing pod and assert is_done() returns passed=False with failed_pods populated. Resolve the synthetic failure and assert is_done() returns passed=True."
+  },
+  {
+    "component_id": "behavior:gitops_pr_generation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No existing file — design task",
+    "diagnosis": "There is no GitOps PR generation mechanism; the auto-remediator needs a standardised PR format so reviewers can trace each change back to a finding and sandbox log.",
+    "fix_class": "design",
+    "proposed_fix": "Define PRBody(finding_id: str, evidence: str, sandbox_log_url: str, diff: str). Title format: 'fix(<finding_id>): <imperative-verb> <resource> [auto]' — max 72 chars. Labels: ['auto-remediation', 'finding:<finding_id>', 'severity:<severity>']. Implementation: create a branch named 'auto/<finding_id>/<timestamp>', commit the patch, call gh pr create --title ... --body ... --label ...; attach the vcluster sandbox log as a PR comment with gh pr comment. Edge cases: skip PR if diff is empty; set draft=true if DoneChecker.is_done() returned any warnings.",
+    "test_plan": "Mock gh CLI calls; assert title matches regex, body contains finding_id and sandbox_log_url, and all three labels are present. Assert draft=true when DoneChecker warns."
+  },
+  {
+    "component_id": "mcp-tool:analyze_logs",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:99,107-128 — 'total_entries': 1247, 'filtered_entries': 156 ... 'error_count': 23 ... 'message': 'Failed to connect to database'  (all hardcoded literals); no kubernetes client import or API call anywhere in the file",
+    "diagnosis": "analyze_logs returns entirely fabricated log data including hardcoded entry counts, timestamps, and error messages; it never calls the Kubernetes API (e.g. CoreV1Api.read_namespaced_pod_log) or any real log aggregation backend.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace _analyze_logs stub with: (1) call CoreV1Api.read_namespaced_pod_log(name=target, namespace=namespace, since_seconds=parse_time_range(time_range), timestamps=True); (2) filter lines by log_level and optional search_pattern using regex; (3) build the response dict from actual log lines. For 'cluster' target, list pods and aggregate across them. Remove all hardcoded integer and string literals.",
+    "test_plan": "Mock CoreV1Api.read_namespaced_pod_log to return a synthetic log string with known ERROR/WARN/INFO lines; call analyze_logs and assert counts and messages match the synthetic input, not any hardcoded value."
+  },
+  {
+    "component_id": "behavior:vcluster_sandbox",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No existing file — design task",
+    "diagnosis": "There is no vcluster sandbox lifecycle implementation; the auto-remediator needs ephemeral cluster isolation to safely test candidate fixes before promoting them.",
+    "fix_class": "design",
+    "proposed_fix": "Implement async context manager VClusterSandbox(name: str, host_kubeconfig: Path). __aenter__: run 'vcluster create <name> --namespace vcluster-<name> --connect=false', poll until vcluster status == Running (timeout 90s), call 'vcluster connect <name>' to write a temp kubeconfig, return kubeconfig path. __aexit__: run 'vcluster delete <name> --namespace vcluster-<name>' regardless of success/failure. Smoke-test step: apply candidate YAML via kubectl apply -f, wait for rollout with 30s timeout, capture 'kubectl get events' output. Target lifecycle under 120s end-to-end. Edge case: if vcluster binary absent, raise MissingSandboxDependencyError with install instructions.",
+    "test_plan": "Integration test: spin up a real vcluster, apply a trivial nginx deployment, assert rollout succeeds, assert vcluster is deleted in __aexit__. Unit test: mock subprocess; assert delete is called even when apply raises."
+  },
+  {
+    "component_id": "k8s/ingress.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/ingress.yaml:11 — 'ssl-redirect: \"false\"'; lines 14-19 — TLS block commented out with no enforcement; line 21 — 'host: mcp-server.local  # Change to your domain'",
+    "diagnosis": "The ingress disables TLS redirect and leaves TLS entirely commented out, meaning the MCP server is exposed over plain HTTP with a placeholder hostname, which is insecure for any non-local deployment; there are also no rate-limiting, authentication, or allowlist annotations.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Set ssl-redirect: 'true'. Uncomment and fill in the TLS block with a real secret name placeholder and the cert-manager cluster-issuer annotation. Add annotation 'nginx.ingress.kubernetes.io/whitelist-source-range' defaulting to cluster-internal CIDR. Replace 'mcp-server.local' with a documented required variable (e.g. '${MCP_HOSTNAME}'). Add 'nginx.ingress.kubernetes.io/auth-type: basic' or an OAuth2-proxy annotation to prevent unauthenticated access.",
+    "test_plan": "Deploy the manifest in a test cluster with cert-manager; assert the TLS secret is created and HTTPS responds with a valid cert. Assert HTTP requests are redirected to HTTPS. Assert requests from outside the allowlist CIDR receive 403."
+  },
+  {
+    "component_id": "tests/production/test_network_service_issues.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_network_service_issues.py:82-85 — 'k8s_manager.resolve_service_no_endpoints = AsyncMock(return_value=mock_resolution) ... resolution = await k8s_manager.resolve_service_no_endpoints(service_context)'; fixtures 'network_manager', 'service_mesh_manager', 'storage_manager' used at lines 96, 397, 472 but never defined in tests/conftest.py",
+    "diagnosis": "Every test in this file installs its own AsyncMock on the manager and then immediately calls that mock, so the tests assert nothing about real implementation behavior; additionally three fixture names (network_manager, service_mesh_manager, storage_manager) are undefined, causing pytest collection errors that prevent the tests from running at all.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Define the three missing fixtures in conftest.py (network_manager wrapping DiagnosticsManager, service_mesh_manager and storage_manager as new manager classes or mocks). Rewrite each test to call the real manager method against a mocked kubernetes client — not to patch the method under test itself. For example, test_service_endpoint_not_found_resolution should mock CoreV1Api.list_namespaced_endpoints to return zero endpoints and assert the real diagnostics path returns the expected error structure.",
+    "test_plan": "Run 'pytest tests/production/test_network_service_issues.py --collect-only' and assert zero collection errors. Run the full file and assert all tests pass against mocked k8s API responses rather than self-fulfilling mocks."
+  },
+  {
+    "component_id": "behavior:event_stream_watcher",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No existing file — design task",
+    "diagnosis": "There is no event stream watcher; the auto-remediator needs a continuous watch on the Kubernetes event stream to detect issues in real time and feed them into the remediation queue.",
+    "fix_class": "design",
+    "proposed_fix": "Implement async def watch_events(queue: asyncio.Queue, namespace: str = '') using kubernetes_asyncio.watch.Watch().stream(CoreV1Api.list_event_for_all_namespaces). For each event, classify via EventClassifier.classify(event) -> Optional[RemediationRequest] using a lookup table keyed on (reason, type) pairs (e.g. ('BackOff', 'Warning') -> CrashLoopBackOff). Push non-None results to queue. Handle API disconnect by catching ApiException and reconnecting with exponential backoff (max 60s). Expose a stop() method that sets an asyncio.Event to exit the watch loop cleanly. Data model: RemediationRequest(finding_id, resource_ref, event_raw, classified_at).",
+    "test_plan": "Feed a synthetic Warning/BackOff event through a mock watch stream; assert the queue receives a RemediationRequest with the correct finding_id. Simulate an ApiException mid-stream and assert reconnect is attempted. Assert stop() causes the watcher to exit within 2s."
+  },
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:1-6 — 'Successfully implemented a comprehensive production-ready functional unit test suite... covering ALL 45,720+ closed Kubernetes GitHub issues'; line 99 — 'Kubernetes API: Full integration with Kubernetes client libraries'; line 139 — '✅ Dependencies installed and configured'",
+    "diagnosis": "The document makes multiple false production-readiness claims: the test suite does not call the Kubernetes API (all manager methods return hardcoded stubs), three named test fixtures are undefined causing collection failures, and the claim of covering 45,720+ issues is unverifiable since the tests mock their own return values.",
+    "fix_class": "document",
+    "proposed_fix": "Replace the 'Objective Achieved' / 'COMPLETE' framing with an accurate status section. Explicitly list known gaps: (1) all manager methods return stub data, no real API calls; (2) network_manager, service_mesh_manager, storage_manager fixtures undefined; (3) issue coverage claim is aspirational, not measured. Add a 'Remaining Work' section itemising these gaps with links to the corresponding findings. Remove the checkmark emoji lines that assert completion.",
+    "test_plan": "After fixing the underlying code, re-run pytest --tb=short and assert zero collection errors and zero stub-only tests remain; update the doc to reflect the actual pass/fail counts from the CI run."
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "agent_id": 48,
+  "components": [
+    {
+      "id": "mcp-tool:get_issue_statistics",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:analyzer_hpa",
+      "kind": "behavior",
+      "focus": "HPAAnalyzer: no metrics, capped at max, never scaling"
+    },
+    {
+      "id": "mcp-tool:find_kubectl_commands",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "functional_unit_test.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "README.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "mcp-tool:get_troubleshooting_guide",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "status.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "enhanced:kubectl_exec",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:find_similar_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "start.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    }
+  ]
+}

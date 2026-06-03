@@ -1,0 +1,55 @@
+{
+  "agent_id": 15,
+  "components": [
+    {
+      "id": "behavior:analyzer_base",
+      "kind": "behavior",
+      "focus": "BaseAnalyzer abstract class: input=k8s state, output=Finding"
+    },
+    {
+      "id": "mcp-tool:get_issue_statistics",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "enhanced:kubectl_logs",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/mcp_server.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "src/github_issues_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "CHANGELOG.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:dpo_pair_extraction",
+      "kind": "behavior",
+      "focus": "given (rejected_actions, chosen_action, evidence), emit DPO issue body"
+    },
+    {
+      "id": "mcp-tool:search_documentation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "mcp-tool:troubleshoot_pod_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

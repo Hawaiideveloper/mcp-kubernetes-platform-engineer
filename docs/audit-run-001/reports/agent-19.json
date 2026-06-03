@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:worklist_sqlite",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/github_issues_manager.py:75-143 — _setup_database creates tables with UNIQUE(repo, issue_number) but no worklist/claim table exists anywhere in the codebase",
+    "diagnosis": "No agent-claim worklist table or atomic claim/release mechanism exists; concurrent agents reading the same SQLite DB will collide on work units with no coordination primitive.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a `worklist` table: CREATE TABLE worklist (item_id TEXT PRIMARY KEY, claimed_by TEXT, claimed_at TEXT, released_at TEXT, status TEXT). Use SQLite's BEGIN EXCLUSIVE transaction around INSERT OR IGNORE + SELECT to implement atomic_claim(item_id, agent_id) -> bool. Add release(item_id) and reap_stale(timeout_s) helpers. Expose via WorklistManager class.",
+    "test_plan": "Spin 10 concurrent asyncio tasks each calling atomic_claim on the same item_id; assert exactly 1 returns True. Test reap_stale by inserting a row with claimed_at 10 minutes ago and verifying it is released."
+  },
+  {
+    "component_id": "enhanced:kubectl_exec",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py — no Tool named 'kubectl_exec' appears anywhere in the file; grep of src/ for 'enhanced_tools' returns zero results in mcp_server.py",
+    "diagnosis": "The schema for kubectl_exec does not exist in enhanced_tools.py and the module is never imported by mcp_server.py, so there is no kubectl exec capability exposed to MCP clients.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Add Tool('kubectl_exec', ...) to get_enhanced_kubectl_tools() with required fields pod_name, command (list), namespace, container (optional). Add 'from enhanced_tools import get_enhanced_kubectl_tools' to mcp_server.py and extend handle_list_tools to include these tools. Add dispatch case in handle_call_tool routing to kubectl_manager.exec_command().",
+    "test_plan": "After wiring, call the tool via MCP with a real pod name and verify the kubectl_manager.exec_command method is invoked; confirm the response contains stdout/stderr fields, not a 'Unknown tool' error."
+  },
+  {
+    "component_id": "mcp-tool:search_documentation",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:560-563 — delegates to documentation_manager.search_documentation(); src/documentation_manager.py:328-373 — searches self.documentation_db which is populated at init by live HTTP crawls to kubernetes.io",
+    "diagnosis": "The tool calls real HTTP scraping code, but on startup failure (network unavailable, rate-limit, or parsing error) documentation_db stays empty and the method silently returns [] with no indication of the failure source.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In search_documentation, if len(self.documentation_db) == 0, return a structured error dict {'error': 'documentation_db empty', 'cause': 'init crawl may have failed'} instead of []. In _build_documentation_index, capture and surface aggregate crawl errors. Add a last_indexed_at timestamp and expose it so callers can tell if data is stale.",
+    "test_plan": "Mock aiohttp to raise ConnectionError during init; call search_documentation and assert the response contains an 'error' key. Then provide a mock successful crawl and verify results are returned."
+  },
+  {
+    "component_id": "enhanced:helm_uninstall",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:504 — Tool named 'uninstall_helm_chart' exists in get_enhanced_helm_tools(); grep of src/mcp_server.py for 'enhanced_tools' returns zero results — module is never imported",
+    "diagnosis": "The uninstall_helm_chart schema exists in enhanced_tools.py but mcp_server.py never imports that module, so the tool is invisible to MCP clients and calls to it return 'Unknown tool'.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add: from enhanced_tools import get_enhanced_helm_tools. Extend handle_list_tools to include get_enhanced_helm_tools() in the returned list. Add elif name == 'uninstall_helm_chart': dispatch to self.helm_manager.uninstall(...) in handle_call_tool.",
+    "test_plan": "After wiring, list tools via MCP and assert 'uninstall_helm_chart' appears. Call the tool with a dummy release_name and verify helm_manager.uninstall is invoked, not the fallback 'Unknown tool' branch."
+  },
+  {
+    "component_id": "k8s/service.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/service.yaml:37-47 — NodePort service with hardcoded nodePort: 30001 exposes the MCP stdio server externally; no NetworkPolicy restricts which pods may reach it",
+    "diagnosis": "The NodePort service creates a cluster-wide external entry point on port 30001 with no NetworkPolicy restricting access, violating least-privilege network segmentation; the service also lacks an appProtocol field on its port definitions.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the NodePort service entirely unless external access is documented as a requirement; prefer an Ingress or internal ClusterIP. If NodePort is retained, add a NetworkPolicy: ingress from specific namespace/podSelector. Add appProtocol: http to port specs. Document the reason for nodePort: 30001 being hardcoded.",
+    "test_plan": "Apply the manifest to a test cluster with a NetworkPolicy scanner (e.g., kube-score or polaris) and confirm no 'unrestricted NodePort' finding. Verify no external probe can reach port 30001 from outside the allowed pod selector."
+  },
+  {
+    "component_id": "mcp-tool:search_github_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:583-591 — delegates to github_issues_manager.search_issues(); src/github_issues_manager.py:488 — SQL uses unparameterized f-string: search_terms = \" OR \".join([f\"title LIKE '%{term}%' OR body LIKE '%{term}%'\" for term in key_terms])",
+    "diagnosis": "find_similar_issues (called via the related tool) builds a SQL WHERE clause by string-interpolating user-supplied terms directly into the query, which is a SQL injection vulnerability if key_terms are not sanitized.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the f-string SQL construction in find_similar_issues (line 488) with parameterized queries: build a WHERE clause with ? placeholders and pass terms as a params tuple: WHERE (title LIKE ? OR body LIKE ?) for each term. Bound the number of terms to the existing 10-item cap.",
+    "test_plan": "Unit test find_similar_issues with error_message=\"'; DROP TABLE github_issues; --\" and verify the query executes without error and the table still contains data afterwards."
+  },
+  {
+    "component_id": "enhanced:helm_install",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:408 — Tool named 'install_helm_chart' in get_enhanced_helm_tools(); src/mcp_server.py — zero occurrences of 'enhanced_tools' or 'get_enhanced_helm_tools'",
+    "diagnosis": "install_helm_chart schema is defined but the module is never imported by mcp_server.py, making the tool dead — MCP clients calling it will receive 'Unknown tool: install_helm_chart'.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same import fix as helm_uninstall: add from enhanced_tools import get_enhanced_helm_tools in mcp_server.py, extend handle_list_tools to merge in get_enhanced_helm_tools(), and add elif name == 'install_helm_chart': self.helm_manager.install(...) dispatch in handle_call_tool.",
+    "test_plan": "After wiring, issue a list_tools MCP request and assert 'install_helm_chart' is present. Call it with dry_run=True pointing at a known chart and confirm the helm_manager install method is invoked."
+  },
+  {
+    "component_id": "update.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "update.sh:1-6 — no 'set -euo pipefail'; git pull failure is swallowed via '|| echo'; no validation that start.sh succeeded before declaring success",
+    "diagnosis": "update.sh lacks error-exit guards (set -euo pipefail) so a failed git pull or start failure is silently ignored and the script exits 0, giving operators false confidence the update succeeded.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add set -euo pipefail as line 2. Replace the swallowed git pull with a proper check: git pull origin main || { echo 'ERROR: git pull failed'; exit 1; }. Capture start.sh exit code and propagate it. Remove emoji (cosmetic). Add a final health-check call to confirm the server started.",
+    "test_plan": "Run update.sh in a directory with no git repo (simulating pull failure) and confirm the script exits non-zero. Run it in a valid repo and confirm it exits 0 only when start.sh also exits 0."
+  },
+  {
+    "component_id": "behavior:analyzer_hpa",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/diagnostics_manager.py:46-53 — diagnose_cluster_health returns a static results dict with no call to kubernetes client; no HPA-specific analysis method exists anywhere in the codebase",
+    "diagnosis": "HPAAnalyzer does not exist; the diagnostics_manager returns hardcoded stub data and never queries the Kubernetes HPA API, so capped/maxed/stuck HPAs are never detected.",
+    "fix_class": "implement",
+    "proposed_fix": "Add HPAAnalyzer class with analyze(namespace=None) method that calls k8s_client.autoscaling_v2.list_horizontal_pod_autoscaler_for_all_namespaces(). For each HPA check: (1) currentReplicas == maxReplicas, (2) AbleToScale condition False, (3) ScalingActive condition False, (4) missing metrics (currentMetrics empty). Return findings list with hpa_name, namespace, condition, and remediation hint.",
+    "test_plan": "Mock the k8s API to return an HPA with currentReplicas==maxReplicas and ScalingActive=False; assert analyze() returns findings for both conditions. Mock an HPA with no issues and assert analyze() returns an empty findings list."
+  },
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:185-210 — check_network_connectivity returns hardcoded static dict including 'latency_ms': 2.3, 'resolved_ip': '10.96.0.1', 'status': 'success' for ping/dns; no subprocess or k8s exec call is made",
+    "diagnosis": "check_network_connectivity always returns fabricated success data regardless of actual network state, making it useless for diagnosing real connectivity failures and actively misleading to operators.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub with calls to kubectl_manager.exec_command(source_pod, namespace, ['ping', '-c1', target]) for ping tests, and exec_command(['nslookup', target]) for dns tests. Parse actual stdout for latency and resolution. For http tests, exec curl -o /dev/null -w '%{http_code}'. Return real results with errors populated on failure.",
+    "test_plan": "Integration test against a live cluster: call check_network_connectivity with a known-unreachable target and verify 'status' is 'failed' in the response. Call with a reachable service and verify numeric latency_ms is present and non-zero."
+  }
+]

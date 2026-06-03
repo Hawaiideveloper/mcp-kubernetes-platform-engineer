@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:troubleshoot_pod_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:110-148 — results.update({'status': 'CrashLoopBackOff', 'restart_count': 5, 'issues': ['Pod is in CrashLoopBackOff state', ...]})",
+    "diagnosis": "troubleshoot_pod_issues always returns the same hardcoded CrashLoopBackOff payload regardless of the requested pod_name or namespace — no kubernetes client is called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes client into DiagnosticsManager; in troubleshoot_pod_issues call core_v1.read_namespaced_pod(pod_name, namespace) to fetch real phase/containerStatuses, call core_v1.read_namespaced_pod_log() for logs, and core_v1.list_namespaced_event() filtered by involvedObject.name for events. Remove the hardcoded update block (lines 111-148).",
+    "test_plan": "Unit-test with a mocked kubernetes client that returns a Running pod and assert result['status'] == 'Running'. Integration-test against a local kind cluster with a known CrashLoopBackOff pod and verify the returned restart_count matches `kubectl get pod` output."
+  },
+  {
+    "component_id": "behavior:vcluster_sandbox",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No vcluster-related file or import found anywhere in the repo (grep -r vcluster returns nothing).",
+    "diagnosis": "There is zero implementation of a vcluster sandbox lifecycle — no create, apply, smoke-test, or teardown logic exists anywhere in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Add src/vcluster_sandbox.py with: async def create_sandbox(name: str) -> str (runs 'vcluster create {name} --connect'); async def apply_manifest(name: str, yaml: str) (pipes yaml to kubectl apply inside the vcluster context); async def smoke_test(name: str) -> bool (checks all pods Running); async def destroy_sandbox(name: str) (runs 'vcluster delete {name}'). Surface via a new MCP tool 'vcluster_sandbox' that wraps these four phases with a try/finally guaranteeing destroy.",
+    "test_plan": "Mock subprocess.run calls and assert the four lifecycle functions are called in order with correct arguments. Integration test: create a sandbox, apply a simple nginx deployment, verify smoke_test returns True, then assert sandbox is gone after destroy."
+  },
+  {
+    "component_id": "behavior:analyzer_pod",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/diagnostics_manager.py:110-125 — hardcoded issues list does not branch on actual pod phase or container state; no OOMKilled, probe-failure, or ImagePullBackOff branching logic present.",
+    "diagnosis": "PodAnalyzer behavior is entirely absent — the method returns a single fixed CrashLoopBackOff scenario instead of inspecting real containerStatuses.state fields to classify ImagePullBackOff, CrashLoopBackOff, OOMKilled, and probe failures.",
+    "fix_class": "implement",
+    "proposed_fix": "After fetching real pod object, inspect pod.status.container_statuses[*].state: if state.waiting.reason in ('ImagePullBackOff','ErrImagePull') emit image issue; if state.waiting.reason == 'CrashLoopBackOff' check last_state.terminated.exit_code and emit OOM if 137 or app crash if other; check pod.status.conditions for probe failures. Map each branch to a structured issue dict with 'reason', 'exit_code', and 'suggestion' keys.",
+    "test_plan": "Parameterized unit tests covering each state (ImagePullBackOff, CrashLoopBackOff exit 1, CrashLoopBackOff exit 137, probe failure) with mock pod objects; assert the returned issues list contains the expected reason string for each."
+  },
+  {
+    "component_id": "src/diagnostics_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:13 — class DiagnosticsManager has no k8s_client attribute; all _check_* private methods (lines 217-275) return static dicts; no kubernetes import present at top of file.",
+    "diagnosis": "DiagnosticsManager declares no kubernetes client dependency and every private check method returns hardcoded fixture data, making all diagnostic output fabricated.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'from kubernetes import client as k8s_client' and accept a CoreV1Api instance in __init__. Replace _check_nodes (line 217) with a real list_node() call, _check_pods (line 230) with list_pod_for_all_namespaces(), _check_services (line 244) with list_namespaced_service(), _check_networking (line 255) with list_namespaced_config_map('kube-system'), _check_storage (line 266) with list_persistent_volume(). Propagate async exceptions instead of silently returning {\"error\": str(e)}.",
+    "test_plan": "Mock each kubernetes API call and verify the corresponding _check_* method returns data derived from the mock response, not static strings. Confirm that a k8s ApiException from any _check_* method propagates up through diagnose_cluster_health rather than being swallowed."
+  },
+  {
+    "component_id": "tests/conftest.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/conftest.py:93-99 — k8s_manager fixture sets manager.client = Mock(); manager.v1 = Mock() after construction, and diagnostics_manager fixture (line 101-106) sets manager.k8s_client = Mock() — but DiagnosticsManager has no k8s_client attribute, so mock is attached to a non-existent slot.",
+    "diagnosis": "Test fixtures mock non-existent attributes on managers (k8s_client on DiagnosticsManager, prometheus_client on MonitoringManager) and the mcp_server fixture replaces all managers with bare Mocks, meaning tests never exercise real dispatch paths.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Align fixture mocks with actual manager __init__ signatures once real clients are added. Replace bare Mock() replacements in the mcp_server fixture with spec=DiagnosticsManager etc. to catch interface mismatches. Add at least one integration-level fixture that uses MockKubernetesClient (defined at line 398 but never wired to any manager fixture).",
+    "test_plan": "Run pytest and assert zero AttributeError warnings from mock attribute assignment; add a test that calls diagnostics_manager.troubleshoot_pod_issues('real-pod', 'default') through the mcp_server fixture and verify the mock's troubleshoot_pod_issues was called with correct arguments."
+  },
+  {
+    "component_id": "enhanced:kubectl_describe",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:44-66 — kubectl_describe Tool defined; grep of src/mcp_server.py for 'enhanced_tools' returns no output (confirmed by grep).",
+    "diagnosis": "kubectl_describe (and all 30+ tools in enhanced_tools.py) are defined but mcp_server.py never imports enhanced_tools, so none of these tools are registered or callable by MCP clients.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add 'from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools' and extend the tools list in handle_list_tools() with both lists. Add dispatch branches in handle_call_tool() for 'kubectl_describe' calling self.kubectl_manager.describe(resource, name, namespace) and likewise for each other enhanced tool. Alternatively, if kubectl_manager/helm_manager are not yet implemented, mark the tools as stub and gate on a feature flag.",
+    "test_plan": "After wiring, call handle_list_tools and assert 'kubectl_describe' appears in the returned tool names. Call handle_call_tool('kubectl_describe', {'resource':'pod','name':'foo'}) with a mocked kubectl_manager.describe and assert it is invoked."
+  },
+  {
+    "component_id": "mcp-port-forward.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "mcp-port-forward.sh:1-7 — 'set -euo pipefail' is present but line 56: 'kubectl port-forward ... &' forks a background process whose PID is not captured; lines 99-107: test_connectivity calls curl twice (line 100 for exit code, line 101 for response body), doubling the network call.",
+    "diagnosis": "The background kubectl port-forward PID is not saved to a pidfile so stop_port_forward relies on fragile pgrep pattern matching, and test_connectivity makes redundant duplicate curl requests.",
+    "fix_class": "rewrite",
+    "proposed_fix": "After the kubectl port-forward & on line 56, add 'PF_PID=$! ; echo $PF_PID > /tmp/mcp-pf.pid'. In stop_port_forward, read the pidfile with 'kill $(cat /tmp/mcp-pf.pid)' and remove it. In test_connectivity, capture both status and body in one curl invocation: 'RESPONSE=$(curl -sf http://localhost:$LOCAL_PORT/health)' and check $? for success.",
+    "test_plan": "Run 'bash -n mcp-port-forward.sh' to verify syntax. Script-level test: mock kubectl with a stub that writes a PID, call start, verify pidfile exists, call stop, verify process is gone and pidfile removed."
+  },
+  {
+    "component_id": "k8s/deployment.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest; line 90: readOnlyRootFilesystem: false; line 49-51: KUBECONFIG env value is set to the service account directory path, not a valid kubeconfig file.",
+    "diagnosis": "Three combined issues: (1) image is pinned to mutable 'latest' tag making deploys non-reproducible; (2) readOnlyRootFilesystem is false, widening the attack surface; (3) KUBECONFIG is set to the service account directory, not a real kubeconfig, so in-cluster auth will fail.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Pin image to a specific digest or semver tag (e.g. ':1.0.0@sha256:...'). Set readOnlyRootFilesystem: true and add an emptyDir volume for any writable paths needed at runtime. Remove the KUBECONFIG env var entirely (kubernetes python client auto-detects in-cluster config via KUBERNETES_SERVICE_HOST/PORT which are already set).",
+    "test_plan": "Lint with 'kubectl apply --dry-run=client -f k8s/deployment.yaml' after changes. Run a Polaris or kube-score scan and assert no 'latest tag' or 'readOnlyRootFilesystem=false' findings. Deploy to a test namespace and verify pod reaches Running state with no kubeconfig errors in logs."
+  },
+  {
+    "component_id": "k8s/namespace.yaml",
+    "kind": "manifest",
+    "severity": "low",
+    "evidence": "k8s/namespace.yaml:1-9 — only metadata labels are present; no ResourceQuota, LimitRange, or NetworkPolicy resources are included or referenced.",
+    "diagnosis": "The namespace manifest defines no resource quotas, limit ranges, or network policies, leaving the MCP server namespace open to unbounded resource consumption and unrestricted network egress.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a ResourceQuota object limiting total CPU/memory for the namespace (e.g. requests.cpu: 2, limits.cpu: 4, requests.memory: 2Gi, limits.memory: 4Gi). Add a default LimitRange so containers without explicit limits get sensible defaults. Add a default-deny NetworkPolicy allowing only ingress on port 3001 from the cluster's ingress namespace.",
+    "test_plan": "Apply the updated namespace.yaml and verify 'kubectl describe quota -n mcp-kubernetes' shows the expected limits. Attempt to create a pod exceeding the quota and confirm it is rejected. Verify the NetworkPolicy blocks cross-namespace traffic with a curl test pod."
+  },
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "K8S_ANNOUNCEMENT.md:12 — 'Monitors 17+ major Kubernetes ecosystem repos ... Automatically updates its knowledge base every hour'; line 30 — 'Automated remediation for common issues'; line 28 — 'Deep cluster health checks, pod/network diagnostics'. Code reality: diagnostics_manager.py returns hardcoded data, no GitHub monitoring scheduler exists, no automated remediation logic exists.",
+    "diagnosis": "The announcement makes at least three production-grade claims (continuous learning, automated remediation, deep diagnostics) that are directly contradicted by the stub-only implementation, constituting misleading marketing.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'Continuous Learning Engine: Monitors 17+ repos ... every hour' with 'Planned: Continuous Learning Engine (not yet implemented)'. Replace 'Automated Remediation' with 'Planned: Automated Remediation (stub only — dry_run always returns canned data)'. Replace 'Deep cluster health checks' with 'Planned: Deep cluster health checks (currently returns mock data)'. Add a prominent 'Status: Alpha/Prototype — not production-ready' notice at the top.",
+    "test_plan": "Review updated document against each code path; confirm no claim asserts a feature that returns real kubernetes API data until that feature is implemented. Run a doc-linting check to flag any remaining 'production-grade' or 'automated' language not backed by real implementation."
+  }
+]

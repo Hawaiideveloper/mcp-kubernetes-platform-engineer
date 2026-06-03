@@ -1,0 +1,55 @@
+{
+  "agent_id": 10,
+  "components": [
+    {
+      "id": "K8S_ANNOUNCEMENT.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "mcp-tool:analyze_resource_usage",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:gitops_pr_generation",
+      "kind": "behavior",
+      "focus": "PR body: finding ID + evidence + sandbox log. Title format. Labels."
+    },
+    {
+      "id": "behavior:done_definition",
+      "kind": "behavior",
+      "focus": "what \"proven with output\" means: green pytest + image build + clean events + empty failed pods"
+    },
+    {
+      "id": "deploy-k8s.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "mcp-tool:security_scan",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:backend_cache",
+      "kind": "behavior",
+      "focus": "LLM explanation cache: finding-hash \u2192 explanation, TTL"
+    },
+    {
+      "id": "src/config.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "k8s/configmap.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "enhanced:kubectl_apply",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    }
+  ]
+}

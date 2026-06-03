@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:analyzer_base",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/ — no file named analyzer.py, base_analyzer.py, or any file containing 'class BaseAnalyzer' or 'class Finding' exists in the repo",
+    "diagnosis": "There is no BaseAnalyzer abstract class or Finding data model anywhere in the codebase; the abstraction required by all future analyzer components is entirely absent.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzers/base.py:\n  from abc import ABC, abstractmethod\n  from dataclasses import dataclass, field\n  from typing import Any, Dict, List, Optional\n  @dataclass\n  class Finding:\n      severity: str  # critical|high|medium|low|info\n      title: str\n      resource: str\n      namespace: Optional[str]\n      evidence: Dict[str, Any]\n      remediation: str\n  class BaseAnalyzer(ABC):\n      @abstractmethod\n      async def analyze(self, k8s_state: Dict[str, Any]) -> List[Finding]: ...",
+    "test_plan": "Import BaseAnalyzer and Finding in a unit test; assert isinstance of a concrete subclass passes; assert Finding dataclass raises TypeError on missing required fields."
+  },
+  {
+    "component_id": "enhanced:kubectl_delete",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:1-654 — grep of entire file produces zero matches for 'enhanced_tools', 'kubectl_delete', 'kubectl_get', or any tool name from enhanced_tools.py; the file imports KubectlManager but never calls get_enhanced_kubectl_tools()",
+    "diagnosis": "The kubectl_delete schema (and all 18 other enhanced kubectl tool schemas in enhanced_tools.py) are dead code: mcp_server.py never imports enhanced_tools, never adds these Tool objects to the list_tools response, and never dispatches to them in handle_call_tool.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py add:\n  from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools\nIn handle_list_tools extend the tools list:\n  tools += get_enhanced_kubectl_tools() + get_enhanced_helm_tools()\nIn handle_call_tool add elif branches dispatching to self.kubectl_manager and self.helm_manager for each enhanced tool name.",
+    "test_plan": "Call list_tools via MCP protocol and assert 'kubectl_delete' appears in the returned names; call kubectl_delete with dry_run flag and assert KubectlManager.delete is invoked (mock)."
+  },
+  {
+    "component_id": "mcp-tool:analyze_logs",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:99 — 'total_entries': 1247; line 107-128 — hardcoded log_summary dict with 'error_count': 23, 'warning_count': 67; top_errors list contains static fake messages 'Failed to connect to database', 'Authentication timeout'",
+    "diagnosis": "analyze_logs returns entirely hardcoded fake data with a fixed past timestamp; it never calls the Kubernetes API to retrieve actual pod logs.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub body with actual k8s client calls:\n  pods = await k8s_client.list_namespaced_pod(namespace)\n  for pod in pods.items:\n      raw = await k8s_client.read_namespaced_pod_log(pod.metadata.name, namespace, since_seconds=_parse_range(time_range))\n      entries = _filter_by_level(raw, log_level)\n      if search_pattern: entries = _grep(entries, search_pattern)\nAggregate counts from real entries; remove all hardcoded strings.",
+    "test_plan": "Mock CoreV1Api.read_namespaced_pod_log to return a fixture log string; call analyze_logs and assert total_entries matches fixture line count and top_errors contains only lines from the fixture."
+  },
+  {
+    "component_id": "src/github_issues_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/github_issues_manager.py:488-490 — 'search_terms = \" OR \".join([f\"title LIKE \\'%{term}%\\' OR body LIKE \\'%{term}%\\'\" for term in key_terms])' followed by 'sql = f\"\"\"SELECT ... WHERE ({search_terms})\"\"\"' — user-derived terms are interpolated directly into SQL with an f-string",
+    "diagnosis": "find_similar_issues builds a SQL WHERE clause by string-interpolating key_terms extracted from the user-supplied error_message, creating a SQL injection vulnerability.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace f-string SQL construction with parameterized queries:\n  placeholders = ' OR '.join(['title LIKE ? OR body LIKE ?' for _ in key_terms])\n  sql = f'SELECT ... WHERE ({placeholders}) AND state = \"closed\" ORDER BY relevance_score DESC LIMIT ?'\n  params = [val for term in key_terms for val in (f'%{term}%', f'%{term}%')] + [max_results]\n  async with db.execute(sql, params) as cursor: ...",
+    "test_plan": "Pass error_message=\"'; DROP TABLE github_issues; --\" and assert the table still exists after the call; separately assert results return an empty list rather than raising an exception."
+  },
+  {
+    "component_id": "k8s/deployment.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/deployment.yaml:37 — 'image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest'; line 50 — 'value: \"/var/run/secrets/kubernetes.io/serviceaccount\"' set as KUBECONFIG; line 90 — 'readOnlyRootFilesystem: false'",
+    "diagnosis": "Three security defects: (1) mutable :latest image tag blocks reproducibility and auditability; (2) KUBECONFIG is set to the service account directory path rather than the kubeconfig file path, which will cause client initialization to fail; (3) readOnlyRootFilesystem is false, allowing container filesystem writes.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Pin image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:1.0.0@sha256:<digest>\n2. Remove the KUBECONFIG env var entirely — the Python kubernetes client auto-detects in-cluster config from the service account mount without KUBECONFIG.\n3. Set readOnlyRootFilesystem: true and ensure data/logs are written to the already-defined volume mounts.",
+    "test_plan": "Deploy to a test cluster; confirm pod starts without CrashLoopBackOff; confirm kubernetes client initializes by calling get_cluster_info and receiving real node data; run trivy image scan and assert no critical CVEs on pinned digest."
+  },
+  {
+    "component_id": "behavior:analyzer_node",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/ — no NodeAnalyzer class exists; no code anywhere checks node.status.conditions for type='Ready', 'MemoryPressure', 'DiskPressure', or 'PIDPressure'",
+    "diagnosis": "NodeAnalyzer for detecting NotReady, disk pressure, memory pressure, and PID pressure conditions does not exist anywhere in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzers/node.py implementing BaseAnalyzer:\n  async def analyze(self, k8s_state) -> List[Finding]:\n      findings = []\n      for node in k8s_state['nodes']:\n          for cond in node.status.conditions:\n              if cond.type in ('MemoryPressure','DiskPressure','PIDPressure') and cond.status == 'True':\n                  findings.append(Finding(severity='high', title=cond.type, resource=node.metadata.name, ...))\n              if cond.type == 'Ready' and cond.status != 'True':\n                  findings.append(Finding(severity='critical', title='NodeNotReady', ...))\n      return findings",
+    "test_plan": "Create a mock node with MemoryPressure=True and Ready=Unknown; assert NodeAnalyzer.analyze returns two Findings with severities 'high' and 'critical' respectively."
+  },
+  {
+    "component_id": "behavior:analyzer_deployment",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/ — no DeploymentAnalyzer class exists; k8s_manager.py returns hardcoded deployment data; no code checks deployment.status.available_replicas vs deployment.spec.replicas or deployment.status.conditions for Progressing=False",
+    "diagnosis": "DeploymentAnalyzer for replica mismatch and stuck rollout detection does not exist; the data required to detect these conditions is never fetched from the real API.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/analyzers/deployment.py implementing BaseAnalyzer:\n  async def analyze(self, k8s_state) -> List[Finding]:\n      findings = []\n      for dep in k8s_state['deployments']:\n          desired = dep.spec.replicas or 0\n          available = dep.status.available_replicas or 0\n          if available < desired:\n              findings.append(Finding(severity='high', title='ReplicaMismatch', evidence={'desired': desired, 'available': available}, ...))\n          for cond in (dep.status.conditions or []):\n              if cond.type == 'Progressing' and cond.reason == 'ProgressDeadlineExceeded':\n                  findings.append(Finding(severity='critical', title='RolloutStuck', ...))\n      return findings",
+    "test_plan": "Mock a deployment with spec.replicas=3 and status.available_replicas=1; assert DeploymentAnalyzer returns a ReplicaMismatch Finding; mock ProgressDeadlineExceeded condition and assert RolloutStuck Finding is returned."
+  },
+  {
+    "component_id": "mcp-tool:find_similar_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:593-596 — handler calls self.github_issues_manager.find_similar_issues(); src/github_issues_manager.py:478-516 — method queries SQLite local DB populated by GitHub API fetches; handler is wired but query at line 490 uses f-string SQL injection (see separate finding)",
+    "diagnosis": "The handler is wired and dispatches to a real SQLite-backed implementation, but the underlying SQL query is vulnerable to injection via user-controlled key_terms interpolated into the WHERE clause.",
+    "fix_class": "rewrite",
+    "proposed_fix": "See fix for src/github_issues_manager.py SQL injection: replace f-string WHERE clause construction with parameterized placeholders and pass key_terms as params tuple to db.execute.",
+    "test_plan": "Unit test: supply error_message with SQL metacharacters; assert query completes without exception and database integrity is preserved; integration test: supply a real error string and assert returned issues contain at least one matching title substring."
+  },
+  {
+    "component_id": "mcp-tool:get_trending_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:599-602 — handler calls self.github_issues_manager.get_trending_issues(); src/github_issues_manager.py:541-571 — method queries SQLite by created_at >= since_date; database is seeded by _fetch_recent_issues on startup which calls real GitHub API but has no auth token by default (line 56: 'self.github_token = None')",
+    "diagnosis": "get_trending_issues is wired and uses a real SQLite DB, but the GitHub token is always None, meaning startup fetches hit the unauthenticated rate limit of 60 req/hr across 17 repos, causing most fetches to fail silently with HTTP 403 and the DB to start empty — so get_trending_issues returns an empty list in practice.",
+    "fix_class": "implement",
+    "proposed_fix": "Read token from config or environment in __init__:\n  self.github_token = getattr(config, 'github_token', None) or os.getenv('GITHUB_TOKEN')\nAlso add rate-limit backoff in _fetch_issues_page: on 403 response, parse 'X-RateLimit-Reset' header and await asyncio.sleep(reset_time - time.time()) before retrying.",
+    "test_plan": "Set GITHUB_TOKEN env var in a test environment; confirm _fetch_recent_issues populates at least one row in the DB; call get_trending_issues and assert a non-empty list is returned."
+  },
+  {
+    "component_id": "src/__init__.py",
+    "kind": "python",
+    "severity": "info",
+    "evidence": "src/__init__.py:1-7 — only contains __version__ = '1.0.0', __author__, and __description__; no imports, no re-exports, no init logic",
+    "diagnosis": "__init__.py is a minimal metadata stub with no issues, but the version string '1.0.0' is hardcoded here and also referenced in k8s/deployment.yaml label app.kubernetes.io/version, creating a manual sync requirement with no enforcement.",
+    "fix_class": "document",
+    "proposed_fix": "Add a version consistency check or single-source the version:\n  # In deployment.yaml generation, reference version from __init__.py via a build step or Makefile:\n  # APP_VERSION=$(python -c 'from src import __version__; print(__version__)')\n  # Substitute into deployment.yaml before apply.\nAlternatively add a CI lint step that asserts deployment.yaml label matches src/__init__.py __version__.",
+    "test_plan": "Add a test in tests/ that imports __version__ from src and parses the version label from k8s/deployment.yaml, then asserts they are equal."
+  }
+]

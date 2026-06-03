@@ -1,0 +1,55 @@
+{
+  "agent_id": 14,
+  "components": [
+    {
+      "id": "behavior:image_tag_migration_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for bitnami/kubectl:1.30 yank class of issues"
+    },
+    {
+      "id": "mcp-tool:troubleshoot_pod_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "push-and-deploy.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/service.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "src/documentation_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:helm_upgrade",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:get_issue_statistics",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:gitops_pr_generation",
+      "kind": "behavior",
+      "focus": "PR body: finding ID + evidence + sandbox log. Title format. Labels."
+    },
+    {
+      "id": "logs.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "enhanced:helm_uninstall",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    }
+  ]
+}

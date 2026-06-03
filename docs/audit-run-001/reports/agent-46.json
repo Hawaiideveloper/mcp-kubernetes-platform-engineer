@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "enhanced:kubectl_scale",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:162-191 — kubectl_scale Tool defined; src/mcp_server.py:8-34 imports show no 'from enhanced_tools import' and grep for 'kubectl_scale' in mcp_server.py returns zero hits",
+    "diagnosis": "The kubectl_scale tool schema is defined in enhanced_tools.py but enhanced_tools.py is never imported by mcp_server.py, so the tool is completely dead and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add 'from enhanced_tools import get_enhanced_kubectl_tools' and extend the tool list returned in list_tools with get_enhanced_kubectl_tools(). Then add an elif branch in handle_call_tool for 'kubectl_scale' that calls self.kubectl_manager.scale_resource(resource, name, replicas, namespace). KubectlManager must implement scale_resource via the kubernetes Python client's patch_namespaced_deployment_scale.",
+    "test_plan": "Call kubectl_scale via the MCP client targeting a test deployment; assert the deployment spec.replicas is updated in the cluster and that non_destructive_mode blocks the call when enabled."
+  },
+  {
+    "component_id": "src/security_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/security_manager.py:48-53 — 'overall_security_score': 85; lines 93-116 return hardcoded RBAC totals (total_roles: 15, total_role_bindings: 23); lines 119-150 return hardcoded pod counts (total_pods: 45); no kubernetes client import exists anywhere in the file",
+    "diagnosis": "Every scan sub-method (_scan_rbac, _scan_pod_security, _scan_network_policies, _scan_secrets, _scan_container_images) returns entirely static hardcoded dictionaries with fabricated resource counts, CVEs, and compliance scores — no kubernetes API client is called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes client (CoreV1Api, RbacAuthorizationV1Api, NetworkingV1Api) into SecurityManager.__init__. Rewrite _scan_rbac to call rbac_api.list_cluster_role_binding_for_all_namespaces() and flag bindings with cluster-admin roleRef. Rewrite _scan_pod_security to call core_api.list_pod_for_all_namespaces() and inspect securityContext fields. Each scan method should build the issues list from real API data, not literals.",
+    "test_plan": "Point the server at a local kind cluster; call security_scan with scan_types=['rbac','pods'] and assert the returned total_pods matches 'kubectl get pods -A --no-headers | wc -l'; assert no hardcoded score of 85 appears in output."
+  },
+  {
+    "component_id": "behavior:finding_dedup",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "N/A — design task; no dedup logic exists anywhere in src/",
+    "diagnosis": "No finding deduplication exists; the auto-remediator would emit duplicate work orders for the same root cause (e.g., missing resource limits on 100 pods each flagged individually).",
+    "fix_class": "design",
+    "proposed_fix": "Data model: Finding(root_cause_key: str, severity: str, affected_resources: List[str], first_seen: datetime, count: int). root_cause_key = sha256(finding_type + namespace + container_image_or_role). Interface: dedupe(findings: List[RawFinding]) -> List[Finding]. Algorithm: group by root_cause_key, merge affected_resources, keep highest severity, set count. Store in a dict keyed by root_cause_key; on new scan, upsert. Edge cases: different namespaces with same root cause should remain separate keys (include namespace in key).",
+    "test_plan": "Feed 50 raw findings all with type=missing_resource_limits across 50 pods; assert dedupe() returns exactly 1 Finding with count=50 and affected_resources length 50; feed 2 findings with different namespaces and same type; assert 2 Findings are returned."
+  },
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "N/A — design task; src/security_manager.py and src/mcp_server.py have no structured audit log, only unstructured logger.info calls",
+    "diagnosis": "There is no immutable audit log recording who triggered each remediation action, what was changed, when, and what evidence justified it — required for compliance and post-incident review.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: AuditEntry(id: uuid, timestamp: ISO8601, actor: str, action: str, target_resource: str, namespace: str, finding_id: str, dry_run: bool, outcome: str, evidence: str). Interface: audit_log.append(entry: AuditEntry). Storage: append-only JSONL file at /data/audit.log (the PVC mount). Wire into execute_remediation in mcp_server.py as a post-action decorator: after every tool call that mutates cluster state, create and append an AuditEntry. Edge cases: dry_run=True entries must still be logged with outcome='dry_run'.",
+    "test_plan": "Execute two remediations (one dry_run=True, one live) and assert /data/audit.log contains exactly two entries with correct actor, action, and dry_run fields; assert appending never truncates existing entries."
+  },
+  {
+    "component_id": "behavior:rbac_split",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "N/A — design task; k8s/pvc.yaml and k8s/ manifests show a single ServiceAccount with no least-privilege splitting",
+    "diagnosis": "The server uses a single identity for both read-only diagnosis and write operations, violating least-privilege — a bug in the write path could gain cluster-wide read access or vice versa.",
+    "fix_class": "design",
+    "proposed_fix": "Create two ServiceAccounts: 'mcp-reader' (ClusterRole: get/list/watch on pods, events, nodes, services, deployments, replicasets, statefulsets, daemonsets, configmaps, networkpolicies, roles, rolebindings) and 'mcp-writer' (Role scoped per namespace: patch deployments, create/delete pods). KubernetesManager accepts a read_client and write_client. Diagnosis methods use read_client; execute_remediation uses write_client. Wire via projected ServiceAccount tokens or two kubeconfig contexts.",
+    "test_plan": "With only read_client, attempt to patch a deployment and assert AuthorizationError is raised. With write_client, attempt to list cluster nodes and assert the call is rejected by RBAC. Integration test using two kind service account tokens."
+  },
+  {
+    "component_id": "behavior:analyzer_deployment",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "N/A — design task; no DeploymentAnalyzer class exists in src/",
+    "diagnosis": "No automated analysis logic exists to detect replica mismatches (spec.replicas != status.readyReplicas) or stuck rollouts (Progressing condition with reason=ProgressDeadlineExceeded).",
+    "fix_class": "design",
+    "proposed_fix": "Interface: DeploymentAnalyzer.analyze(deployment: V1Deployment) -> List[Finding]. Logic: (1) replica_mismatch: if deployment.status.ready_replicas != deployment.spec.replicas, emit Finding(type='replica_mismatch', severity='high', evidence=f'ready={ready} spec={spec}'). (2) stuck_rollout: iterate deployment.status.conditions; if type=='Progressing' and reason=='ProgressDeadlineExceeded', emit Finding(type='stuck_rollout', severity='critical'). Register in DiagnosticsManager.diagnose_cluster_health under check_types=['deployments'].",
+    "test_plan": "Mock a V1Deployment with ready_replicas=1, spec.replicas=3; assert analyze() returns one finding with type=replica_mismatch. Mock a deployment with ProgressDeadlineExceeded condition; assert analyze() returns stuck_rollout finding with severity=critical."
+  },
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/pvc.yaml:1-16 — entire file is a bare PVC spec with no annotations, no encryption-at-rest label, storageClassName: local-path (line 15), and accessModes: [ReadWriteOnce] (line 9); no volumeMode specified",
+    "diagnosis": "The PVC lacks volumeMode: Filesystem (should be explicit), has no encryption-at-rest annotation, and uses storageClassName: local-path which is node-local and unsuitable for production HA deployments; audit log data stored here would be lost on node failure.",
+    "fix_class": "document",
+    "proposed_fix": "Add 'volumeMode: Filesystem' under spec. Add annotation 'encryption: required' or document the expectation that the storage class encrypts at rest. Replace storageClassName: local-path with a parameterized value (e.g., via Helm values or a comment noting production requires a replicated storage class). Add a comment citing the single-node limitation.",
+    "test_plan": "Deploy to a multi-node cluster; confirm PVC binds on the correct node and data persists across pod restarts; confirm the volumeMode field appears in 'kubectl get pvc -o yaml'."
+  },
+  {
+    "component_id": "behavior:analyzer_cronjob",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "N/A — design task; no CronJobAnalyzer exists; the manual-cw5-003 reference implies orphaned jobs were found manually",
+    "diagnosis": "No automated CronJob analysis detects missed schedules or orphaned Job objects left by failed CronJob runs, requiring manual triage as seen with manual-cw5-003.",
+    "fix_class": "design",
+    "proposed_fix": "Interface: CronJobAnalyzer.analyze(cronjob: V1CronJob, jobs: List[V1Job]) -> List[Finding]. Logic: (1) missed_schedule: compare cronjob.status.last_schedule_time to expected next run using croniter; if overdue by more than one interval, emit Finding(type='missed_schedule'). (2) orphaned_jobs: for each Job where job.metadata.owner_references is empty and job.metadata.labels['cronjob-name'] matches, emit Finding(type='orphaned_job', severity='low'). Integrate into DiagnosticsManager.diagnose_cluster_health with check_types=['cronjobs'].",
+    "test_plan": "Mock a CronJob with last_schedule_time 3 hours ago and schedule='*/30 * * * *'; assert analyze() returns missed_schedule. Create a Job with no ownerReferences but cronjob label; assert analyze() returns orphaned_job."
+  },
+  {
+    "component_id": "security-scan-demo.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "security-scan-demo.sh:1-3 — shebang is '#!/bin/bash' with no 'set -euo pipefail'; lines 14-18 use 'kubectl get pods -A -o json | jq ...' with no error handling if kubectl or jq are absent; line 8 uses 'kubectl config current-context' which exits non-zero if no context is set but the script continues",
+    "diagnosis": "The script has no error-safety flags (set -euo pipefail), so failures in kubectl or jq silently produce empty variables that are then interpolated into the summary counts (lines 118-121), giving a false 'all clear' when tools are missing or the cluster is unreachable.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' at line 2. Add dependency checks at top: 'command -v kubectl >/dev/null || { echo \"kubectl not found\"; exit 1; }' and same for jq. Wrap the 'kubectl config current-context' call with '|| { echo \"No kubectl context\"; exit 1; }'. Replace all empty-string checks with explicit exit-code checks on kubectl subcommands.",
+    "test_plan": "Run the script with kubectl pointing to a non-existent cluster; assert the script exits non-zero with a meaningful error message rather than printing '0 detected' for all findings."
+  },
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/helm_manager.py:45 — '_run_helm' is a synchronous 'def' (blocking subprocess.run); lines 102-409 — every public method is declared 'async def' but calls 'return self._run_helm(args)' directly without 'await asyncio.get_event_loop().run_in_executor(...)'; also line 301 — password is appended to CLI args list and logged at line 58 via 'Running helm command: ...' leaking credentials to logs; line 333-334 — max_results maps to --max-col-width (a display flag, not a result-count limit)",
+    "diagnosis": "All async Helm methods block the asyncio event loop because _run_helm runs subprocess.run synchronously; additionally, repo passwords are leaked to logs, and max_results is wired to the wrong helm flag.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change _run_helm to async and use 'await asyncio.get_event_loop().run_in_executor(None, functools.partial(subprocess.run, ...))'. Remove password from the logged command string (mask with '***'). For search_helm_charts, replace '--max-col-width' with '--max' to correctly limit result count. Also note: helm install/upgrade are not registered in mcp_server.py handle_call_tool — wire those elif branches.",
+    "test_plan": "Run the event loop under a 1-second timeout and call list_helm_releases; assert the loop is not blocked (use asyncio.wait_for). Check server logs after add_helm_repository with a password; assert '***' appears instead of the real password. Call search_helm_charts with max_results=3 and assert at most 3 rows are returned."
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "agent_id": 2,
+  "components": [
+    {
+      "id": "src/enhanced_tools.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:worklist_sqlite",
+      "kind": "behavior",
+      "focus": "SQLite worklist for non-colliding agent claims; atomic claim/release"
+    },
+    {
+      "id": "behavior:restart_first_ladder",
+      "kind": "behavior",
+      "focus": "design the ladder: rollout restart -> wait 5m -> escalate. State machine."
+    },
+    {
+      "id": "setup-vscode-nodeport.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "enhanced:kubectl_rollout",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "logs.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "src/logger.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "setup-vscode-k8s.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "src/__init__.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:event_stream_watcher",
+      "kind": "behavior",
+      "focus": "watch k8s events stream, classify, route to remediation queue"
+    }
+  ]
+}

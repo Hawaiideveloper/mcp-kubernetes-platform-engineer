@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "GETTING_STARTED.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GETTING_STARTED.md:143-145 — 'The MCP server will provide responses based on: 45,720+ indexed Kubernetes GitHub issues / Real-time cluster analysis (if kubectl configured)'; line 149 — 'The server automatically updates its knowledge base every hour'",
+    "diagnosis": "GETTING_STARTED.md claims real-time cluster analysis and live hourly GitHub updates, but k8s_manager.py:29 explicitly comments 'Kubernetes client initialization would go here / For now, we\'ll use a stub implementation' and all managers return hardcoded data with no live API calls.",
+    "fix_class": "document",
+    "proposed_fix": "Replace lines 140-155 with an honest capabilities section: mark live-cluster features as 'requires real k8s client (not yet implemented)', remove the 45,720+ issues claim, and add a 'Current State' warning box stating that all tool responses are static mock data until the Kubernetes client is wired up.",
+    "test_plan": "Review updated doc against actual manager source; run grep for unqualified production claims; gate doc review in CI using a custom markdownlint rule that flags unsupported numeric claims."
+  },
+  {
+    "component_id": "mcp-tool:get_recommendations",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:546-550 — 'result = await self.k8s_manager.get_recommendations(...)'; src/k8s_manager.py:91-164 — method body builds a static dict of generic text bullets with no kubernetes client call; line 103 — 'self.logger.info(f\"Generating recommendations for areas: {focus_areas}\")'",
+    "diagnosis": "get_recommendations dispatches to KubernetesManager.get_recommendations which returns hardcoded generic advice strings with no inspection of the actual cluster state; self.client is never initialized (k8s_manager.py:29 stub comment).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Initialize kubernetes.client.CoreV1Api in KubernetesManager.initialize(). In get_recommendations: (1) call list_node() and list_pod_for_all_namespaces() to collect real resource requests/limits, (2) identify pods without limits or probes, (3) build recommendations from actual findings. Return empty list with a message if cluster is unreachable.",
+    "test_plan": "Mock kubernetes.client responses in pytest; assert that a pod missing resource limits generates a 'set resource limits' recommendation; assert that a correctly configured pod does not; integration test against a kind cluster."
+  },
+  {
+    "component_id": "behavior:probe_tuning_remediation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "Design task — no existing implementation. Related stub: src/k8s_manager.py:166-210 execute_remediation returns hardcoded string lists.",
+    "diagnosis": "No deterministic auto-remediator exists for connection-refused-on-startup (startup probe missing / too-tight initialDelaySeconds); the existing execute_remediation stub does not touch probe fields.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ProbeRemediationRequest {pod_name, namespace, container_name, failure_type='connection_refused', current_probe: dict|None}. Interface: async def remediate_probe(req) -> RemediationResult. Logic: (1) read pod spec via read_namespaced_pod, (2) if startupProbe absent, compute safe initialDelaySeconds from average container start time (last 5 restarts via pod events), (3) patch pod spec via patch_namespaced_pod with dry_run='All' first, (4) on user confirm, apply. Edge cases: init containers, multi-container pods, immutable pod fields (must patch Deployment/StatefulSet owner instead). Dependencies: kubernetes python client >=28, pod event history. Test plan: unit-mock patch_namespaced_pod, assert probe values; integration test on kind with a deliberately slow-start container.",
+    "test_plan": "Unit test with mocked k8s client verifying patch payload contains correct initialDelaySeconds; integration test on a kind cluster where a nginx pod has initialDelaySeconds=1 and confirm remediator raises it to a calculated safe value."
+  },
+  {
+    "component_id": "mcp-tool:security_scan",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:532-537 — 'result = await self.security_manager.security_scan(...)'; src/security_manager.py:93-116 _scan_rbac returns hardcoded dict: '\"total_roles\": 15, \"total_role_bindings\": 23' and a static issue list referencing 'default:admin-sa' and 'developer-role' that do not exist in any real cluster.",
+    "diagnosis": "Every security scan sub-method (_scan_rbac, _scan_pod_security, _scan_network_policies, _scan_secrets, _scan_container_images) returns fabricated findings with specific resource names, CVE references, and compliance percentages that are entirely fictional; no kubernetes API is ever called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Wire each _scan_* method to the k8s client: _scan_rbac should call list_cluster_role_binding() and flag any subject with cluster-admin; _scan_pod_security should call list_pod_for_all_namespaces() and check securityContext fields; _scan_secrets should call list_secret_for_all_namespaces() and flag base64-decoded values matching password/key patterns. Remove all hardcoded issue dicts. Return empty issues list when client is unavailable rather than fake data.",
+    "test_plan": "Create pytest fixtures with mocked k8s API responses containing both compliant and non-compliant resources; assert that non-compliant items appear in results and compliant items do not; verify overall_security_score is computed from actual findings, not hardcoded to 85."
+  },
+  {
+    "component_id": "behavior:trading_ns_hardblock",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "Design task — no existing safeguard. src/mcp_server.py:59-61 implements only a broad ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS env flag; no namespace-specific block exists.",
+    "diagnosis": "There is no enforcement preventing automated remediation from targeting the trading namespaces ibkr-live-trader, daxxon-trading, and brightflow-live; the non-destructive mode flag is all-or-nothing and does not encode namespace-level policy.",
+    "fix_class": "implement",
+    "proposed_fix": "Add PROTECTED_NAMESPACES = {'ibkr-live-trader', 'daxxon-trading', 'brightflow-live'} constant in config.py. In handle_call_tool, before any mutating tool dispatch (execute_remediation, kubectl_create, kubectl_delete, kubectl_apply), extract namespace from arguments and raise ProtectedNamespaceError if namespace in PROTECTED_NAMESPACES. Log the block attempt. Expose a PROTECTED_NAMESPACES env override (comma-separated) so the list can be extended without code changes. PRD note: requires a PR-approval gate (out-of-band) before the block can be lifted for specific targets.",
+    "test_plan": "Unit test: call execute_remediation with namespace='ibkr-live-trader', assert ProtectedNamespaceError is raised and no k8s API is called; test that execute_remediation with namespace='staging' succeeds; test env override adds additional namespaces to the block list."
+  },
+  {
+    "component_id": "README.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "README.md:58-59 — 'Production Ready: Successfully deployed in both Docker containers and Kubernetes clusters with full authentication, persistent storage, and comprehensive documentation integration (1,029+ official Kubernetes reference files)'; README.md:1101-1103 — 'Live Status: Successfully deployed and operational / Image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest / Health Status: All health checks passing'",
+    "diagnosis": "README asserts production-ready live deployment with specific IPs (172.100.10.107:30001), all-passing health checks, and 1,029 integrated docs, none of which can be verified by code inspection; all manager implementations are stubs returning fake data, making 'production ready' a false claim.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'Production Ready' badge and live-status section with an honest 'Alpha / Proof of Concept' status block. Change all live-deployment bullets to a future roadmap table. Remove the specific IP address (172.100.10.107). Add a 'Known Limitations' section listing: no real k8s client, all tool responses are mock data, GitHub issues integration unimplemented. Keep architecture diagrams as design intent.",
+    "test_plan": "Automated doc linter (markdownlint + custom rule) that fails CI if README contains the words 'Successfully deployed', 'Production Ready', or a hardcoded IP in the live-status section without a [WIP] qualifier."
+  },
+  {
+    "component_id": "src/config.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/config.py:47-61 — SecurityConfig.admission_controllers defaults list includes 'PodSecurityPolicy' which was removed in Kubernetes 1.25; src/config.py:96 — kubeconfig_path default is '~/.kube/config' (tilde string, not expanded); src/config.py:86-90 — dataclass fields kubernetes/monitoring/logging/security/diagnostics typed as None with no Optional annotation.",
+    "diagnosis": "Config has three concrete gaps: (1) deprecated PodSecurityPolicy in default admission controller list will cause confusion on 1.25+ clusters; (2) kubeconfig tilde is not expanded via os.path.expanduser, so Path('~/.kube/config') is treated literally; (3) dataclass fields with default=None lack Optional type hints, breaking type checking.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 61: remove 'PodSecurityPolicy' from defaults, add 'PodSecurity' instead. Line 96: change default to os.path.expanduser('~/.kube/config') or use Path.home(). Lines 86-90: annotate fields as Optional[KubernetesConfig] = None etc. Add a validate() method that warns if kubeconfig_path does not exist at startup.",
+    "test_plan": "Unit test: instantiate ServerConfig with no env vars and assert kubeconfig_path does not contain a literal tilde; assert 'PodSecurityPolicy' not in admission_controllers; run mypy on config.py and assert zero type errors."
+  },
+  {
+    "component_id": "tests/production/test_pod_issues.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/production/test_pod_issues.py:70-71 — 'mcp_server.resolve_issue_end_to_end = AsyncMock(return_value=mock_pipeline_result) / result = await mcp_server.resolve_issue_end_to_end(issue_context)'; lines 151-157 — 'github_issues_manager.find_similar_issues = AsyncMock(...) / k8s_manager.resolve_imagepull_issue = AsyncMock(...)'; no fixture file visible that provides mcp_server, k8s_manager, etc.",
+    "diagnosis": "Every test in this file monkey-patches AsyncMock onto the exact methods being tested and then asserts on the mocked return value; this tests nothing but Python's AsyncMock machinery, not any real code path. Additionally, methods like resolve_imagepull_issue and resolve_init_container_failure do not exist in k8s_manager.py.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Delete all tests that set method = AsyncMock(return_value=X) then assert result == X. Replace with tests that: (1) mock only the kubernetes client layer (kubernetes.client.*), (2) call the real manager methods, (3) assert on the computed output. Add a conftest.py providing fixtures that inject a kubernetes client mock via unittest.mock.patch. Mark integration tests (real cluster) separately with @pytest.mark.integration.",
+    "test_plan": "Run pytest --co to confirm all tests collect without missing fixture errors; run pytest tests/production/ with the new mocks and assert >0 real code paths are exercised; confirm coverage report shows manager methods are hit."
+  },
+  {
+    "component_id": "k8s/rbac.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/rbac.yaml:20 — resources list includes '\"secrets\"' with verbs '[\"get\", \"list\", \"watch\"]'; k8s/rbac.yaml:48-50 — policy group includes 'podsecuritypolicies' (removed in k8s 1.25); no namespace-scoped Role/RoleBinding — only ClusterRole/ClusterRoleBinding granting cluster-wide access.",
+    "diagnosis": "The ClusterRole grants cluster-wide read access to all secrets (a high-risk permission allowing credential harvesting across every namespace) and references the removed PodSecurityPolicy API; a namespace-scoped Role would be sufficient and safer for a diagnostic-only tool.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove 'secrets' from the core resources rule (line 20); add a separate, narrowly scoped rule if secret metadata inspection is genuinely needed. Remove podsecuritypolicies from policy group (line 49). Consider replacing the ClusterRole with a Role in the mcp-kubernetes namespace plus a limited ClusterRole for read-only cross-namespace resources (nodes, namespaces). Add a comment justifying each cluster-wide permission.",
+    "test_plan": "Run kubectl auth can-i list secrets --as=system:serviceaccount:mcp-kubernetes:kubernetes-mcp-server-sa -A and assert it returns 'no'; validate manifest with kube-linter or conftest OPA policy that rejects secret list/watch at cluster scope."
+  },
+  {
+    "component_id": "behavior:image_tag_migration_remediation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "Design task — no existing implementation. src/k8s_manager.py:166-210 execute_remediation has a stub that only handles 'pod_restart_loop' and 'node_not_ready' with hardcoded string lists; no image tag inspection or mutation logic exists.",
+    "diagnosis": "When a pinned image tag is yanked from a registry (e.g. bitnami/kubectl:1.30 class of events), no automated path exists to detect ImagePullBackOff pods, identify the yanked image, find a safe substitute tag, and patch the owning resource.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ImageTagMigrationRequest {namespace: str|None, old_image: str, new_image: str, dry_run: bool}. Interface: async def migrate_image_tag(req) -> MigrationResult {patched: List[str], skipped: List[str], errors: List[str]}. Logic: (1) list all Deployments/StatefulSets/DaemonSets cluster-wide via apps/v1, (2) find containers whose image matches old_image (exact or prefix match), (3) build patch replacing image field, (4) if dry_run, return proposed patches; else apply via patch_namespaced_deployment etc., (5) watch rollout status for 60s and report. Edge cases: CronJobs (batch/v1), pod-level overrides (not patchable — report as skipped), registry digests vs tags. Dependencies: kubernetes python client apps_v1_api. Blocked by: k8s client stub must be replaced first.",
+    "test_plan": "Unit test with mocked list_namespaced_deployment returning two deployments (one matching old_image, one not); assert only the matching deployment is patched with new_image; assert dry_run=True calls patch with dry_run='All'; assert dry_run=False calls patch without dry_run parameter."
+  }
+]

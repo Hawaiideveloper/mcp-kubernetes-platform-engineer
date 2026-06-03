@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/main.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/main.py:107-113 — GET /k8s/diagnostics returns hardcoded {\"status\": \"healthy\", \"cluster_info\": \"Available\", \"nodes\": \"Ready\", \"pods\": \"Running\"}; similarly /k8s/monitoring (line 122-126) and /k8s/security (line 133-138) return static strings. These endpoints never call self.mcp_server methods.",
+    "diagnosis": "The three HTTP REST endpoints in main.py return hardcoded fake data and never delegate to any manager, making the HTTP API a hollow facade.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace each endpoint body with an actual call to the relevant manager:\n  GET /k8s/diagnostics -> await app_instance.mcp_server.diagnostics_manager.diagnose_cluster_health(...)\n  GET /k8s/monitoring  -> await app_instance.mcp_server.monitoring_manager.analyze_resource_usage(...)\n  GET /k8s/security    -> await app_instance.mcp_server.security_manager.security_scan(...)\nAlso CORS allow_origins=[\"*\"] at line 44 should be restricted to known origins.",
+    "test_plan": "Start the HTTP server with a live kubeconfig; assert GET /k8s/diagnostics returns data whose node count matches `kubectl get nodes --no-headers | wc -l`. Assert non-\"*\" CORS origin rejection for unknown origins."
+  },
+  {
+    "component_id": "mcp-tool:get_best_practices",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:566-568 dispatches to documentation_manager.get_best_practices; src/documentation_manager.py:376-380 — method returns self.best_practices which is populated only from a hardcoded dict in _load_best_practices (lines 280-326), not from the scraped documentation_db.",
+    "diagnosis": "get_best_practices returns a static hardcoded list that was never populated from real Kubernetes documentation; the live scrape at initialize() is completely bypassed for this path.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In get_best_practices, after returning hardcoded entries, also search documentation_db for entries whose tags or sections match the category, merge unique items, and deduplicate. Or: store scraped best_practices keyed by category into self.best_practices during _build_documentation_index so the hardcoded fallback is supplemented by real data.",
+    "test_plan": "Mock aiohttp to return a fixture page containing a 'best practice' sentence; after initialize(), call get_best_practices('security') and assert the fixture sentence appears in the returned list."
+  },
+  {
+    "component_id": "src/k8s_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:25-34 initialize() contains comment '# Kubernetes client initialization would go here / # For now, we'll use a stub implementation' — self.client and self.api_client remain None. get_cluster_info (line 49) builds a fully fabricated dict with hardcoded values: \"version\": \"v1.29.0\", nodes total: 3, pods total: 45 (lines 50-74).",
+    "diagnosis": "KubernetesManager never loads a kubeconfig or instantiates any kubernetes-client object; every public method returns hardcoded fictional data, meaning all cluster-facing MCP tools lie to the caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In initialize(), call kubernetes.config.load_incluster_config() with fallback to load_kube_config(). Assign self.core_v1 = kubernetes.client.CoreV1Api() and self.apps_v1 = kubernetes.client.AppsV1Api().\nIn get_cluster_info, replace the hardcoded dict with:\n  nodes = self.core_v1.list_node()\n  pods  = self.core_v1.list_pod_for_all_namespaces()\n  ... aggregate real counts.",
+    "test_plan": "Use unittest.mock to patch kubernetes.client.CoreV1Api; assert list_node() is called and its return value flows through to the response. Integration test against a kind cluster: node count in response must match `kubectl get nodes` output."
+  },
+  {
+    "component_id": "behavior:orphan_job_cleanup",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No existing implementation found in src/; design task for PRD.",
+    "diagnosis": "There is no orphan-job detection or cleanup mechanism; the PRD needs a concrete design.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: OrphanJob { name, namespace, uid, creation_ts, owner_refs[] }. Detection: on a configurable schedule (default 10 min), call batch_v1.list_job_for_all_namespaces(), filter jobs where ownerReferences is empty AND labels do not contain a known controller label (e.g., app.kubernetes.io/managed-by). Interface: async def detect_orphan_jobs(namespace=None, age_threshold_minutes=60) -> List[OrphanJob]. Cleanup: async def cleanup_orphan_job(job: OrphanJob, dry_run=True) calls batch_v1.delete_namespaced_job with propagation_policy='Foreground'. Edge cases: CronJob-created jobs have ownerRef pointing to CronJob—must not be flagged; jobs in Terminating state skipped.",
+    "test_plan": "Unit: mock list_job response with one job with no ownerRef older than threshold; assert it appears in detect result. Integration (kind): create a bare Job, run detector, assert it is found; run cleanup(dry_run=False), assert job is deleted."
+  },
+  {
+    "component_id": "k8s/namespace.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/namespace.yaml:1-9 — only a Namespace object with labels; no ResourceQuota, LimitRange, or PodSecurity admission label (e.g., pod-security.kubernetes.io/enforce: restricted) is present.",
+    "diagnosis": "The namespace manifest provides no resource governance or pod security enforcement, leaving the namespace open to unconstrained resource consumption and insecure pod specs.",
+    "fix_class": "implement",
+    "proposed_fix": "Append to namespace.yaml or add companion files:\n  1. Add label pod-security.kubernetes.io/enforce: restricted to namespace metadata.\n  2. Add a LimitRange with default cpu/memory requests and limits.\n  3. Add a ResourceQuota capping total CPU, memory, and pod count for the namespace.",
+    "test_plan": "Apply manifest to a test cluster; attempt to create a pod running as root—expect admission rejection. Attempt to create a pod exceeding the quota—expect quota error."
+  },
+  {
+    "component_id": "update.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "update.sh:1-5 — no 'set -euo pipefail'; line 3 calls ./stop.sh and line 5 calls ./start.sh with no error checking; line 4 silently swallows git pull failures via '2>/dev/null || echo ...'.",
+    "diagnosis": "update.sh lacks shell safety flags and error propagation, so a failed stop, git pull, or start silently produces a partially-updated or dead server with exit code 0.",
+    "fix_class": "rewrite",
+    "proposed_fix": "#!/usr/bin/env bash\nset -euo pipefail\necho 'Updating Kubernetes Platform Engineer MCP...'\n./stop.sh\ngit pull origin main\n./start.sh\necho 'MCP server updated and restarted'",
+    "test_plan": "Make ./start.sh exit 1; run update.sh and assert it exits non-zero. Make git pull fail by removing remote; assert update.sh exits non-zero and does not call start.sh."
+  },
+  {
+    "component_id": "behavior:vcluster_sandbox",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No existing vcluster integration found in src/ or k8s/; design task for PRD.",
+    "diagnosis": "There is no vcluster sandbox lifecycle implementation; the PRD needs a concrete design for spin-up, fix application, smoke test, and teardown within ~10 seconds.",
+    "fix_class": "design",
+    "proposed_fix": "Interface: async def run_in_vcluster_sandbox(fix_manifest: str, smoke_test_cmd: str, timeout_s=300) -> SandboxResult. Steps: (1) call 'vcluster create sandbox-<uuid> -n sandbox-ns --connect=false' via asyncio.create_subprocess_exec; (2) wait for vcluster pod Ready with a 60s timeout; (3) vcluster connect and apply fix_manifest via kubectl apply; (4) run smoke_test_cmd inside vcluster, capture exit code; (5) vcluster delete sandbox-<uuid> in a finally block. SandboxResult { success: bool, stdout: str, stderr: str, duration_s: float }. Edge cases: cleanup must run even on timeout (CancelledError); namespace must be pre-created with ResourceQuota to prevent runaway usage.",
+    "test_plan": "Mock subprocess calls; assert create->connect->apply->test->delete sequence is always called in order and delete is called even when smoke test raises. Integration: run a no-op fix against a real kind cluster, assert SandboxResult.success=True and the vcluster is removed after."
+  },
+  {
+    "component_id": "mcp-tool:performance_analysis",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:539-544 dispatches to monitoring_manager.performance_analysis; src/monitoring_manager.py:148-190 — method comment says '# Stub implementation', timestamp hardcoded to '2025-08-09T10:30:00Z' (line 168), all _analyze_* helpers return fabricated static dicts (e.g., _analyze_cluster_performance lines 256-273 returns avg_response_time: '45ms', throughput: '1200 req/s' with no real data source).",
+    "diagnosis": "performance_analysis returns entirely fabricated metrics with a hardcoded past timestamp; no metrics API, Prometheus, or kubectl top is ever called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub helpers with real data sources:\n  _analyze_cluster_performance: call metrics_v1beta1.list_node_metrics() (requires metrics-server) or query Prometheus API if configured.\n  Use datetime.utcnow().isoformat() for timestamp.\n  Return actual node CPU/memory from NodeMetrics objects.\n  Raise NotImplementedError with a clear message if metrics-server is unavailable rather than returning fake data.",
+    "test_plan": "Mock kubernetes.client.CustomObjectsApi to return a NodeMetrics fixture; assert cpu_avg in result derives from fixture values not hardcoded strings. Assert timestamp is within 5 seconds of test execution time."
+  },
+  {
+    "component_id": "behavior:restart_first_ladder",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No existing restart-ladder state machine found in src/; design task for PRD.",
+    "diagnosis": "There is no restart-escalation ladder; the PRD needs a concrete state machine design.",
+    "fix_class": "design",
+    "proposed_fix": "State machine with states: IDLE -> RESTARTING -> WAITING -> ESCALATED -> DONE. Transitions: enter RESTARTING by calling apps_v1.patch_namespaced_deployment with a rollout annotation; enter WAITING and poll deployment rollout status every 30s for up to 5 minutes; if rollout completes successfully -> DONE; if still degraded after 5 min -> ESCALATED (emit alert, optionally page oncall via configurable webhook). Interface: async def restart_ladder(deployment: str, namespace: str, escalation_hook: Optional[str] = None) -> LadderResult. LadderResult { final_state, elapsed_s, events: List[str] }. Edge cases: deployment not found (404 -> abort), no replicas available at any point (skip wait, escalate immediately), interrupted run (store state in a ConfigMap for recovery).",
+    "test_plan": "Unit: mock patch and poll; simulate successful rollout within 3 min -> assert final_state=DONE. Simulate stalled rollout -> assert final_state=ESCALATED after 5 min timeout. Integration (kind): deploy a broken image, run ladder, assert escalation_hook is called."
+  },
+  {
+    "component_id": "mcp-tool:find_kubectl_commands",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:571-574 dispatches to documentation_manager.find_commands; src/documentation_manager.py:382-399 — find_commands iterates self.documentation_db which is populated by _build_documentation_index via live HTTP scraping of kubernetes.io at startup. If scraping fails or is rate-limited (or network is unavailable in a cluster), documentation_db remains empty (line 36: self.documentation_db = {}), and find_commands silently returns [] with no error.",
+    "diagnosis": "find_kubectl_commands silently returns an empty list whenever the kubernetes.io scrape fails at startup, providing no fallback and no indication to the caller that the data is absent.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a bundled fallback: ship a static commands.json in the package with a curated set of common kubectl commands. In find_commands, if len(documentation_db) == 0, load and search the bundled file instead, and include a 'source': 'bundled_fallback' field in each result. Also log a warning when documentation_db is empty so operators know scraping failed.",
+    "test_plan": "Block network access (mock aiohttp to raise ConnectionError); call initialize() then find_commands(command_type='kubectl', search_term='get pods'); assert result is non-empty and each item has source='bundled_fallback'."
+  }
+]

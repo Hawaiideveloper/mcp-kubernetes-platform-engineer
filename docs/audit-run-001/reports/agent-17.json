@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:worklist_sqlite",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No SQLite worklist file exists anywhere in the repo — confirmed by absence in src/, data/, and root.",
+    "diagnosis": "There is no atomic claim/release mechanism; parallel remediator agents would collide on the same work items with no locking.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/worklist_db.py with table: worklist(id INTEGER PK, component_id TEXT UNIQUE, status TEXT CHECK(status IN ('pending','claimed','done','failed')), claimed_by TEXT, claimed_at TEXT, released_at TEXT). Expose: async def claim_item(agent_id) -> Optional[str] using BEGIN IMMEDIATE + UPDATE WHERE status='pending' LIMIT 1 + RETURNING inside a single transaction to guarantee atomicity. Also expose release_item(component_id, agent_id, new_status) and seed_worklist(components: List[str]).",
+    "test_plan": "Spin 10 concurrent asyncio tasks all calling claim_item(); assert each returns a distinct component_id with no duplicates. Then call release_item() with status='done' and assert the item is no longer claimable."
+  },
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No audit log file, table, or logger exists in the repo for remediator actions — confirmed by grep across src/.",
+    "diagnosis": "No immutable audit trail of who-did-what-when exists, making post-incident review and compliance impossible.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/audit_log.py with SQLite table: audit_log(id INTEGER PK, ts TEXT NOT NULL DEFAULT(datetime('now')), agent_id TEXT, action TEXT, component_id TEXT, evidence TEXT, outcome TEXT CHECK(outcome IN ('success','failure','skipped')), detail TEXT). Expose: async def append(agent_id, action, component_id, evidence, outcome, detail='') which does a single INSERT — never UPDATE/DELETE. Wire into every remediator action with a try/finally so failures are also logged.",
+    "test_plan": "Call append() 5 times with varying outcomes; assert all 5 rows exist with correct fields. Simulate a crash mid-append and assert previously written rows are intact (WAL mode)."
+  },
+  {
+    "component_id": "src/monitoring_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "monitoring_manager.py:55 — `\"timestamp\": \"2025-08-09T10:30:00Z\"` (hardcoded); line 99 — `\"total_entries\": 1247`; line 107-128 — entire log_summary and top_errors are static dicts; lines 196-254 — all _analyze_*_resources methods return hardcoded values with no kubernetes client calls.",
+    "diagnosis": "Every public method in MonitoringManager returns fabricated static data; no kubernetes client, metrics-server, or log aggregator is queried at any point.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes.client.CoreV1Api and CustomObjectsApi (metrics.k8s.io/v1beta1) in __init__. In analyze_resource_usage: call custom_objects_api.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes') for node metrics and equivalent pods endpoint. In analyze_logs: call core_v1_api.read_namespaced_pod_log(pod_name, namespace, since_seconds=...) and parse results. Replace all hardcoded timestamps with datetime.utcnow().isoformat().",
+    "test_plan": "Integration test with a real or kind cluster: assert returned cpu/memory values match kubectl top output within 5%. Unit test with mocked k8s client: assert client methods are called with correct args and no hardcoded data leaks through."
+  },
+  {
+    "component_id": "mcp-tool:get_cluster_info",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:489-492 dispatches to k8s_manager.get_cluster_info(). k8s_manager.py:22-23 — `self.client = None; self.api_client = None`. k8s_manager.py:29-31 — initialize() logs a message and returns without calling kubernetes.config.load_incluster_config() or load_kube_config(). k8s_manager.py:50-74 — get_cluster_info() returns fully hardcoded dict including `\"version\": \"v1.29.0\"`, `\"total\": 3` nodes, `\"total\": 45` pods.",
+    "diagnosis": "get_cluster_info never contacts a real cluster; it returns a fabricated snapshot regardless of the actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In KubernetesManager.initialize(): call kubernetes.config.load_incluster_config() with fallback to load_kube_config(); assign self.core_v1 = kubernetes.client.CoreV1Api() and self.version_api = kubernetes.client.VersionApi(). In get_cluster_info(): call self.version_api.get_code() for version, self.core_v1.list_node() for node counts, self.core_v1.list_pod_for_all_namespaces() for pod counts. Handle ApiException with a clear error message.",
+    "test_plan": "Run against a live kind cluster; assert returned version matches `kubectl version --short`. Mock the k8s client in unit tests and assert all three API methods are invoked."
+  },
+  {
+    "component_id": "k8s/configmap.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "configmap.yaml:1-19 — ConfigMap contains only string key-value pairs. No Secret reference for sensitive values. Keys RBAC_ENABLED, POD_SECURITY_STANDARDS, NETWORK_POLICIES are present but the application code (src/config.py) is not shown to consume them, and no validation that their values affect behavior exists.",
+    "diagnosis": "ConfigMap places no sensitive data in Secrets and provides no immutable flag; any pod with read access to the namespace can read all configuration, and stale values after a deploy are silently ignored.",
+    "fix_class": "document",
+    "proposed_fix": "Add `immutable: true` to prevent accidental edits after deploy. Add a comment block documenting which env vars are consumed by the app. Move any future sensitive config (e.g., GITHUB_TOKEN) to a Secret referenced via envFrom.secretRef rather than a ConfigMap key. Verify each key maps to a field in src/config.py; remove dead keys.",
+    "test_plan": "Apply the updated ConfigMap and confirm `kubectl get cm kubernetes-mcp-server-config -o yaml` shows immutable: true. Confirm the app pod starts without error and logs show the expected config values."
+  },
+  {
+    "component_id": "mcp-tool:search_github_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "mcp_server.py:583-591 dispatches to github_issues_manager.search_issues(). github_issues_manager.py:410-460 — search_issues() executes a real SQLite query against self.db_path. However, github_issues_manager.py:56 — `self.github_token = None` (hardcoded None); lines 154-155 — token is only added to headers if truthy. GitHub unauthenticated rate limit is 60 req/hr; the repo list at lines 37-55 contains 17 repos, so a single initialize() call exhausts the rate limit.",
+    "diagnosis": "search_github_issues queries a real SQLite DB populated via the GitHub REST API, but with no token the fetch silently fails (return_exceptions=True at line 165), leaving the DB empty so all searches return empty arrays.",
+    "fix_class": "implement",
+    "proposed_fix": "Read GITHUB_TOKEN from os.environ in __init__ instead of hardcoding None. In _fetch_repo_issues, check the response status: if 403/429, log a warning with rate-limit reset time and skip rather than silently swallowing. Add a startup check: if token is None, log a warning that search_github_issues will return empty results. Expose a health endpoint that reports DB row count.",
+    "test_plan": "Set GITHUB_TOKEN env var and run integration test; assert DB row count > 0 after initialize(). Unit test _fetch_repo_issues with a mocked 403 response; assert a warning is logged and no exception propagates."
+  },
+  {
+    "component_id": "tests/production/test_cluster_management.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_cluster_management.py:108 — `k8s_manager.resolve_node_not_ready = AsyncMock(return_value=mock_resolution)`. Line 111 — `resolution = await k8s_manager.resolve_node_not_ready(node_context)`. This pattern is repeated for every test (lines 200-203, 288-291, 382-385, 485-488, 572-575, 666-669, 759-762). The fixture `k8s_manager` is not defined in this file; no conftest.py found in the same directory.",
+    "diagnosis": "Every test installs an AsyncMock on the method being tested, then calls the mock — it is a tautological assertion that the mock returns what it was told to return; no production code is exercised.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace AsyncMock pattern with a real (or kind-cluster-backed) KubernetesManager instance. Each test should call the actual method with a crafted input and assert on real output shape and content. For offline CI, use responses or a VCR cassette to replay k8s API responses rather than mocking the method under test. Add a conftest.py that provisions a pytest fixture backed by a kind cluster or recorded API responses.",
+    "test_plan": "After rewrite, run pytest with --tb=short; assert no test patches the method under test. Assert test coverage of k8s_manager.py rises above 70% per coverage report."
+  },
+  {
+    "component_id": "src/main.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "main.py:42-48 — CORSMiddleware configured with `allow_origins=[\"*\"]`. main.py:103-115 — /k8s/diagnostics returns `{\"status\": \"healthy\", \"cluster_info\": \"Available\", \"nodes\": \"Ready\", \"pods\": \"Running\"}` as a hardcoded dict without calling any manager. Lines 117-127 and 129-139 — /k8s/monitoring and /k8s/security endpoints share the same pattern. main.py:61 — `self.mcp_server.start()` is never called from K8sPlatformApp; the HTTP server and the MCP stdio server are two disconnected entry points with no shared state.",
+    "diagnosis": "The HTTP REST endpoints are stubs that return fabricated health data, CORS is open to all origins, and the HTTP server path never invokes the MCP server's stdio transport — the two modes are operationally isolated with no shared manager state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Restrict CORSMiddleware allow_origins to an env-var list (default: localhost). Wire /k8s/diagnostics to call self.mcp_server.diagnostics_manager.diagnose_cluster_health() and return real data. Remove the duplicate manager initialization in K8sPlatformApp.initialize() — it duplicates mcp_server.start()'s own init sequence. Document clearly that the stdio entry point (cli stdio) is the MCP path and the HTTP entry point is a monitoring/ops sidecar only.",
+    "test_plan": "Start the HTTP server against a kind cluster; assert /k8s/diagnostics returns a non-trivial dict with real node names. Assert that an OPTIONS preflight from an arbitrary origin is rejected when ALLOWED_ORIGINS is set to a specific domain."
+  },
+  {
+    "component_id": "k8s/rbac.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "rbac.yaml:20 — ClusterRole grants `\"get\", \"list\", \"watch\"` on `\"secrets\"` cluster-wide. rbac.yaml:47-53 — policy/podsecuritypolicies and extensions/ingresses are included (both deprecated/removed in k8s 1.25+). rbac.yaml:55-69 — ClusterRoleBinding binds the role at cluster scope with no namespace restriction.",
+    "diagnosis": "The service account has read access to every Secret in the entire cluster — a privilege escalation vector if the pod is compromised — and includes rules for removed API groups that will cause a warning on apply against 1.25+ clusters.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove `secrets` from the cluster-wide ClusterRole. If secret inspection is needed for security_scan, create a separate RoleBinding scoped to `mcp-kubernetes` namespace only for secrets. Remove the `policy` and `extensions` apiGroups blocks (they no longer exist in 1.25+). Consider downgrading from ClusterRole to Role for namespace-scoped operations and only keeping ClusterRole rules for truly cluster-scoped resources (nodes, namespaces, clusterroles).",
+    "test_plan": "Apply the updated rbac.yaml to a 1.28 cluster; assert `kubectl apply` produces no warnings about deprecated API groups. Run `kubectl auth can-i list secrets --as=system:serviceaccount:mcp-kubernetes:kubernetes-mcp-server-sa -n kube-system` and assert it returns 'no'."
+  },
+  {
+    "component_id": "enhanced:kubectl_logs",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "enhanced_tools.py:130-160 — Tool(name='kubectl_logs', ...) is defined with full inputSchema. Grep of src/mcp_server.py for 'enhanced_tools' or 'kubectl_logs' returns zero results — the module is never imported and the tool schema is never registered with the MCP server.",
+    "diagnosis": "kubectl_logs is a dead schema: it is defined in enhanced_tools.py but mcp_server.py does not import enhanced_tools, so the tool is never exposed to clients and the handler is never called.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add `from enhanced_tools import get_enhanced_kubectl_tools` and extend the list_tools() return with `+ get_enhanced_kubectl_tools()`. In handle_call_tool, add an elif branch for 'kubectl_logs' that calls self.kubectl_manager.get_logs(pod_name=arguments['pod_name'], namespace=arguments.get('namespace','default'), container=arguments.get('container'), tail=arguments.get('tail')). Implement kubectl_manager.get_logs() using core_v1_api.read_namespaced_pod_log().",
+    "test_plan": "After wiring, call the MCP server with tool name 'kubectl_logs' and a known pod name on a kind cluster; assert the response contains actual log lines. Assert that list_tools() includes kubectl_logs in its output."
+  }
+]

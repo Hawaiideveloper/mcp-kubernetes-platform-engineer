@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "status.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "status.sh:1 — '#!/bin/bash' with no 'set -euo pipefail'; status.sh:3 — 'if docker ps | grep -q k8s-mcp-server'; status.sh:5 — 'echo \"✓ Health: OK (Docker healthcheck passed)\"' (hardcoded assertion, not probed)",
+    "diagnosis": "status.sh lacks set -euo pipefail so any command failure is silently swallowed, and it prints a hardcoded health assertion rather than querying the actual Docker health status.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' after shebang. Replace the hardcoded health echo with: health=$(docker inspect --format='{{.State.Health.Status}}' k8s-mcp-server 2>/dev/null || echo 'unavailable'); echo \"Health: $health\". Remove the literal '✓ Health: OK' line.",
+    "test_plan": "Run status.sh against a stopped container and verify non-zero exit code and no false 'OK' output. Run against a healthy container and verify actual Docker health status is shown."
+  },
+  {
+    "component_id": "behavior:finding_dedup",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No dedup logic exists anywhere in src/; diagnostics_manager.py returns flat lists of issues with no grouping by root cause; monitoring_manager.py returns parallel lists of bottlenecks with no identity keys.",
+    "diagnosis": "There is no mechanism to group or deduplicate N findings that share the same root cause across multiple resources, so callers receive noisy repeated findings.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: FindingKey(kind: str, message_template: str, affected_resources: list[str]). Interface: def dedup_findings(findings: list[Finding]) -> list[Finding] groups by (kind, normalized_message) and merges affected_resources lists, keeping highest severity. Dependencies: hashlib for fingerprint, difflib.SequenceMatcher for fuzzy message similarity (threshold 0.85). Edge cases: same message different namespaces should remain separate; findings with no message should never merge. Implementation location: new src/finding_dedup.py, called by diagnostics_manager before returning results.",
+    "test_plan": "Unit test: inject 10 findings with identical (kind, message) across 10 pod names; assert output is 1 finding with 10 affected_resources. Second test: inject findings with dissimilar messages; assert no merging occurs."
+  },
+  {
+    "component_id": "enhanced:kubectl_get",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:15 — Tool(name='kubectl_get', ...); grep of entire repo for 'import enhanced_tools' or 'from enhanced_tools' returns zero matches outside enhanced_tools.py itself; src/mcp_server.py has no import of enhanced_tools (confirmed by grep returning no output)",
+    "diagnosis": "kubectl_get schema is defined in enhanced_tools.py but the module is never imported in mcp_server.py, so the tool is never registered with or callable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py, add: 'from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools'. In handle_list_tools(), extend the returned tools list with get_enhanced_kubectl_tools(). In handle_call_tool(), add: 'elif name == \"kubectl_get\": result = await self.kubectl_manager.get_resources(resource=arguments[\"resource\"], name=arguments.get(\"name\"), namespace=arguments.get(\"namespace\"), output_format=arguments.get(\"output_format\",\"yaml\"))'. Implement kubectl_manager.get_resources() using kubernetes Python client list APIs.",
+    "test_plan": "Call the 'kubectl_get' tool via the MCP test harness; confirm the handler is reached and a real API call (or mock) is dispatched. Confirm kubectl_get appears in the list_tools response."
+  },
+  {
+    "component_id": "mcp-tool:analyze_resource_usage",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:508-513 — routes to self.monitoring_manager.analyze_resource_usage(); src/monitoring_manager.py:59 — comment '# Stub implementation for different scopes'; monitoring_manager.py:199-203 — 'total_cores: 12, used_cores: 5.4' are literal constants; monitoring_manager.py:55 — 'timestamp: 2025-08-09T10:30:00Z' is a hardcoded past date; no kubernetes or metrics_server client is imported or called anywhere in monitoring_manager.py",
+    "diagnosis": "analyze_resource_usage routes to MonitoringManager which returns entirely hardcoded fake data with a past-dated timestamp; no real Kubernetes metrics API call is made.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Import kubernetes.client.CustomObjectsApi in monitoring_manager.py. For cluster/node scope call custom_objects_api.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes'). For namespace/pod scope call custom_objects_api.list_namespaced_custom_object('metrics.k8s.io','v1beta1',namespace,'pods'). Parse the response to build the analysis dict dynamically. Set timestamp from datetime.utcnow().isoformat(). Remove all hardcoded constant blocks.",
+    "test_plan": "Integration test against a real or kind cluster with metrics-server; assert returned cpu/memory values match kubectl top output. Unit test with a mocked CustomObjectsApi; assert no literal constants appear in output."
+  },
+  {
+    "component_id": "src/monitoring_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "monitoring_manager.py:107-113 — log_summary hardcodes 'error_count: 23, warning_count: 67'; monitoring_manager.py:115-128 — top_errors list is static with dates '2025-08-09'; monitoring_manager.py:258-272 — _analyze_cluster_performance returns literal 'avg_response_time: 45ms'; monitoring_manager.py — zero imports of kubernetes, subprocess, or any observability client",
+    "diagnosis": "MonitoringManager implements no real logic in any method — all three public methods (analyze_resource_usage, analyze_logs, performance_analysis) and all private helpers return hardcoded fake data with no k8s API calls.",
+    "fix_class": "rewrite",
+    "proposed_fix": "For analyze_logs: use kubernetes.client.CoreV1Api.read_namespaced_pod_log(pod, namespace, since_seconds=parse_time_range(time_range)) to fetch real logs; apply log_level and search_pattern filters in Python. For performance_analysis: call metrics-server custom objects API. Replace all nine stub helper methods with real API calls. Remove hardcoded literal dicts entirely.",
+    "test_plan": "Run against a live cluster; verify returned timestamps are within 60 seconds of now. Run with a pod name that does not exist; verify an error dict is returned (not fake data). Check that no literal '2025-08-09' or integer constants appear in any output."
+  },
+  {
+    "component_id": "enhanced:helm_status",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:604 — Tool(name='helm_status', ...) defined in get_enhanced_helm_tools(); grep of repo for 'import enhanced_tools' or 'from enhanced_tools' returns zero matches outside enhanced_tools.py; src/mcp_server.py — no import of enhanced_tools, no 'helm_status' in handle_call_tool dispatch",
+    "diagnosis": "helm_status schema is defined in enhanced_tools.py but the module is never imported in mcp_server.py so the tool is dead code unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py add: 'from enhanced_tools import get_enhanced_helm_tools'. In handle_list_tools() extend the tools list with get_enhanced_helm_tools(). In handle_call_tool() add: 'elif name == \"helm_status\": result = await self.helm_manager.helm_status(release_name=arguments[\"release_name\"], namespace=arguments.get(\"namespace\"), output_format=arguments.get(\"output_format\",\"table\"))'. Implement helm_manager.helm_status() using subprocess(['helm','status',release_name,'-o',output_format]).",
+    "test_plan": "List MCP tools and confirm 'helm_status' appears. Call it with a known release name; verify the response contains actual helm status output. Call with a non-existent release; verify a non-zero error is returned rather than fake data."
+  },
+  {
+    "component_id": "src/diagnostics_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "diagnostics_manager.py:55 — comment '# Stub implementation for different check types'; diagnostics_manager.py:110 — 'results.update({\"status\": \"CrashLoopBackOff\", \"restart_count\": 5, ...})' applied unconditionally regardless of actual pod_name; diagnostics_manager.py:217-275 — _check_nodes/_check_pods/_check_services/_check_networking/_check_storage all return hardcoded dict literals with no kubernetes client calls",
+    "diagnosis": "DiagnosticsManager never calls the Kubernetes API; all diagnostic results are hardcoded fake data, meaning every pod is always reported as CrashLoopBackOff regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes CoreV1Api instance at __init__. In troubleshoot_pod_issues call core_v1_api.read_namespaced_pod(pod_name, namespace) and core_v1_api.list_namespaced_event(namespace, field_selector=f'involvedObject.name={pod_name}'). In _check_nodes call core_v1_api.list_node(). In _check_pods call core_v1_api.list_namespaced_pod(namespace). Remove all hardcoded results dicts.",
+    "test_plan": "Call troubleshoot_pod_issues with a Running pod; assert status field is 'Running' not 'CrashLoopBackOff'. Call with a non-existent pod; assert a 404-derived error is returned. Run _check_nodes against a single-node kind cluster; assert total_nodes is 1."
+  },
+  {
+    "component_id": "setup-vscode-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "setup-vscode-k8s.sh:77 — 'with open(\"/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json\", ...' (hardcoded path with mangled username, missing dot before com); setup-vscode-k8s.sh:8 — 'VSCODE_SETTINGS_DIR=\"$HOME/Library/Application Support/Code/User\"' correctly uses $HOME but the inline Python block on line 77/89 ignores it and uses a different broken literal path; setup-vscode-k8s.sh:33 — 'read -p' makes script non-interactive in CI",
+    "diagnosis": "The embedded Python block hardcodes a mangled path '/Users/hawaiidevelopergmail.com/...' instead of using $HOME, which will always fail with FileNotFoundError on every machine including the author's.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the literal hardcoded paths in the Python heredoc with: 'import os; settings_path = os.path.expanduser(\"~/Library/Application Support/Code/User/settings.json\")' and use settings_path in both open() calls. Also add a '--non-interactive' flag that skips the read -p prompt and defaults to abort, for CI usage.",
+    "test_plan": "Run the script on a macOS machine with VS Code installed; verify settings.json is read and written from the correct $HOME path. Run in a CI environment with --non-interactive; verify the script exits 1 without hanging on read."
+  },
+  {
+    "component_id": "behavior:analyzer_hpa",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No HPAAnalyzer exists in src/; no HPA-related analysis appears in diagnostics_manager.py, monitoring_manager.py, or k8s_manager.py; Kubernetes HPA object has spec.minReplicas, spec.maxReplicas, status.currentMetrics, status.conditions fields that cover all three scenarios.",
+    "diagnosis": "No HPA analysis capability exists; the PRD must specify how to detect and surface the three failure modes: missing metrics source, replicas capped at max, and replicas stuck at zero despite load.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: HPAFinding(name, namespace, condition: Literal['no_metrics','capped_at_max','never_scaling'], current_replicas, max_replicas, metric_source, last_scale_time). Interface: async def analyze_hpa(namespace=None) -> list[HPAFinding]. Implementation: call autoscaling_v2_api.list_namespaced_horizontal_pod_autoscaler(namespace). For each HPA: (a) if status.conditions contains type=ScalingActive reason=FailedGetScale -> no_metrics; (b) if currentReplicas==maxReplicas for >threshold_minutes -> capped_at_max; (c) if lastScaleTime is None or older than staleness_threshold and currentReplicas==minReplicas -> never_scaling. Edge cases: HPA with external metrics, HPA v1 vs v2 schema differences, missing lastScaleTime on new HPAs.",
+    "test_plan": "Unit test with mocked autoscaling API responses covering each of the three conditions. Integration test with a kind cluster HPA targeting a deployment with no metrics-server; assert no_metrics finding is returned."
+  },
+  {
+    "component_id": "src/github_issues_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "github_issues_manager.py:56 — 'self.github_token = None  # Add GitHub token for higher rate limits' (token is hardcoded to None, never read from env or config); github_issues_manager.py:488 — 'search_terms = \" OR \".join([f\"title LIKE \\'%{term}%\\' OR body LIKE \\'%{term}%\\'\" for term in key_terms])' with f-string interpolation directly into SQL (SQL injection via key_terms); github_issues_manager.py:320 — 'issue[\"reactions\"][\"total_count\"]' will raise KeyError if GitHub returns issue without reactions field",
+    "diagnosis": "GitHubIssuesManager has three distinct bugs: GitHub token is hardwired to None (always unauthenticated), find_similar_issues constructs SQL by string interpolation creating a SQL injection vector, and _extract_issue_data will crash on any issue missing the 'reactions' key.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Token: replace line 56 with 'self.github_token = os.getenv(\"GITHUB_TOKEN\") or getattr(config, \"github_token\", None)'. SQL injection: replace the f-string SQL build in find_similar_issues with parameterized queries using '?' placeholders and pass key_terms as params list. KeyError: replace line 320 with 'issue.get(\"reactions\", {}).get(\"total_count\", 0)'.",
+    "test_plan": "Set GITHUB_TOKEN env var; verify Authorization header is sent in HTTP requests. Call find_similar_issues with a key_term containing a single quote (e.g. \"O'Reilly\"); verify no SQL error. Pass a mock issue dict without 'reactions' key to _extract_issue_data; verify it completes without exception."
+  }
+]

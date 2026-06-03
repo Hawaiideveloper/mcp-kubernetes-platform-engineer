@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:execute_remediation",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:166-210 — execute_remediation returns a hardcoded dict with string literals such as 'Analyzed pod events and logs' and 'Would restart pod with corrected image'; no kubernetes client import exists in the file (only asyncio, json, typing, config, logger are imported at lines 5-10)",
+    "diagnosis": "execute_remediation never calls any real Kubernetes API; it returns fabricated action strings based on string-matching the issue_type parameter, giving callers false confidence that remediation occurred.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'from kubernetes import client, config as k8s_config' import. In initialize(), call k8s_config.load_incluster_config() or load_kube_config(). In execute_remediation(), for pod_restart_loop call CoreV1Api().delete_namespaced_pod(); for node_not_ready exec kubelet restart via CoreV1Api().connect_get_namespaced_pod_exec(). Propagate dry_run flag to each API call. Return actual API responses, not strings.",
+    "test_plan": "Unit test with mocked kubernetes.client: assert delete_namespaced_pod is called with correct pod/namespace when dry_run=False and NOT called when dry_run=True. Integration test against a kind cluster: introduce a crashloop pod, call execute_remediation, assert pod restarts within 30s."
+  },
+  {
+    "component_id": "behavior:iteration_state_machine",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No file in src/ implements a review->PRD->split->implement->verify loop or any state machine. The mcp_server.py dispatch table (lines 489-610) handles single-shot tool calls only.",
+    "diagnosis": "There is no iteration state machine design anywhere in the codebase; the behavior must be designed from scratch for the auto-remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: RemediationSession(id, state: Enum[REVIEW|PRD|SPLIT|IMPLEMENT|VERIFY|DONE|FAILED], issue_snapshot, plan_steps: List[Step], current_step_idx, attempts, created_at, updated_at). Interface: async def advance(session: RemediationSession) -> RemediationSession. Stop conditions: state==DONE (all steps verified), state==FAILED (attempts > max_retries or verify detects regression), timeout exceeded. Persist sessions in SQLite. Each state transition is an idempotent async function callable independently for resumability.",
+    "test_plan": "Unit test each state transition function in isolation with mocked k8s client. Integration test: inject a known issue, run the state machine to completion, assert final state is DONE and cluster health check passes. Test FAILED path by injecting an irrecoverable condition and asserting max_retries stops the loop."
+  },
+  {
+    "component_id": "mcp-tool:get_recommendations",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:91-163 — get_recommendations returns hardcoded recommendation dicts (e.g. line 116: 'title': 'Optimize Resource Requests and Limits') constructed purely from the focus_areas list; no kubernetes client import exists (lines 5-10), so no actual cluster state is read.",
+    "diagnosis": "get_recommendations produces static, generic advice independent of actual cluster state; the cluster_context parameter is accepted but completely ignored, and no real API calls are made.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Initialize kubernetes client in KubernetesManager.initialize(). In get_recommendations(), call AppsV1Api().list_deployment_for_all_namespaces() to find deployments missing resource requests, AutoscalingV1Api().list_horizontal_pod_autoscaler_for_all_namespaces() to find unscaled workloads, and NetworkingV1Api().list_network_policy_for_all_namespaces() for segmentation gaps. Build recommendations from actual API findings, not static strings.",
+    "test_plan": "Mock kubernetes API responses with one deployment missing resources and one without HPA. Assert returned recommendations reference the actual deployment names and namespaces. Assert empty cluster returns empty recommendation lists, not generic static items."
+  },
+  {
+    "component_id": "setup-vscode-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "setup-vscode-k8s.sh:77 — hardcoded path '/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json' (missing '@' in email-derived path fragment); line 89 repeats same broken path; line 8 correctly uses $HOME but the embedded Python heredoc ignores it.",
+    "diagnosis": "The embedded Python script uses a hardcoded incorrect filesystem path instead of the shell variable SETTINGS_FILE, so the script will always fail with FileNotFoundError on any machine other than the one it was developed on (and even there, the path is malformed).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Pass SETTINGS_FILE as an argument or environment variable into the Python heredoc: python3 -c \"import json, os, sys; sf=os.environ['SETTINGS_FILE']; ...\" with SETTINGS_FILE=\"$SETTINGS_FILE\" in the environment. Remove the hardcoded path. Also add 'set -euo pipefail' before line 1 (it is present at line 3 but only after the shebang; confirm it is line 3 not after sourced code).",
+    "test_plan": "Run the script on a test machine where $HOME differs from the hardcoded value. Assert the script reads and writes $SETTINGS_FILE not the hardcoded path. Run with shellcheck to confirm no unquoted variables or path issues."
+  },
+  {
+    "component_id": "behavior:five_min_watchdog",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No watchdog implementation exists anywhere in src/. The mcp_server.py handles one-shot tool calls (lines 489-610) with no background loop, timer, or health-gate logic.",
+    "diagnosis": "The five-minute watchdog behavior must be designed from scratch; the PRD should define the heal-detection contract precisely.",
+    "fix_class": "design",
+    "proposed_fix": "Implement as an asyncio task: async def watchdog_loop(session, interval=300). After each remediation step, poll: (1) target pod readiness via CoreV1Api().read_namespaced_pod_status() — all containers must be Ready==True; (2) Event stream must show zero new Warning events for the target resource in the last 60s (CoreV1Api().list_namespaced_event with fieldSelector=involvedObject.name). Declare healed only when both conditions hold for two consecutive polls. On timeout (5 min), mark session FAILED. Emit a structured log entry with evidence for DPO extraction.",
+    "test_plan": "Unit test: mock pod status returning Ready=False then Ready=True; assert watchdog emits healed=True only after the second Ready=True poll. Integration test: deploy a crashloop pod, trigger remediation, assert watchdog resolves within 5 min on a kind cluster. Test timeout path: assert FAILED is emitted when pod never becomes ready."
+  },
+  {
+    "component_id": "README.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "README.md:58 — 'Production Ready: Successfully deployed in both Docker containers and Kubernetes clusters'; README.md:204 — 'Live Issue Database — Monitors 17 major Kubernetes repositories with 45,720+ indexed issues'; README.md:113-133 — lists specific live cluster IP 172.100.10.107:30001 and claims '1/1 replicas ready'. Actual code: k8s_manager.py:29 comment 'For now, we will use a stub implementation'; k8s_manager.py:49 comment 'Stub implementation'; no kubernetes client imported.",
+    "diagnosis": "The README makes at least five production-readiness claims that are directly contradicted by stub-only manager code; users deploying based on these claims will receive hardcoded fake data from every tool call.",
+    "fix_class": "document",
+    "proposed_fix": "Add a prominent 'Development Status' section at the top of README.md stating all manager methods are currently stubs returning synthetic data and no real Kubernetes API calls are made. Remove or gate the 'Production Ready' badge and the specific live IP/pod status claims until real implementations exist. Replace 45,720+ issue count claim with accurate current count or remove it.",
+    "test_plan": "Review README diff against implemented code after each manager is rewritten. Automated doc-lint check: grep for 'Production Ready' and 'Live Status' badges and fail CI if any manager initialize() still contains the stub comment."
+  },
+  {
+    "component_id": "behavior:dpo_pair_extraction",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No DPO extraction code exists in src/. The github_issues_manager.py exists but contains no pair-generation or issue-body emission logic for training data.",
+    "diagnosis": "The DPO pair extraction behavior is entirely unimplemented and must be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: DPOPair(session_id, prompt: str, chosen_action: RemediationStep, rejected_actions: List[RemediationStep], evidence: Dict[str, Any]). Interface: def extract_dpo_pairs(session: RemediationSession) -> List[DPOPair]. Implementation: for each step where alternatives were evaluated, the taken path (healed=True) is chosen; untaken paths or paths that led to regression are rejected. Emit as GitHub issue body with sections: ## Prompt, ## Chosen, ## Rejected (list), ## Evidence (API response snippets). Gate extraction on session.state==DONE to avoid partial data.",
+    "test_plan": "Unit test: build a synthetic RemediationSession with two steps, one with alternatives; assert extract_dpo_pairs returns exactly one pair with correct chosen/rejected split. Integration test: run a full session on kind cluster and assert the emitted issue body parses as valid JSON DPO format."
+  },
+  {
+    "component_id": "CHANGELOG.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "CHANGELOG.md:71 — '[1.0.0] - 2025-09-01 PRODUCTION READY RELEASE'; CHANGELOG.md:83-88 — claims REST endpoints GET /health, GET /k8s/diagnostics, GET /k8s/monitoring, GET /k8s/security are 'All REST endpoints operational'; CHANGELOG.md:103 — 'Complete test infrastructure with 390 comprehensive tests'; CHANGELOG.md:328 — 'Phase 3: Production Readiness COMPLETE ... Comprehensive test suite (390 tests)'. Actual code: k8s_manager.py:29 'stub implementation'; no HTTP REST server exists in mcp_server.py (it is stdio-based, lines 640-648); no 390-test suite is present (tests directory not audited by this agent but CHANGELOG claims conflict with stub code).",
+    "diagnosis": "CHANGELOG v1.0.0 and v1.1.0 entries falsely claim production REST endpoints are operational, 390 tests pass, and real Kubernetes integration exists; all three claims are contradicted by the stub-only codebase.",
+    "fix_class": "document",
+    "proposed_fix": "Rewrite [1.0.0] and [1.1.0] entries to accurately state that the release delivers MCP tool stubs with schema definitions and no real k8s client calls. Add a [KNOWN LIMITATIONS] section at the top listing: (1) all managers return synthetic data, (2) no HTTP REST server (stdio only), (3) test count to be verified. Do not list Phase 3 as COMPLETE until real implementation ships.",
+    "test_plan": "After rewrite, cross-reference each CHANGELOG claim against a grep of source code. CI check: any CHANGELOG entry marked COMPLETE must have a corresponding passing test tagged with the feature name."
+  },
+  {
+    "component_id": "setup-vscode-nodeport.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "setup-vscode-nodeport.sh:13-14 — CLUSTER_IP and NODEPORT are set by running kubectl commands before set -euo pipefail takes effect (set -euo pipefail is at line 6, but kubectl at lines 13-14 runs without checking if kubectl is available or if the cluster is reachable); line 50 — heredoc uses unquoted EOF (EOF not 'EOF') so $CLUSTER_IP and $NODEPORT expand inside the heredoc, injecting shell-variable values directly into the JSON written to /tmp/mcp_nodeport_config.json, creating a path injection risk if CLUSTER_IP contains special characters.",
+    "diagnosis": "The NodePort script does not validate that CLUSTER_IP and NODEPORT are non-empty before using them in a JSON config file written to /tmp, and the unquoted heredoc allows variable expansion that could corrupt the JSON if the cluster IP contains unexpected characters.",
+    "fix_class": "rewrite",
+    "proposed_fix": "After lines 13-14 add: [[ -z \"$CLUSTER_IP\" ]] && { echo 'ERROR: could not determine cluster IP'; exit 1; }. Validate NODEPORT is numeric: [[ \"$NODEPORT\" =~ ^[0-9]+$ ]] || { echo 'ERROR: invalid nodeport'; exit 1; }. Use printf '%s' to write JSON safely rather than an unquoted heredoc. Write config to a temp file with mktemp rather than a predictable /tmp path.",
+    "test_plan": "Run with no cluster available and assert non-zero exit with clear error. Run with a mocked CLUSTER_IP containing a double-quote character and assert the script exits with error rather than writing malformed JSON."
+  },
+  {
+    "component_id": "stop.sh",
+    "kind": "shell",
+    "severity": "low",
+    "evidence": "stop.sh:1-5 — no shebang is technically #!/bin/bash at line 1, set -euo pipefail is absent; the '|| true' on lines 3-4 swallows all errors silently including unexpected ones; the script does not verify Docker is installed before calling docker stop.",
+    "diagnosis": "stop.sh lacks set -euo pipefail and performs no error distinction, so a missing Docker binary or daemon crash produces the same silent success output as a clean stop, making automated healthcheck pipelines unable to detect failures.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' after shebang. Replace '|| true' with explicit checks: 'docker stop k8s-mcp-server 2>/dev/null; ret=$?; if [[ $ret -ne 0 && $ret -ne 1 ]]; then echo \"ERROR: docker stop failed ($ret)\"; exit $ret; fi'. Check 'command -v docker >/dev/null 2>&1 || { echo \"docker not found\"; exit 1; }' before any docker call.",
+    "test_plan": "Run stop.sh when Docker daemon is not running; assert non-zero exit code. Run stop.sh when container does not exist; assert exit 0 (idempotent). Run stop.sh when container is running; assert container is stopped and removed."
+  }
+]

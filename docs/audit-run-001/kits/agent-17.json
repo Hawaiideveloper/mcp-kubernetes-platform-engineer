@@ -1,0 +1,55 @@
+{
+  "agent_id": 17,
+  "components": [
+    {
+      "id": "behavior:worklist_sqlite",
+      "kind": "behavior",
+      "focus": "SQLite worklist for non-colliding agent claims; atomic claim/release"
+    },
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    },
+    {
+      "id": "src/monitoring_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:get_cluster_info",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "k8s/configmap.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:search_github_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "tests/production/test_cluster_management.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "src/main.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "k8s/rbac.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "enhanced:kubectl_logs",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    }
+  ]
+}

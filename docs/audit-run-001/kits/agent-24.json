@@ -1,0 +1,55 @@
+{
+  "agent_id": 24,
+  "components": [
+    {
+      "id": "k8s/secret.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "src/security_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:kubectl_logs",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:analyzer_ingress",
+      "kind": "behavior",
+      "focus": "IngressAnalyzer: no backend, TLS expiry, host conflict"
+    },
+    {
+      "id": "behavior:analyzer_node",
+      "kind": "behavior",
+      "focus": "NodeAnalyzer: NotReady, disk pressure, memory pressure, PID pressure"
+    },
+    {
+      "id": "mcp-port-forward.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/namespace.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:find_kubectl_commands",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/monitoring_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:diagnose_cluster_health",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

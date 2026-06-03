@@ -1,0 +1,55 @@
+{
+  "agent_id": 43,
+  "components": [
+    {
+      "id": "src/main.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:get_best_practices",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/k8s_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:orphan_job_cleanup",
+      "kind": "behavior",
+      "focus": "deterministic fix for \"saw a job the controller did not create\""
+    },
+    {
+      "id": "k8s/namespace.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "update.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:vcluster_sandbox",
+      "kind": "behavior",
+      "focus": "spin up vcluster, apply candidate fix, smoke test, tear down. Lifecycle ~10s"
+    },
+    {
+      "id": "mcp-tool:performance_analysis",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:restart_first_ladder",
+      "kind": "behavior",
+      "focus": "design the ladder: rollout restart -> wait 5m -> escalate. State machine."
+    },
+    {
+      "id": "mcp-tool:find_kubectl_commands",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

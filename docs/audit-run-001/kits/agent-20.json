@@ -1,0 +1,55 @@
+{
+  "agent_id": 20,
+  "components": [
+    {
+      "id": "mcp-tool:check_network_connectivity",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "coming_soon.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "mcp-tool:get_issue_statistics",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "enhanced:helm_uninstall",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/main.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:helm_install",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:analyzer_cronjob",
+      "kind": "behavior",
+      "focus": "CronJobAnalyzer: missed schedules, orphaned jobs (saw the manual-cw5-003 thing)"
+    },
+    {
+      "id": "src/kubectl_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:event_stream_watcher",
+      "kind": "behavior",
+      "focus": "watch k8s events stream, classify, route to remediation queue"
+    },
+    {
+      "id": "k8s/secret.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:55 — '# Stub implementation for different check types'; lines 218-275 — _check_nodes, _check_pods, _check_services, _check_networking, _check_storage all return hardcoded static dicts with no k8s client calls",
+    "diagnosis": "diagnose_cluster_health dispatches to stub sub-methods that return fixed fabricated data (e.g., exactly 3 nodes, 45 pods) regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject KubernetesManager (which wraps kubernetes-client) into DiagnosticsManager. Replace _check_nodes with await self.k8s.core_v1.list_node(). Replace _check_pods with list_namespaced_pod(namespace) or list_pod_for_all_namespaces(). Replace _check_services, _check_networking, _check_storage similarly. Remove all hardcoded return dicts.",
+    "test_plan": "Unit-test with a mocked kubernetes client returning known fixture data and assert the result matches. Integration-test against a kind cluster: create a NotReady node via taint and verify diagnose_cluster_health reports it."
+  },
+  {
+    "component_id": "src/mcp_server.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:73 — 'self.kubectl_manager = KubectlManager(...)'; src/mcp_server.py:74 — 'self.helm_manager = HelmManager(...)'; grep of entire file shows zero calls to self.kubectl_manager.* or self.helm_manager.* after instantiation",
+    "diagnosis": "KubectlManager and HelmManager are instantiated in __init__ but never referenced in handle_call_tool or anywhere else in the server — dead weight that also means all kubectl/helm tool schemas from enhanced_tools.py are unreachable.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Add tool-dispatch branches in handle_call_tool for kubectl_* and helm_* tool names (kubectl_get, kubectl_describe, install_helm_chart, etc.). Route each to the corresponding self.kubectl_manager or self.helm_manager method. Also ensure handle_list_tools returns the enhanced tool list by calling get_enhanced_kubectl_tools() and get_enhanced_helm_tools() from enhanced_tools.py.",
+    "test_plan": "Call kubectl_get via the MCP test harness with resource='pods' and assert the response comes from KubectlManager._run_kubectl rather than returning 'Unknown tool'. Verify helm list_helm_releases similarly."
+  },
+  {
+    "component_id": "mcp-tool:troubleshoot_pod_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:110-148 — '# Stub implementation - would query actual pod status'; hardcoded status='CrashLoopBackOff', restart_count=5, hardcoded log lines with timestamp '2025-08-09', hardcoded events referencing ImagePullBackOff regardless of the pod_name argument",
+    "diagnosis": "troubleshoot_pod_issues always returns the same fabricated crash data and logs for every pod name passed; no kubernetes client call is made to look up the actual pod.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Call kubernetes_client.CoreV1Api().read_namespaced_pod(pod_name, namespace) to get real status. Fetch actual logs via read_namespaced_pod_log. Fetch events via list_namespaced_event with field_selector involving_object.name=pod_name. Remove all hardcoded result.update({...}) blocks.",
+    "test_plan": "Integration-test: create a healthy pod and a CrashLoopBackOff pod in a kind cluster. Call troubleshoot_pod_issues on each and assert status differs. Unit-test with mocked client returning controlled fixtures."
+  },
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "K8S_ANNOUNCEMENT.md:12 — 'Continuous Learning Engine … Automatically updates its knowledge base every hour'; K8S_ANNOUNCEMENT.md:17 — 'Production-Ready Kubernetes Deployment'; K8S_ANNOUNCEMENT.md:25 — '1,029+ official Kubernetes reference docs integrated for live search'; K8S_ANNOUNCEMENT.md:29 — 'Automated Remediation & Diagnostics … Deep cluster health checks … security scanning'",
+    "diagnosis": "Every major functional claim in the announcement is false or grossly overstated: diagnostics return hardcoded data, documentation indexing depends on runtime web scraping that silently fails if offline, and remediation is unimplemented stubs.",
+    "fix_class": "document",
+    "proposed_fix": "Replace marketing language with accurate capability status table: (1) GitHub issues DB — real SQLite/aiohttp fetch, functional; (2) Documentation search — requires network at startup, may be empty; (3) Cluster diagnostics — STUB, returns fake data; (4) Remediation — STUB. Remove '1,029+ docs' claim and 'production-ready' language until stubs are replaced.",
+    "test_plan": "Review updated doc against actual code; run the server offline and verify documentation_db size; invoke diagnose_cluster_health and confirm returned node names match real cluster nodes."
+  },
+  {
+    "component_id": "mcp-tool:search_documentation",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/documentation_manager.py:40-48 — initialize() calls _build_documentation_index() which fires aiohttp requests to kubernetes.io; if network is unavailable or rate-limited, documentation_db remains empty (line 66: 'Documentation index built with 0 entries'); search_documentation at line 337 returns [] silently with no warning to caller",
+    "diagnosis": "search_documentation silently returns empty results whenever the documentation index is empty, which happens on every offline startup or network failure, with no error surfaced to the MCP caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a bundle of pre-scraped docs as a static JSON file committed to the repo. In initialize(), try network fetch and fall back to static bundle if fetch yields 0 entries. In search_documentation, if documentation_db is empty, include a 'warning' key in the result explaining the index is unavailable rather than returning a bare empty list.",
+    "test_plan": "Unit-test search_documentation with an empty documentation_db and assert a warning key is present in the response. Integration-test: block network (or use mock) and verify fallback static bundle is used."
+  },
+  {
+    "component_id": "src/helm_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/helm_manager.py:125-127 — 'if repository: repo_result = await self.add_helm_repository(repository, repository)'; passes repository URL as both the name and the URL to add_helm_repository, meaning the repo name will be something like 'https://charts.example.com' rather than a short label",
+    "diagnosis": "install_helm_chart passes the repository URL string as the Helm repo name, which will either fail the 'helm repo add' command or create an unusably-named repo entry.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Accept an explicit repo_name parameter in install_helm_chart (separate from the URL). Change the call to: repo_result = await self.add_helm_repository(repo_name or _derive_name(repository), repository). Add helper _derive_name() that extracts a slug from the URL (e.g., 'charts-example-com').",
+    "test_plan": "Unit-test install_helm_chart with repository='https://charts.bitnami.com/bitnami' and assert helm repo add receives two distinct arguments (name vs URL). Mock subprocess.run and verify the command string."
+  },
+  {
+    "component_id": "GettingStarted.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "GettingStarted.md:17 — 'curl -fsSL https://raw.githubusercontent.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/main/start.sh | bash'; GettingStarted.md:30-34 — 'curl http://localhost:3001/health'; GettingStarted.md:44-47 — '@k8s-platform-engineer diagnose why my pods are crashing'",
+    "diagnosis": "The guide references a start.sh curl-pipe-bash install, HTTP health endpoint on port 3001, and VS Code Copilot @-mention integration — none of which exist: the server is stdio-only (mcp_server.py:640), there is no HTTP server, no health endpoint, and no Copilot extension glue code in the repo.",
+    "fix_class": "document",
+    "proposed_fix": "Replace Docker/curl section with actual stdio MCP startup: 'python -m uvicorn' or 'python src/main.py'. Remove all references to port 3001 and /health. Replace Copilot @-mention examples with correct MCP client config JSON. Add a note that VS Code integration requires mcp-client configuration pointing to the stdio process.",
+    "test_plan": "Follow the updated guide step-by-step in a clean environment and verify the MCP server starts successfully and responds to a tool call via stdin/stdout."
+  },
+  {
+    "component_id": "behavior:analyzer_network_policy",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No NetPolAnalyzer class exists anywhere in the repo (grep confirmed); diagnostics_manager.py:255-264 — _check_networking returns a hardcoded dict with 'network_policies: 5' and no real analysis",
+    "diagnosis": "Design task: implement a NetworkPolicyAnalyzer that detects orphan NetworkPolicy objects and denied pod-to-pod flows using the real k8s API.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: NetworkPolicyFinding(policy_name, namespace, issue_type: Literal['orphan','denied_flow'], affected_pods: List[str], evidence: str). Interface: async def analyze(namespace: Optional[str]) -> List[NetworkPolicyFinding]. Dependencies: kubernetes.NetworkingV1Api.list_namespaced_network_policy(), CoreV1Api.list_namespaced_pod(). Logic: (1) for each NetworkPolicy, match its podSelector against pods — if 0 pods match, emit 'orphan'; (2) cross-reference ingress/egress rules against running pod labels to find policies that block known flows. Edge cases: empty namespace (scan all), wildcard selectors, policies using namespaceSelector.",
+    "test_plan": "Unit-test with mocked API: one policy with no matching pods => 1 orphan finding. Integration-test in kind cluster: deploy two pods, apply a NetworkPolicy blocking traffic between them, assert the analyzer returns a denied_flow finding."
+  },
+  {
+    "component_id": "mcp-tool:search_github_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/github_issues_manager.py:487-489 — find_similar_issues builds SQL with f-string interpolation: 'search_terms = \" OR \".join([f\"title LIKE \\'%{term}%\\' OR body LIKE \\'%{term}%\\'\" for term in key_terms])'; then executes via db.execute(sql, (max_results,)) where key_terms are inserted directly into the SQL string",
+    "diagnosis": "find_similar_issues (called from the find_similar_issues tool) interpolates user-derived key_terms directly into the SQL query string, creating a SQL injection vulnerability.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Refactor find_similar_issues to build a parameterized query: use 'WHERE title LIKE ? OR body LIKE ?' repeated for each term using OR, and pass all term values as SQL parameters. Example: placeholders = ' OR '.join(['(title LIKE ? OR body LIKE ?)'] * len(key_terms)); params = [val for t in key_terms for val in (f'%{t}%', f'%{t}%')]; params.append(max_results).",
+    "test_plan": "Unit-test with error_message=\"'; DROP TABLE github_issues;--\" and verify the query does not corrupt the database. Verify resulting SQL uses only ? placeholders."
+  },
+  {
+    "component_id": "behavior:analyzer_service",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "No ServiceAnalyzer class exists in the repo; diagnostics_manager.py:244-253 — _check_services returns hardcoded counts (total_services: 15, issues: []) with no k8s API calls",
+    "diagnosis": "Design task: implement a ServiceAnalyzer that detects services with no endpoints and selector mismatches against running pods.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ServiceFinding(service_name, namespace, issue_type: Literal['no_endpoints','selector_mismatch'], detail: str). Interface: async def analyze(namespace: Optional[str]) -> List[ServiceFinding]. Dependencies: CoreV1Api.list_namespaced_service(), CoreV1Api.list_namespaced_endpoints(), CoreV1Api.list_namespaced_pod(). Logic: (1) for each Service with a non-empty selector, fetch its Endpoints object — if subsets is empty or None, emit 'no_endpoints'; (2) independently match service selector labels against running pod labels — if zero pods match but endpoints also zero, emit 'selector_mismatch' with the divergent label keys. Edge cases: headless services (ClusterIP=None, skip endpoint check), ExternalName services (skip), services in terminating namespace.",
+    "test_plan": "Unit-test: mock a Service with selector {app: foo} and no matching pods => selector_mismatch finding. Integration-test in kind: deploy a Service pointing to a non-existent label, assert ServiceAnalyzer returns a finding with issue_type='no_endpoints'."
+  }
+]

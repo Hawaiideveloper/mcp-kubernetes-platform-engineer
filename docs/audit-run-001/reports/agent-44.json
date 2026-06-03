@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "tests/production/test_security_compliance.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/production/test_security_compliance.py:127 — `security_manager.resolve_privileged_pod_violation = AsyncMock(return_value=mock_resolution)` then line 130 `resolution = await security_manager.resolve_privileged_pod_violation(security_context)`. Pattern repeated at lines 255, 376, 505, 651, 762, 897.",
+    "diagnosis": "Every test in this file mocks the method it is testing onto the manager object and then calls that same mock, so the tests verify mock round-trips rather than any real behavior; no production code path is exercised.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace AsyncMock self-assignment pattern with actual calls to SecurityManager methods. Add a real (or subprocess-stubbed) k8s client in conftest security_manager fixture. Each test should call `await security_manager.<real_method>(context)` and assert on the structure that the real implementation returns, not on a hand-crafted dict.",
+    "test_plan": "Run pytest tests/production/test_security_compliance.py with no monkeypatching of the method under test; all 25 tests should hit real SecurityManager code and pass or fail meaningfully. Confirm with coverage that SecurityManager methods appear in the coverage report."
+  },
+  {
+    "component_id": "behavior:five_min_watchdog",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No watchdog implementation exists anywhere in src/; grep for 'watchdog', 'heal', 'five_min' returns zero results in src/.",
+    "diagnosis": "The five-minute watchdog behavior described in the PRD does not exist; there is no loop, scheduler, or health-check reconciler in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Add `src/watchdog.py` with class `FiveMinuteWatchdog`. Data model: `WatchdogState { last_run: datetime, issues_found: list[str], issues_resolved: list[str] }`. Interface: `async def run_cycle(k8s_manager, diagnostics_manager) -> WatchdogState`. Cycle: (1) call `diagnostics_manager.diagnose_cluster_health()`, (2) for each warning compare against previous state, (3) attempt auto-remediation via `k8s_manager.execute_remediation()`, (4) re-run health check to confirm resolution (readiness probe passes, zero new warnings). Schedule via `asyncio.create_task` with 300s sleep in `mcp_server.start()`.",
+    "test_plan": "Unit test: inject a mock diagnostics_manager that returns a warning on first call and clean on second; assert WatchdogState.issues_resolved contains the warning. Integration test: run two cycles against a real (kind) cluster with a broken pod; verify pod is remediated by cycle 2."
+  },
+  {
+    "component_id": "VSCODE_K8S_INTEGRATION.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "VSCODE_K8S_INTEGRATION.md:56 — `curl http://172.100.10.107:30001/health`; VSCODE_K8S_INTEGRATION.md:244 — `{\"status\":\"healthy\",...}` success indicator. The active entry point src/mcp_server.py uses stdio transport (line 640: `async with stdio_server()`) with no HTTP server or /health route; src/main.py has a /health route at line 80 but that file is not the active entry point.",
+    "diagnosis": "The doc claims a /health HTTP endpoint accessible via NodePort and curl, but the production entry point (mcp_server.py) is stdio-only with no HTTP listener, making those instructions false and the stated success indicators unreachable.",
+    "fix_class": "document",
+    "proposed_fix": "Either (a) update VSCODE_K8S_INTEGRATION.md to remove all curl /health references and replace Method 1 NodePort section with a note that the server is stdio-only (no HTTP port), or (b) wire src/main.py (which has the HTTP server) as the real entry point, add a /health handler that queries the cluster, and update the doc to reference main.py. Hardcoded IP 172.100.10.107 must also be replaced with a placeholder.",
+    "test_plan": "After fix (a): verify the doc contains no curl commands pointing to /health. After fix (b): `curl http://<node-ip>:30001/health` returns 200 with `{\"status\":\"healthy\"}` against a real cluster."
+  },
+  {
+    "component_id": "tests/unit/test_issue_patterns.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "tests/unit/test_issue_patterns.py:52-53 — `github_issues_manager.analyze_issue_pattern = AsyncMock(return_value=mock_result)` then `result = await github_issues_manager.analyze_issue_pattern(pattern)`. Pattern repeated at lines 93, 129, 160, 191, etc. through all 20 async tests.",
+    "diagnosis": "All async tests in this file assign AsyncMock to the method being tested on the fixture object, then call that mock, so nothing in GitHubIssuesManager is exercised; the tests are tautological.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove all `github_issues_manager.<method> = AsyncMock(...)` assignments inside test bodies. The conftest already populates `manager.db_path = ':memory:'` and calls `populate_test_issues`. Write each test to call the real method (e.g. `await github_issues_manager.find_similar_issues(...)`) and assert the returned dict has the expected keys and plausible values. For methods not yet implemented, mark the test `@pytest.mark.xfail(strict=True)` until implemented.",
+    "test_plan": "Run pytest tests/unit/test_issue_patterns.py -v; confirm tests exercise real GitHubIssuesManager code paths; check coverage shows github_issues_manager.py lines covered."
+  },
+  {
+    "component_id": "behavior:analyzer_pod",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/diagnostics_manager.py does not contain pattern-matching logic for ImagePullBackOff, CrashLoopBackOff, OOMKilled, or probe failures; grep for those strings returns zero hits in src/diagnostics_manager.py.",
+    "diagnosis": "PodAnalyzer behavior for the four key failure modes does not exist; troubleshoot_pod_issues is a stub that returns canned data rather than analyzing real pod state.",
+    "fix_class": "implement",
+    "proposed_fix": "Add `src/pod_analyzer.py` with `class PodAnalyzer`. Interface: `async def analyze(pod_name, namespace, k8s_client) -> PodAnalysis`. Detection: (1) call `k8s_client.read_namespaced_pod_status()`, inspect `container_statuses[*].state.waiting.reason` for `ImagePullBackOff`/`CrashLoopBackOff`; (2) inspect `lastState.terminated.reason == 'OOMKilled'`; (3) inspect events for `Unhealthy` reason to detect probe failures. Return `PodAnalysis { issue_type, severity, evidence_lines, suggested_fix }`. Wire into DiagnosticsManager.troubleshoot_pod_issues.",
+    "test_plan": "Unit tests with mocked k8s_client responses covering all four failure modes; assert correct issue_type and non-empty suggested_fix. Integration test against a kind cluster with a deliberately broken pod."
+  },
+  {
+    "component_id": "enhanced:kubectl_get",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:11-42 — `Tool(name='kubectl_get', ...)` defined. Grep of src/mcp_server.py for 'enhanced_tools' returns zero results; grep for 'kubectl_get' in src/mcp_server.py also returns zero results.",
+    "diagnosis": "The kubectl_get tool schema is defined in enhanced_tools.py but enhanced_tools.py is never imported by mcp_server.py, so the tool is never registered or callable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py add `from enhanced_tools import get_enhanced_kubectl_tools`. In `handle_list_tools`, extend the returned `tools` list: `tools.extend(get_enhanced_kubectl_tools())`. In `handle_call_tool`, add `elif name == 'kubectl_get': result = await self.kubectl_manager.get(resource=arguments['resource'], name=arguments.get('name'), namespace=arguments.get('namespace'), output_format=arguments.get('output_format','yaml'))`. Confirm KubectlManager.get() calls the real k8s API via subprocess or client.",
+    "test_plan": "Start the MCP server; call list_tools and verify 'kubectl_get' appears in the response. Call kubectl_get with resource='pods' against a live cluster and verify a non-empty pod list is returned."
+  },
+  {
+    "component_id": "mcp-tool:get_best_practices",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:566-569 — `elif name == 'get_best_practices': result = await self.documentation_manager.get_best_practices(category=arguments.get('category'))`. src/documentation_manager.py:376-380 — `async def get_best_practices(self, category=None)` returns from `self.best_practices`, which is a hardcoded dict loaded at line 281-326 in `_load_best_practices()`. No k8s API call is made.",
+    "diagnosis": "get_best_practices returns a static hardcoded dictionary that was never populated from any real cluster state or live documentation fetch; it does not reflect the actual cluster being managed.",
+    "fix_class": "implement",
+    "proposed_fix": "Keep the static fallback but add a live-documentation layer: in `DocumentationManager.initialize()`, after `_load_best_practices()`, call `_build_documentation_index()` (already implemented) and merge scraped best practices into `self.best_practices`. Additionally, add a method that intersects best practices with real cluster state (e.g., flag which practices the live cluster violates) by querying k8s_manager. Surface those violations in the tool response.",
+    "test_plan": "Call get_best_practices with category='security'; verify the response includes items scraped from kubernetes.io/docs (not only the 6 hardcoded strings). Separately call without a cluster and verify graceful fallback to static list."
+  },
+  {
+    "component_id": "mcp-tool:get_cluster_info",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:29-33 — `async def initialize(self): ... # Kubernetes client initialization would go here / # For now, we'll use a stub implementation`. src/k8s_manager.py:49-83 — `get_cluster_info` returns hardcoded values: `\"version\": \"v1.29.0\"`, `\"total\": 3`, `\"ready\": 3`, `\"total\": 45`, `\"running\": 42`.",
+    "diagnosis": "get_cluster_info returns entirely fabricated cluster data; no k8s API client is initialized or called, so every consumer of this tool receives fake metrics regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In `KubernetesManager.initialize()`, load kubeconfig via `kubernetes.config.load_kube_config()` (or `load_incluster_config()`) and instantiate `self.v1 = kubernetes.client.CoreV1Api()`, `self.apps_v1 = kubernetes.client.AppsV1Api()`. In `get_cluster_info()`, replace all hardcoded values with: `nodes = self.v1.list_node()`, `pods = self.v1.list_pod_for_all_namespaces()`, `namespaces = self.v1.list_namespace()`, then compute real counts. Return `version` from `self.v1.get_api_versions()`.",
+    "test_plan": "Run against a kind cluster; assert returned node count matches `kubectl get nodes --no-headers | wc -l`. Assert version string matches `kubectl version --short`. Run with no cluster available and verify a clear error (not fabricated data) is returned."
+  },
+  {
+    "component_id": "behavior:analyzer_network_policy",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No file named `network_policy_analyzer.py` or similar exists in src/; grep for 'NetworkPolicy\|orphan\|denied_flow' in src/ returns zero hits in any manager file.",
+    "diagnosis": "NetworkPolicyAnalyzer (orphan policies, denied flows) does not exist; no implementation covers this behavior anywhere in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Add `src/network_policy_analyzer.py` with `class NetworkPolicyAnalyzer`. Interface: `async def analyze(namespace, k8s_client) -> NetworkPolicyReport`. Orphan detection: fetch all NetworkPolicy objects via `networking_v1.list_namespaced_network_policy()`; for each, check if any pod in the namespace matches its `podSelector`; policies with no matching pods are orphans. Denied-flow detection: list pods and cross-reference their labels against all ingress/egress rules; flag pod pairs that have no matching allow rule. Return `NetworkPolicyReport { orphan_policies: list, potential_denied_flows: list, coverage_percent: float }`.",
+    "test_plan": "Unit test with a mock k8s client that returns one policy with a selector matching no pods; assert it appears in orphan_policies. Unit test with two pods and a deny-all policy; assert the pair appears in potential_denied_flows."
+  },
+  {
+    "component_id": "behavior:probe_tuning_remediation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "src/k8s_manager.py:166-210 — `execute_remediation` is a stub with only `pod_restart_loop` and `node_not_ready` branches; no probe-tuning logic exists. Grep for 'probe\|initialDelaySeconds\|connection.refused' in src/ returns zero substantive hits.",
+    "diagnosis": "Deterministic probe-tuning remediation for connection-refused-on-startup does not exist; execute_remediation has no branch for probe failures and applies no actual patch.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a `probe_failure` branch in `execute_remediation`. Logic: (1) fetch pod spec via `v1.read_namespaced_pod()`; (2) identify the failing container's liveness/readiness probe; (3) read current `initialDelaySeconds`; (4) compute new value as `max(current * 2, 30)`; (5) if not dry_run, patch the owning Deployment via `apps_v1.patch_namespaced_deployment()` with the updated probe config; (6) wait for rollout and verify probe passes within 2 minutes. Return `{ old_delay, new_delay, patched_resource, rollout_status }`.",
+    "test_plan": "Unit test: mock a pod with `initialDelaySeconds=5` and a Unhealthy event; assert patched value equals 10. Integration test: deploy a pod with a probe that fires too early; call execute_remediation; verify pod reaches Running state and probe succeeds."
+  }
+]

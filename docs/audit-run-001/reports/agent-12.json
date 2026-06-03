@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:vcluster_sandbox",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No vcluster integration exists anywhere in src/ or tests/ — grep finds zero references to vcluster, sandbox, or ephemeral cluster lifecycle",
+    "diagnosis": "There is no ephemeral sandbox mechanism; any candidate fix the remediator produces is either applied directly to the real cluster or never tested at all.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: SandboxSession { id, vcluster_name, kubeconfig_path, created_at, status }. Interface: async create_sandbox() -> SandboxSession, async apply_fix(session, manifest_yaml), async smoke_test(session, probe_spec) -> bool, async destroy_sandbox(session). Dependencies: vcluster CLI or Helm chart, temp kubeconfig file, 10-second timeout probe. Edge cases: vcluster pod never becomes ready (timeout + cleanup), smoke test flakes (retry 3x), destroy must succeed even if create partially failed.",
+    "test_plan": "Unit: mock vcluster CLI calls, assert kubeconfig written and cleaned up. Integration: spin a real vcluster in CI, apply a broken manifest, assert smoke_test returns False, assert cluster is destroyed. Measure e2e wall time <= 60s."
+  },
+  {
+    "component_id": "behavior:analyzer_service",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No ServiceAnalyzer class exists in src/; k8s_manager.py returns hardcoded cluster info (confirmed by prior audit finding). No endpoint or selector-mismatch detection logic is present.",
+    "diagnosis": "ServiceAnalyzer is entirely unimplemented — no code checks for missing endpoints or selector mismatches between Service and Pod label sets.",
+    "fix_class": "design",
+    "proposed_fix": "Interface: async analyze_service(namespace, service_name) -> ServiceAnalysis. Steps: (1) fetch Service via v1.read_namespaced_service; (2) fetch EndpointSlice or Endpoints for the service; (3) if endpoints.subsets is empty, flag 'no_endpoints'; (4) list Pods matching service.spec.selector; (5) if pod list empty but selector non-empty, flag 'selector_mismatch'; (6) diff selector keys against pod labels to produce 'missing_label' detail. Return structured ServiceAnalysis with severity and suggested fix. Edge cases: headless services, ExternalName type, selector-less Services.",
+    "test_plan": "Unit tests: mock k8s client returning a service with selector {app: foo} but no matching pods — assert selector_mismatch detected. Mock service with 0 endpoint subsets — assert no_endpoints detected. Integration test against a real misconfigured service in a vcluster sandbox."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "documentation_manager.py:275 — generate_test_documentation() in conftest.py injects docs WITHOUT a 'troubleshooting' key, but documentation_manager.py:406 does `for trouble in doc['troubleshooting']` with no key-existence guard, causing a KeyError at runtime whenever the search DB contains hand-loaded docs.",
+    "diagnosis": "get_troubleshooting_guide and search_documentation iterate over doc['troubleshooting'] without a .get() fallback, making the manager crash on any doc entry that lacks that key.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 406: change `for trouble in doc['troubleshooting']:` to `for trouble in doc.get('troubleshooting', []):`\nLine 347: same fix for `for command in doc['commands']:` -> `doc.get('commands', [])`\nLine 344: `for section in doc['sections']:` -> `doc.get('sections', [])`\nAlso: _build_documentation_index() at line 64 uses asyncio.gather(*tasks, return_exceptions=True) but never checks for exceptions in the returned list — add a check and log each failed task.",
+    "test_plan": "Unit test: insert a doc entry without 'troubleshooting' key into documentation_db, call get_troubleshooting_guide('anything') — assert no exception and empty list returned. Existing test in conftest already provides such entries, so running the test suite will verify the fix."
+  },
+  {
+    "component_id": "security-scan-demo.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "security-scan-demo.sh:1 — shebang is `#!/bin/bash` with no `set -euo pipefail`; lines 14-18 pipe kubectl through jq without checking exit codes; line 64 uses `[ \"$NETWORK_POLICIES\" -lt 1 ]` but `wc -l | tr -d ' '` can return empty string on error, causing arithmetic errors.",
+    "diagnosis": "Missing `set -euo pipefail` means any kubectl failure is silently swallowed and the script reports false-positive clean results; the empty-string arithmetic comparison on line 64 will also crash the script unpredictably.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` after shebang (line 2).\nWrap each kubectl command in a subshell with error capture: `ROOT_PODS=$(kubectl get pods -A -o json 2>/dev/null | jq -r '...' || echo '')`\nChange arithmetic guards to: `[[ \"${NETWORK_POLICIES:-0}\" -lt 1 ]]`\nReplace emoji in echo statements with plain text for non-UTF-8 terminals.\nAdd a `command -v kubectl` and `command -v jq` preflight check at top.",
+    "test_plan": "Run shellcheck against the fixed script — expect zero warnings. Run in a context where kubectl is unavailable and verify the script exits non-zero with a clear error message rather than reporting false-positives."
+  },
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/pvc.yaml:1-16 — the manifest contains no securityContext, no VolumeMode, no selector, and hardcodes `storageClassName: local-path` without documentation. No annotations for backup policy or retention. The namespace `mcp-kubernetes` is assumed to exist but no Namespace manifest is present in k8s/.",
+    "diagnosis": "The PVC is under-specified: it lacks volume mode declaration, storage class is environment-specific with no override mechanism, and there is no indication of encryption-at-rest requirements or backup annotations.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `volumeMode: Filesystem` to spec.\nAdd annotation `backup.velero.io/backup-volumes: 'kubernetes-mcp-server-data'` in metadata.\nAdd a comment block explaining why `local-path` is chosen and that operators should override via Kustomize for production.\nAdd a companion `namespace.yaml` creating `mcp-kubernetes` with `Pod Security Admission` labels (baseline or restricted).\nParameterize `storageClassName` via a Kustomize patch target.",
+    "test_plan": "Run `kubectl apply --dry-run=server -f k8s/pvc.yaml` against a cluster with local-path-provisioner installed and verify no errors. Run `kubeconform` or `kube-score` against the manifest and assert score >= 80."
+  },
+  {
+    "component_id": "enhanced:helm_uninstall",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py — grep for 'enhanced_tools' returns no output; grep for 'helm_uninstall' and 'uninstall_helm_chart' returns no output. The schema `uninstall_helm_chart` is defined in enhanced_tools.py:503-525 but mcp_server.py never imports enhanced_tools.",
+    "diagnosis": "enhanced_tools.py is entirely dead code — mcp_server.py does not import it, so none of its 30+ tool schemas (including helm_uninstall) are registered or callable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Option A (wire-up): In mcp_server.py, import get_enhanced_kubectl_tools, get_enhanced_helm_tools from enhanced_tools and extend the tools list returned by handle_list_tools(). Add dispatch branches in handle_call_tool() mapping each enhanced tool name to the corresponding kubectl_manager or helm_manager method.\nOption B (delete): If enhanced_tools.py is intended to be replaced entirely by the inline tools in mcp_server.py, delete enhanced_tools.py and document the deduplication decision.\nChoice depends on whether enhanced_tools.py contains schemas that are NOT already in mcp_server.py inline list (they do overlap significantly — audit required before wiring).",
+    "test_plan": "After wiring: call `list_tools` via the MCP protocol and assert `uninstall_helm_chart` appears. Call `uninstall_helm_chart` with a mocked helm_manager and assert the handler dispatches to `helm_manager.uninstall_chart`. After deleting: assert no import of enhanced_tools anywhere and all previously-tested tools still appear."
+  },
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No audit log module, table, or write path exists anywhere in src/ — grep for 'audit_log', 'audit log', 'append_audit', 'audit_entry' returns zero matches.",
+    "diagnosis": "Every remediator action is unaudited; there is no who/what/when/evidence trail, making post-incident review and compliance impossible.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: AuditEntry { id UUID, timestamp ISO8601, actor str ('remediator'|user_id), action str, target_resource str, namespace str, evidence dict, outcome str ('success'|'failure'|'skipped'), duration_ms int }. Interface: async append(entry: AuditEntry). Storage: append-only SQLite table `audit_log` (WAL mode) or NDJSON file with rotation. Integration points: wrap every manager method call in mcp_server.handle_call_tool() to write an entry before and after execution. Expose read-only `get_audit_log(since, limit)` MCP tool. Edge cases: write failure must not block the action; use fire-and-forget with error log.",
+    "test_plan": "Unit: call any tool handler and assert an AuditEntry was written with correct action and timestamp. Test write failure path — mock storage to raise IOError and assert tool still returns a result. Integration: run 5 tool calls, query get_audit_log, assert 5 entries with non-null timestamps and matching action names."
+  },
+  {
+    "component_id": "behavior:iteration_state_machine",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No state machine, iteration loop, or PRD pipeline exists in src/ — grep for 'state_machine', 'iteration', 'review_loop', 'implement_loop' returns zero matches.",
+    "diagnosis": "The repo has no orchestration layer connecting review -> PRD -> split -> implement -> verify; every step is manual, making automated remediation impossible.",
+    "fix_class": "design",
+    "proposed_fix": "States: IDLE -> REVIEWING -> PRD_GENERATED -> SPLIT -> IMPLEMENTING -> VERIFYING -> DONE | FAILED. Transitions: REVIEWING on new issue detected; PRD_GENERATED after analyzer produces a PRD; SPLIT after PRD decomposed into atomic tasks; IMPLEMENTING per-task (re-entrant); VERIFYING after all tasks complete; DONE if verify passes; FAILED if max_iterations (default 3) exceeded or smoke test fails. Interface: IterationStateMachine.run(issue_context) -> RemediationResult. Stop conditions: (1) smoke test passes; (2) max_iterations exceeded; (3) unrecoverable error (e.g., vcluster create fails). Persist state to SQLite so crashes are recoverable.",
+    "test_plan": "Unit: mock each stage and assert correct state transitions for happy path and for max_iterations exceeded. Integration: inject a synthetic misconfigured Deployment, run the state machine, assert it reaches DONE within 3 iterations with vcluster sandbox smoke test passing."
+  },
+  {
+    "component_id": "behavior:analyzer_network_policy",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No NetPolAnalyzer or network policy analysis logic exists in src/ — grep for 'networkpolicy', 'network_policy', 'NetPol', 'orphan_policy' returns zero matches in src/.",
+    "diagnosis": "Network policy analysis is entirely unimplemented; orphan policies and denied flows cannot be detected.",
+    "fix_class": "design",
+    "proposed_fix": "Interface: async analyze_network_policies(namespace) -> NetPolAnalysis. Steps: (1) list all NetworkPolicies in namespace; (2) for each policy, list pods matching spec.podSelector — if empty, flag 'orphan_policy'; (3) build an allowed-flow matrix from ingress/egress rules; (4) list all Services and their backing pods; (5) for each service, check if a NetworkPolicy denies ingress from expected sources — flag 'denied_flow' with source/destination/port detail. Return NetPolAnalysis { orphan_policies: [], denied_flows: [], unreachable_services: [] }. Edge cases: default-deny namespace policies, CIDR-based rules, empty podSelector (matches all pods).",
+    "test_plan": "Unit: mock k8s client with a NetworkPolicy whose podSelector matches no pods — assert orphan_policy flagged. Mock a policy that blocks port 80 from a frontend service to a backend — assert denied_flow detected. Integration: apply known-bad network policies in a vcluster sandbox and run analyzer."
+  },
+  {
+    "component_id": "tests/production/test_cluster_management.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_cluster_management.py:108 — `k8s_manager.resolve_node_not_ready = AsyncMock(return_value=mock_resolution)` then line 111 calls the same mock and asserts against the injected dict. Line 213 uses fixture `cluster_manager` which is NOT defined in tests/conftest.py (grep finds zero definition), meaning tests 3-4 (etcd, apiserver) will fail at collection with fixture error.",
+    "diagnosis": "Every test in this file is a tautology — each test sets a mock return value then asserts that same value was returned, exercising only Python's Mock library, not any production code. Additionally, `cluster_manager` fixture is undefined, causing collection failures for at least 2 tests.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Delete all AsyncMock assignment patterns and instead call real manager methods with a mocked kubernetes client (as conftest.py already wires mock v1/apps_v1 clients).\n2. Add `cluster_manager` fixture to conftest.py as an alias or wrapper around `k8s_manager` for control-plane-scoped tests.\n3. Each test should assert on the OUTPUT of real logic, not on data the test itself injected.\n4. Minimum coverage gates: assert the k8s API was actually called (e.g., `manager.v1.list_node.assert_called_once()`).",
+    "test_plan": "Run pytest with --tb=short and verify zero fixture-not-found errors. Measure real branch coverage with pytest-cov — target >=60% on k8s_manager.py for these scenarios. Ensure no test passes solely because it asserts on its own mock input."
+  }
+]

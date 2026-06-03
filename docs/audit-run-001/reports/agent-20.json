@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:185-210 — hardcoded stub returns for ping ({\"status\": \"success\", \"latency_ms\": 2.3, \"packet_loss\": 0}), dns ({\"resolved_ip\": \"10.96.0.1\"}), http ({\"status\": \"failed\", \"error\": \"Connection timeout\"}), tcp ({\"connection_time_ms\": 5.1}); no kubernetes client call anywhere in the method",
+    "diagnosis": "check_network_connectivity returns fabricated per-test-type canned data with no real kubectl exec, ping, or network probe against the cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub with kubectl exec into source_pod to run ping/nslookup/curl/nc against target. Example: run `kubectl exec -n {namespace} {source_pod} -- ping -c3 {target}` via KubectlManager._run_kubectl, parse stdout/returncode, and return real latency or error. Handle missing binary gracefully by catching non-zero returncode.",
+    "test_plan": "Integration test: spin up two pods in a test namespace, call check_network_connectivity between them; assert result reflects actual reachability. Also test with a non-existent target and assert status is 'failed' with a real error message, not 'Connection timeout'."
+  },
+  {
+    "component_id": "coming_soon.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "coming_soon.md:178-179 — 'Test coverage maintained above 95%' and 'Code coverage expansion to 100% for critical paths'; also line 196 — 'API response time under 2 seconds for 99% of requests'. Actual test suite is absent/stub, managers return hardcoded data, and no benchmark infrastructure exists.",
+    "diagnosis": "coming_soon.md presents quantitative success metrics (95%+ test coverage, sub-2s response SLA) and feature claims (CI/CD pipelines, enterprise integrations, ML models) as if they are near-term deliverables backed by existing infrastructure, but the codebase has no real k8s API calls, no test suite, and no CI configuration.",
+    "fix_class": "document",
+    "proposed_fix": "Add a prominent disclaimer block at the top of coming_soon.md: 'NOTE: All features listed below are aspirational. The current codebase contains stub implementations that return hardcoded data and does not call the Kubernetes API.' Remove quantitative SLA/coverage claims from the metrics section until those baselines exist.",
+    "test_plan": "Human review: confirm disclaimer is present and accurate SLA/coverage numbers are removed or marked aspirational; cross-reference at least three claimed features against actual code to verify no live implementation exists."
+  },
+  {
+    "component_id": "mcp-tool:get_issue_statistics",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/github_issues_manager.py:573-618 — get_issue_statistics queries a local SQLite DB at ./data/github_issues.db; the DB is populated by _fetch_recent_issues which calls the real GitHub API (line 250: 'https://api.github.com/repos/{repo}/issues'). However, github_token is None (line 56) so all requests are unauthenticated (60 req/hr limit), and the background update loop (line 169) runs without cancellation on server shutdown in mcp_server.py (no stop() call at line 631-653).",
+    "diagnosis": "get_issue_statistics is the only tool in its group with a real implementation, but it depends on unauthenticated GitHub API calls that will hit rate limits in production, and the background asyncio task is never cancelled on server shutdown causing a resource leak.",
+    "fix_class": "implement",
+    "proposed_fix": "1. Read GITHUB_TOKEN from env/secret at __init__ time: `self.github_token = os.getenv('GITHUB_TOKEN')`. 2. In mcp_server.py start(), add shutdown hook: `await self.github_issues_manager.stop()`. 3. Add retry-after parsing on 403 responses in _fetch_issues_page (line 267).",
+    "test_plan": "Set GITHUB_TOKEN to a valid token and verify _fetch_recent_issues completes without 403 errors. Mock the aiohttp session and assert stop() cancels the update_task. Confirm get_issue_statistics returns non-empty stats after seeding DB."
+  },
+  {
+    "component_id": "enhanced:helm_uninstall",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:503-526 — Tool named 'uninstall_helm_chart' is defined. grep of src/mcp_server.py for 'enhanced_tools' returns no matches (confirmed by grep run); mcp_server.py list_tools() at line 82 does not call get_enhanced_helm_tools(); handle_call_tool at line 483 has no elif branch for 'uninstall_helm_chart'.",
+    "diagnosis": "The uninstall_helm_chart schema is defined in enhanced_tools.py but the module is never imported by mcp_server.py, so the tool is never registered or dispatched — it is completely dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: 1. Add `from enhanced_tools import get_enhanced_helm_tools` at top. 2. In handle_list_tools, append `get_enhanced_helm_tools()` to the tools list. 3. In handle_call_tool, add: `elif name == 'uninstall_helm_chart': result = await self.helm_manager.uninstall_helm_chart(release_name=arguments['release_name'], namespace=arguments.get('namespace'), keep_history=arguments.get('keep_history', False))`",
+    "test_plan": "Call list_tools via MCP client and assert 'uninstall_helm_chart' appears. Call the tool with a test release name; assert helm_manager.uninstall_helm_chart is invoked and returns the structured result dict."
+  },
+  {
+    "component_id": "src/main.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/main.py:107-139 — three HTTP REST endpoints (/k8s/diagnostics, /k8s/monitoring, /k8s/security) return hardcoded dicts: {\"status\": \"healthy\", \"nodes\": \"Ready\", ...}, {\"status\": \"monitoring_active\", \"metrics\": \"Available\"}, {\"status\": \"secure\", \"vulnerabilities\": \"None\"}. Comment at line 107 reads '# This would normally call MCP server methods'. Also lines 46-48: CORS allows all origins with allow_credentials=True.",
+    "diagnosis": "The HTTP REST API surface (main.py) exposes three diagnostic/monitoring/security endpoints that return hardcoded fake data and includes an overly permissive CORS configuration that allows credentials from any origin.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Replace hardcoded dicts in each endpoint with calls to the already-initialized self.mcp_server.k8s_manager / monitoring_manager / security_manager methods. 2. Change CORS allow_origins from ['*'] to a configurable list read from ServerConfig, and set allow_credentials=False unless a specific origin list is provided.",
+    "test_plan": "Deploy with a live kubeconfig; call GET /k8s/diagnostics and assert response contains real node names. In unit tests mock the managers and verify the endpoint delegates to them. Verify CORS headers with an OPTIONS preflight request from an unlisted origin."
+  },
+  {
+    "component_id": "enhanced:helm_install",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:406-455 — Tool named 'install_helm_chart' is defined. grep of src/mcp_server.py for 'enhanced_tools' returns no matches; mcp_server.py list_tools() at line 82 does not call get_enhanced_helm_tools(); handle_call_tool has no elif branch for 'install_helm_chart'.",
+    "diagnosis": "The install_helm_chart schema is defined in enhanced_tools.py but the module is never imported by mcp_server.py, so the tool is never registered or dispatched — it is completely dead code.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same wire-up as helm_uninstall: import get_enhanced_helm_tools in mcp_server.py, append to list_tools, add dispatch branch: `elif name == 'install_helm_chart': result = await self.helm_manager.install_helm_chart(release_name=arguments['release_name'], chart=arguments['chart'], namespace=arguments.get('namespace'), values=arguments.get('values'), chart_version=arguments.get('chart_version'), dry_run=arguments.get('dry_run', False))`",
+    "test_plan": "Assert 'install_helm_chart' appears in list_tools response. Call with dry_run=True against a known chart; assert helm_manager method is called and returns a structured result with success/stdout/stderr fields."
+  },
+  {
+    "component_id": "behavior:analyzer_cronjob",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No CronJobAnalyzer class or file exists in src/. Behavior design task.",
+    "diagnosis": "CronJobAnalyzer does not exist; design is needed for detecting missed schedules and orphaned child Job objects (e.g., manual-cw5-003 pattern).",
+    "fix_class": "design",
+    "proposed_fix": "Data model: CronJobReport(name, namespace, schedule, last_schedule_time, missed_count, orphaned_jobs: List[str], status). Interface: `async def analyze_cronjobs(namespace: Optional[str]=None) -> List[CronJobReport]`. Implementation: call `batch/v1 list_cron_job_for_all_namespaces` (or namespaced), compute missed schedules by comparing lastScheduleTime to now using croniter, list Jobs owned by each CronJob via ownerReferences, flag Jobs not in the CronJob's active list as orphaned. Edge cases: suspended CronJobs (skip missed-schedule logic), Jobs without ownerReferences (skip), very old lastScheduleTime (cap missed count at configurable max). Dependencies: kubernetes-client batch_v1_api, croniter library.",
+    "test_plan": "Unit test with a mocked k8s client returning a CronJob with lastScheduleTime 3 hours ago and a 1-hour schedule; assert missed_count == 3. Create a Job with no ownerReference in the same namespace; assert it appears in orphaned_jobs for no CronJob. Integration test: deploy a suspended CronJob and assert missed_count == 0."
+  },
+  {
+    "component_id": "src/kubectl_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/kubectl_manager.py:45-81 — _run_kubectl uses subprocess.run with shell=False and user-controlled args list. Line 254-267: kubectl_generic splits command string with .split() and passes directly to _run_kubectl; a command like 'get pods; rm -rf /' would split to ['get', 'pods;', 'rm', '-rf', '/'] which kubectl rejects, but a command like '--kubeconfig=/etc/passwd' could be injected as a flag. Line 33: __init__ raises RuntimeError if kubectl not in PATH, crashing the entire server at startup with no graceful fallback.",
+    "diagnosis": "kubectl_manager.py uses shell=False (safe against shell injection) but kubectl_generic accepts arbitrary unsanitized command strings; the startup kubectl check raises RuntimeError on missing binary which kills the whole server process with no degraded-mode option.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. In kubectl_generic, validate that the first token is a known safe kubectl subcommand (whitelist: get, describe, logs, top, explain, api-resources, config, rollout, scale, apply, create, patch, label, annotate). Reject any arg containing '/' or '--kubeconfig'. 2. In __init__, catch the RuntimeError from _check_kubectl and set self.available = False; return error dict from all methods when not available rather than crashing.",
+    "test_plan": "Unit test: call kubectl_generic('--kubeconfig=/etc/passwd get pods') and assert success=False with a sanitization error. Test: instantiate KubectlManager with kubectl not in PATH; assert no RuntimeError is raised and kubectl_get returns {success: False, stderr: 'kubectl not available'}."
+  },
+  {
+    "component_id": "behavior:event_stream_watcher",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No EventStreamWatcher class or file exists in src/. Behavior design task.",
+    "diagnosis": "An event stream watcher that watches k8s events in real-time, classifies them, and routes to a remediation queue does not exist; design is needed.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: K8sEvent(uid, namespace, involved_object, reason, message, event_type, first_time, count, severity_class). RemediationTask(event_uid, action, target, priority, status). Interface: `async def watch_events(namespace: Optional[str]=None, callback: Callable[[K8sEvent], Awaitable[None]]=None)`. Implementation: use kubernetes-client `CoreV1Api.list_namespaced_event` with watch=True (stream via kubernetes.watch.Watch). Classify by reason field: map {'BackOff','OOMKilling','Evicted'} -> critical; {'FailedScheduling','ImagePullBackOff'} -> high; rest -> info. Push critical/high to an asyncio.Queue consumed by a remediation worker. Edge cases: dedup by uid+count to avoid reprocessing same event burst; handle watch stream reconnect on 410 Gone with resourceVersion=''; rate-limit remediation queue to avoid thundering herd. Dependencies: kubernetes-client watch API, asyncio.Queue.",
+    "test_plan": "Unit test: feed a fake Watch stream with a BackOff event; assert callback receives K8sEvent with severity_class='critical' and it lands in the remediation queue. Test: feed duplicate uid; assert only one RemediationTask created. Integration test: trigger an ImagePullBackOff pod; assert event appears in queue within 10 seconds."
+  },
+  {
+    "component_id": "k8s/secret.yaml",
+    "kind": "manifest",
+    "severity": "critical",
+    "evidence": "k8s/secret.yaml:13 — `GITHUB_TOKEN: \"\"` — the secret data field is an empty string, not a base64-encoded placeholder. Any deployment applying this manifest will create a Secret with an empty token, silently breaking GitHub API authentication. The file comment at line 11-12 instructs the user to replace it but the default value is deployable as-is.",
+    "diagnosis": "The secret.yaml ships with an empty GITHUB_TOKEN value that will be applied silently to a cluster, resulting in unauthenticated GitHub API calls (60 req/hr) with no error at manifest apply time.",
+    "fix_class": "implement",
+    "proposed_fix": "Replace the empty value with a Helm/kustomize secretGenerator reference or add a validation webhook annotation. Minimally: remove the data block entirely and add a comment block requiring out-of-band secret creation: `kubectl create secret generic kubernetes-mcp-server-secrets --from-literal=GITHUB_TOKEN=$GITHUB_TOKEN -n mcp-kubernetes`. Add a README note that the secret must be created before deployment.",
+    "test_plan": "Run `kubectl apply -f k8s/secret.yaml --dry-run=client` and assert it fails or warns when GITHUB_TOKEN is empty. After fix, verify the deployment pod reads the token from env and GitHub API calls return 200 rather than 403."
+  }
+]

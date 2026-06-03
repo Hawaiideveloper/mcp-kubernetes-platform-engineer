@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:image_tag_migration_remediation",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "src/diagnostics_manager.py:110-125 — hardcoded stub returns fixed CrashLoopBackOff data regardless of pod_name; no real k8s API call to detect image pull failures",
+    "diagnosis": "There is no mechanism to detect, classify, or remediate yanked/missing image tags (e.g., bitnami/kubectl:1.30) because all pod diagnostics return static canned data.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ImageTagFinding(pod, namespace, container, current_image, suggested_image, confidence). Interface: async def remediate_image_tag(pod_name, namespace, dry_run) -> RemediationResult. Dependencies: kubernetes python client (already declared in requirements.txt), a registry probe (docker hub or ghcr API). Steps: 1) call core_v1.read_namespaced_pod to get actual image; 2) query registry API for available tags matching semver pattern; 3) if dry_run=False patch the deployment image via apps_v1.patch_namespaced_deployment. Edge cases: multi-container pods, init containers, image digest pinning, private registries requiring auth.",
+    "test_plan": "Unit-test with a mock k8s client returning a pod spec with bitnami/kubectl:1.30 image; assert remediate_image_tag returns the correct suggested replacement and that patch is called when dry_run=False. Integration test: deploy a pod with a bad tag to a kind cluster and confirm the remediator selects the next available tag."
+  },
+  {
+    "component_id": "mcp-tool:troubleshoot_pod_issues",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:110-148 — comment reads '# Stub implementation - would query actual pod status'; hardcoded status='CrashLoopBackOff', restart_count=5, logs with timestamp '2025-08-09', events with timestamp '2025-08-09T10:29:00Z'",
+    "diagnosis": "troubleshoot_pod_issues always returns the same fabricated CrashLoopBackOff diagnosis with hardcoded log lines regardless of which pod is queried.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub block (lines 111-148) with real k8s calls: v1 = client.CoreV1Api(); pod = v1.read_namespaced_pod(name=pod_name, namespace=namespace); derive status from pod.status.phase and pod.status.container_statuses; fetch logs via v1.read_namespaced_pod_log; fetch events via v1.list_namespaced_event with field_selector=f'involvedObject.name={pod_name}'. Return structured real data.",
+    "test_plan": "Mock kubernetes.client.CoreV1Api with a pod in Pending state; assert the tool returns status=Pending and no CrashLoopBackOff hardcode. Integration test against a live kind cluster with a real failing pod."
+  },
+  {
+    "component_id": "push-and-deploy.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "push-and-deploy.sh:3 — 'set -e' only; missing '-u' (unbound var protection) and '-o pipefail' (pipe failure propagation). Line 8 — hardcoded registry path 'ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest' with no version tag, overwriting latest silently. No registry login step; if docker push fails after kubectl apply, deployment is left pointing at a broken image.",
+    "diagnosis": "The deploy script lacks pipefail/unbound-var protection, always pushes mutable 'latest' tag (no immutable digest or version), and has no rollback on partial failure.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 3: change to 'set -euo pipefail'. Add IMAGE_TAG variable derived from git SHA: IMAGE_TAG=$(git rev-parse --short HEAD). Replace 'latest' with $IMAGE_TAG on lines 8 and 9. Add 'docker login ghcr.io' check before push. After kubectl apply, on failure execute 'kubectl rollout undo deployment/kubernetes-mcp-server -n mcp-kubernetes' as rollback.",
+    "test_plan": "Run script with IMAGE_TAG overridden to a nonexistent image; confirm kubectl rollout undo is invoked. Run shellcheck against the updated script and verify exit 1 on any failed command in a pipe chain."
+  },
+  {
+    "component_id": "k8s/service.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/service.yaml:37-47 — second Service is type: NodePort with nodePort: 30001 exposed cluster-wide; no NetworkPolicy restricts access to this port. Also, no appProtocol field on port definitions; prometheus scrape annotation (line 9) points to port 8080 but there is no evidence a /metrics endpoint is implemented.",
+    "diagnosis": "NodePort service exposes the MCP server directly on every node's external interface without any access restriction, and the prometheus scrape annotation references an unimplemented metrics endpoint.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove or restrict the NodePort service: either delete it and rely on ClusterIP + kubectl port-forward for dev access, or add a NetworkPolicy that whitelists only monitoring-namespace ingress to port 30001. Add appProtocol: http to port entries. Remove prometheus scrape annotations until a /metrics handler is actually implemented in the server.",
+    "test_plan": "Apply the manifest to a kind cluster and verify no external port is exposed via 'kubectl get svc -n mcp-kubernetes' and nmap scan from outside the cluster. Confirm prometheus scrape annotation is absent until /metrics is implemented."
+  },
+  {
+    "component_id": "src/documentation_manager.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/documentation_manager.py:44-48 — initialize() calls _build_documentation_index() which makes live HTTP requests to kubernetes.io during server startup (line 58-64); if the site is unreachable the entire server fails to start (line 49: raise). Line 269 — _index_linked_pages limits to 10 links per page but recurses without depth limit, risking unbounded crawl.",
+    "diagnosis": "Server startup is coupled to live network requests with no offline fallback, making the server undeployable in air-gapped or network-restricted environments; crawl depth is uncapped.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Wrap _build_documentation_index in try/except with a fallback to an empty documentation_db and log a warning instead of raising. Add a max_depth parameter (default 1) to _index_linked_pages and pass depth-1 on recursive calls, stopping at depth==0. Consider pre-bundling a static documentation snapshot as a JSON file shipped with the image.",
+    "test_plan": "Unit test: mock aiohttp to raise ConnectionError; assert initialize() completes without raising and documentation_db is empty. Test search_documentation returns [] gracefully in that state. Verify depth cap by asserting _fetch_documentation_section is called at most 10+1 times per base URL."
+  },
+  {
+    "component_id": "enhanced:helm_upgrade",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:457-499 defines Tool(name='upgrade_helm_chart',...) in get_enhanced_helm_tools(). Grep of src/mcp_server.py shows zero imports of enhanced_tools and zero references to 'upgrade_helm_chart' in the call_tool dispatch. src/helm_manager.py:141 implements async def upgrade_helm_chart() which calls helm subprocess correctly.",
+    "diagnosis": "The upgrade_helm_chart tool schema exists in enhanced_tools.py and the handler exists in helm_manager.py, but enhanced_tools is never imported by mcp_server.py so the tool is never registered and never reachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: 1) add 'from enhanced_tools import get_enhanced_helm_tools, get_enhanced_kubectl_tools' to imports. 2) In handle_list_tools, extend the tools list: '...+ get_enhanced_helm_tools() + get_enhanced_kubectl_tools()'. 3) In handle_call_tool, add elif branch: 'elif name == \"upgrade_helm_chart\": result = await self.helm_manager.upgrade_helm_chart(**arguments)'. Mirror for all other helm/kubectl tool names.",
+    "test_plan": "Start the server, call list_tools via MCP protocol and assert upgrade_helm_chart appears in the response. Call upgrade_helm_chart with dry_run=True against a test release and assert the helm subprocess is invoked with '--dry-run'."
+  },
+  {
+    "component_id": "mcp-tool:get_issue_statistics",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/github_issues_manager.py:573-618 implements get_issue_statistics() with real SQLite queries (no stub). mcp_server.py:605-606 dispatches to self.github_issues_manager.get_issue_statistics(). However, github_issues_manager.py:65-66 calls _fetch_recent_issues() during initialize() without a GitHub token (line 56: self.github_token = None) so on first run all 17 repos will hit the unauthenticated GitHub API rate limit (60 req/hr) and statistics will reflect an empty or partial database with no error surfaced to the caller.",
+    "diagnosis": "get_issue_statistics silently returns zeros/empty dicts when the database was never populated due to GitHub API rate limiting at startup, giving callers false confidence the data is authoritative.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a 'data_quality' field to the statistics response: include 'indexed_repos', 'last_updated', 'rate_limited_repos' so callers can assess freshness. Read GITHUB_TOKEN from env in __init__ (line 56): self.github_token = os.getenv('GITHUB_TOKEN'). In _fetch_issues_page, on 403 append repo to a rate_limited list and persist it so get_issue_statistics can report it.",
+    "test_plan": "Mock the GitHub API to return 403 for all repos; assert get_issue_statistics returns {'total_issues': 0, 'rate_limited_repos': [...17 repos...]}. With a valid GITHUB_TOKEN mock returning 2 issues, assert total_issues=2 and rate_limited_repos=[]."
+  },
+  {
+    "component_id": "behavior:gitops_pr_generation",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No file in the repo implements PR generation. src/mcp_server.py tool list (lines 88-479) has no 'create_pr' or 'open_pr' tool. k8s_manager, diagnostics_manager, monitoring_manager, security_manager all return data but there is no downstream step that writes a git branch, commits a manifest change, or calls the GitHub API to open a PR.",
+    "diagnosis": "GitOps PR generation is completely absent from the codebase; no data model, no interface, no GitHub API integration.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: GitOpsPR(finding_id: str, evidence: str, sandbox_log: str, manifest_diff: str, branch: str, pr_url: str). Interface: async def generate_gitops_pr(finding: Finding, sandbox_result: SandboxResult, repo_path: str, github_token: str) -> GitOpsPR. Steps: 1) git checkout -b fix/{finding_id}; 2) write patched manifest; 3) git commit -m 'fix({finding_id}): {one-line-summary}'; 4) git push origin; 5) POST to GitHub API /repos/{owner}/{repo}/pulls with body containing finding_id, evidence quote, and sandbox_log. Labels: ['auto-remediation', severity_label]. Title format: 'fix({finding_id}): {short_desc}' max 70 chars.",
+    "test_plan": "Mock git subprocess and GitHub API; assert branch name matches pattern 'fix/{finding_id}', PR title is under 70 chars, body contains finding_id, evidence verbatim, and sandbox log. Assert the 'auto-remediation' label is included in the payload."
+  },
+  {
+    "component_id": "logs.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "logs.sh:1-3 — script is 3 lines with no shebang validation, no 'set -e', no check that container 'k8s-mcp-server' exists before running 'docker logs'. If the container does not exist, docker logs exits 1 but the absence of set -e means no error propagation. The container name is hardcoded and will silently produce no output if the deployment uses a different name.",
+    "diagnosis": "logs.sh has no error handling, no pipefail, and a hardcoded container name that will silently fail if the container is not running or has a different name.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add '#!/bin/bash' and 'set -euo pipefail' at top. Add a CONTAINER_NAME variable defaulting to 'k8s-mcp-server' but overridable by env var. Add existence check: 'docker inspect \"$CONTAINER_NAME\" > /dev/null 2>&1 || { echo \"Container $CONTAINER_NAME not found\"; exit 1; }'. Pass optional '--tail' argument from $1 with a default of 100.",
+    "test_plan": "Run the updated script with a non-existent container name and assert exit code 1 with error message. Run with CONTAINER_NAME overridden to a real running container and assert logs appear. Run shellcheck against the script with no warnings."
+  },
+  {
+    "component_id": "enhanced:helm_uninstall",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:503-526 defines Tool(name='uninstall_helm_chart',...) in get_enhanced_helm_tools(). src/helm_manager.py:171-192 implements async def uninstall_helm_chart(). No import of enhanced_tools in src/mcp_server.py (confirmed by grep returning no output). No 'uninstall_helm_chart' in mcp_server.py call_tool dispatch.",
+    "diagnosis": "uninstall_helm_chart is defined in enhanced_tools.py and implemented in helm_manager.py but is never registered or dispatched in mcp_server.py, making it completely unreachable.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same wire-up as helm_upgrade: import get_enhanced_helm_tools in mcp_server.py, extend handle_list_tools, and add dispatch in handle_call_tool: 'elif name == \"uninstall_helm_chart\": if self.non_destructive_mode: result = {\"error\": \"Disabled in non-destructive mode\"}; else: result = await self.helm_manager.uninstall_helm_chart(release_name=arguments[\"release_name\"], namespace=arguments.get(\"namespace\"), keep_history=arguments.get(\"keep_history\", False))'.",
+    "test_plan": "Start server with ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS=true, call uninstall_helm_chart and assert the error response is returned without invoking helm subprocess. With non-destructive mode off and helm mocked, assert helm uninstall is invoked with the correct release name."
+  }
+]

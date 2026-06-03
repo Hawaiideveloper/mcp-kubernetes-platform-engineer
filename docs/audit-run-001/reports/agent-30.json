@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/config.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/config.py:60 — \"PodSecurityPolicy\"",
+    "diagnosis": "SecurityConfig.admission_controllers defaults include PodSecurityPolicy, which was removed in Kubernetes 1.25 and will cause misconfiguration if applied to any 1.25+ cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove 'PodSecurityPolicy' from the default admission_controllers list at line 60. Replace with 'PodSecurity' (the PSA replacement) or document that this list is illustrative only and must be validated against the target cluster version before use.",
+    "test_plan": "Unit test: construct SecurityConfig with defaults, assert 'PodSecurityPolicy' not in config.admission_controllers. Integration test: attempt to apply the default list against a 1.25+ test cluster and assert no admission error."
+  },
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:5 — 'covering ALL 45,720+ closed Kubernetes GitHub issues through systematic pattern recognition'; line 390 — '390 Total Tests'; line 166 — 'Status: COMPLETE - Production-Ready Test Suite Successfully Implemented'",
+    "diagnosis": "The document overclaims massively: actual test counts are 10+9+8+7+21=55 test functions across 5 files (not 390), integration/performance/security subdirectories do not exist, and the claim of covering 45,720+ GitHub issues is unverifiable and false.",
+    "fix_class": "document",
+    "proposed_fix": "Rewrite the summary with accurate counts: 5 test files, 55 test functions, 2 directories (unit/, production/). Remove the '45,720 issues' claim. Remove 'COMPLETE / Production-Ready' status. Add a section listing what is not yet implemented: integration/, performance/, security/ test suites.",
+    "test_plan": "Run 'grep -rc \"def test_\" tests/' and verify the count matches the document. Confirm the three missing subdirectories are either created with real tests or explicitly called out as future work."
+  },
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/pvc.yaml:16 — \"storageClassName: local-path\"",
+    "diagnosis": "The PVC hardcodes storageClassName: local-path, which is a Rancher/k3s-specific provisioner and will silently hang as Pending on any cluster without that class (AKS, EKS, GKE, vanilla kubeadm), and no documentation or comment warns operators.",
+    "fix_class": "document",
+    "proposed_fix": "Either remove storageClassName to use the cluster default, or add a kustomization patch that lets operators override it. Add a comment: '# Requires the local-path provisioner (k3s/Rancher). Override via kustomize patch for other storage classes.' Reference the kustomize images override pattern already used in kustomization.yaml.",
+    "test_plan": "Deploy to a standard GKE/EKS/AKS cluster and confirm PVC reaches Bound state. Alternatively, kustomize build with a storageClass patch and confirm the rendered PVC contains the correct class."
+  },
+  {
+    "component_id": "behavior:probe_tuning_remediation",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "N/A — design task",
+    "diagnosis": "No automated probe-tuning remediation exists; connection-refused-on-startup errors require manual YAML edits.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: ProbeTuningRecommendation {pod_name, container_name, probe_type: 'liveness'|'readiness'|'startup', current_initial_delay_seconds, recommended_initial_delay_seconds, evidence: list[str]}. Interface: async def recommend_probe_tuning(pod_name, namespace) -> List[ProbeTuningRecommendation]. Dependencies: k8s CoreV1Api.read_namespaced_pod, CoreV1Api.list_namespaced_event (filter reason=Unhealthy). Algorithm: (1) fetch pod spec for existing probe config; (2) query events for probe failures with timestamps; (3) compute median time-to-first-success from container start timestamps in events; (4) set recommended_initial_delay = median + 10s buffer. Auto-remediation: patch_namespaced_pod (dry_run=True by default). Edge cases: init containers, multi-container pods (each tuned independently), pods with no probes (emit info not warning).",
+    "test_plan": "Unit test with mocked API: inject synthetic events showing probes failing for 25s, assert recommendation sets initialDelaySeconds >= 35. Integration test: deploy a slow-start container to a test namespace, invoke the tool, assert the patch JSON is valid and Kubernetes accepts it as a dry-run."
+  },
+  {
+    "component_id": "src/health_check.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/health_check.py:40-46 — check_imports() only checks asyncio, json, logging — all stdlib modules that can never be absent",
+    "diagnosis": "health_check.py does not check the one thing that matters for server health: whether the kubernetes Python client and the MCP library are importable, so it will return True even when the server cannot function.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace check_imports() body:\n  try:\n      import kubernetes\n      import mcp\n      import aiohttp\n      import bs4\n      return True\n  except ImportError as e:\n      return False\nAlso add check_kubeconfig() that verifies the kubeconfig path from config exists (or KUBECONFIG env points to a valid file), returning False with a logged message if not.",
+    "test_plan": "Test with kubernetes package uninstalled (virtualenv with it removed): assert check() returns False. Test with all packages present: assert check() returns True. Test with invalid KUBECONFIG path: assert check() returns False."
+  },
+  {
+    "component_id": "mcp-tool:performance_analysis",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:59 — '# Stub implementation for different scopes'; line 106 — '# Stub implementation'; line 174 — '# Stub implementation for different analysis types'; line 55 — '\"timestamp\": \"2025-08-09T10:30:00Z\"'; line 168 — '\"timestamp\": \"2025-08-09T10:30:00Z\"'",
+    "diagnosis": "performance_analysis (and all MonitoringManager methods) return entirely hardcoded, fabricated data — no kubernetes metrics-server, Prometheus, or any real API is called; timestamps are frozen at a past date.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject kubernetes.client.CustomObjectsApi (for metrics-server) and optionally an aiohttp session for Prometheus. For performance_analysis:\n  metrics_data = await self.k8s_client.custom_objects.list_cluster_custom_object('metrics.k8s.io','v1beta1','nodes')\nMap the response to the existing result schema. Add a fallback warning if metrics-server is unavailable. Replace the hardcoded timestamp with datetime.utcnow().isoformat().",
+    "test_plan": "Mock kubernetes.client.CustomObjectsApi to return a real-shaped metrics payload; assert the returned dict contains non-hardcoded values. Add an integration test against a live kind cluster with metrics-server enabled."
+  },
+  {
+    "component_id": "k8s/kustomization.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/kustomization.yaml:18 — \"newTag: latest\"; lines 30,35 — envs: [config.env] and envs: [secrets.env]",
+    "diagnosis": "Two critical issues: (1) newTag: latest prevents reproducible deployments and bypasses image digest pinning; (2) configMapGenerator and secretGenerator reference config.env and secrets.env files that do not exist in the k8s/ directory, so kustomize build will fail with a file-not-found error.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace newTag: latest with a concrete semver tag (e.g. newTag: '1.0.0') or a CI-injected digest. Add placeholder config.env and secrets.env files to k8s/ with commented-out keys and .gitignore the secrets variant. Alternatively, replace secretGenerator with a reference to an externally-managed Secret resource.",
+    "test_plan": "Run 'kustomize build k8s/' and confirm it exits 0 with no file-not-found errors. Confirm the rendered Deployment image tag is not 'latest'. CI: add a step that fails the build if 'newTag: latest' appears in any kustomization.yaml."
+  },
+  {
+    "component_id": "behavior:backend_cache",
+    "kind": "behavior",
+    "severity": "info",
+    "evidence": "N/A — design task",
+    "diagnosis": "No LLM explanation cache exists; repeated calls with identical finding payloads will re-invoke the LLM at full cost and latency.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: CacheEntry {key: str (SHA-256 of normalized finding payload), explanation: str, created_at: datetime, ttl_seconds: int}. Storage: in-process dict[str, CacheEntry] with asyncio.Lock for thread safety; optionally persist to Redis for multi-instance deployments. Interface: async def get_explanation(finding: dict, ttl: int = 3600) -> str. Algorithm: (1) normalize finding dict (sort keys, strip volatile fields like timestamps); (2) compute SHA-256 hash; (3) if cache hit and not expired, return cached value; (4) else call LLM, store result, return. Eviction: LRU with max 1000 entries. Edge cases: cache poisoning via hash collision (use full payload equality check on hit), cache invalidation on k8s version change (include cluster version in hash).",
+    "test_plan": "Unit test: call get_explanation twice with identical finding, assert LLM is invoked once (mock verifies single call). TTL test: set ttl=1, wait 2s, call again, assert LLM is re-invoked. Concurrency test: fire 10 concurrent calls with same finding, assert LLM called exactly once."
+  },
+  {
+    "component_id": "status.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "status.sh:1 — '#!/bin/bash' (no set -euo pipefail); lines 4-12 — all output is hardcoded strings ('Health: OK (Docker healthcheck passed)', 'Port: 3001 -> 3001') regardless of actual state",
+    "diagnosis": "status.sh lacks set -euo pipefail so unbound variable and pipeline errors are silently swallowed; the 'Health: OK' and port lines are hardcoded strings not derived from actual container inspection.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add 'set -euo pipefail' after shebang. Replace hardcoded status strings with real docker inspect calls:\n  health=$(docker inspect --format='{{.State.Health.Status}}' k8s-mcp-server 2>/dev/null || echo 'unknown')\n  port=$(docker inspect --format='{{range $p, $c := .NetworkSettings.Ports}}{{$p}}->{{(index $c 0).HostPort}} {{end}}' k8s-mcp-server 2>/dev/null)\n  echo \"Health: $health\"\n  echo \"Ports: $port\"",
+    "test_plan": "Run the script against a container with a failing healthcheck and assert the output reflects 'unhealthy' not 'OK'. Run with no container running and assert it exits cleanly with 'Not running'."
+  },
+  {
+    "component_id": "mcp-tool:get_troubleshooting_guide",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/documentation_manager.py:401-413 — get_troubleshooting_guide iterates self.documentation_db; src/documentation_manager.py:51-66 — _build_documentation_index makes outbound HTTP to kubernetes.io; src/documentation_manager.py:87-88 — errors are swallowed with except Exception: self.logger.error(...) and no re-raise",
+    "diagnosis": "get_troubleshooting_guide silently returns an empty list [] whenever the documentation_db is empty, which occurs any time the startup HTTP crawl of kubernetes.io fails (network partition, rate limiting, or air-gapped environment) — the tool gives no error to the caller.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add a fallback: if documentation_db is empty at query time, return a structured error response:\n  if not self.documentation_db:\n      return [{'error': 'Documentation index unavailable', 'suggestion': 'Check network access to kubernetes.io or run with --offline-docs-path'}]\nAlternatively, bundle a minimal offline docs snapshot as a JSON file in the repo and load it as the default when network fetch fails.",
+    "test_plan": "Unit test: mock aiohttp to raise aiohttp.ClientError on all requests, call get_troubleshooting_guide('CrashLoopBackOff'), assert the result contains an 'error' key not an empty list. Integration test: call the method with documentation_db populated (mock fetch success) and verify results contain relevant guide entries."
+  }
+]

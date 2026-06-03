@@ -1,0 +1,55 @@
+{
+  "agent_id": 32,
+  "components": [
+    {
+      "id": "behavior:five_min_watchdog",
+      "kind": "behavior",
+      "focus": "watchdog impl: how do we know it healed? readiness + zero new warnings"
+    },
+    {
+      "id": "tests/production/test_security_compliance.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "mcp-tool:get_recommendations",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/monitoring_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:check_network_connectivity",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "CHANGELOG.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "enhanced:helm_uninstall",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "src/helm_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "src/github_issues_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:analyzer_pdb",
+      "kind": "behavior",
+      "focus": "PDBAnalyzer: blocking evictions, mismatched selectors"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "agent_id": 19,
+  "components": [
+    {
+      "id": "behavior:worklist_sqlite",
+      "kind": "behavior",
+      "focus": "SQLite worklist for non-colliding agent claims; atomic claim/release"
+    },
+    {
+      "id": "enhanced:kubectl_exec",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:search_documentation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "enhanced:helm_uninstall",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "k8s/service.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:search_github_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "enhanced:helm_install",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "update.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:analyzer_hpa",
+      "kind": "behavior",
+      "focus": "HPAAnalyzer: no metrics, capped at max, never scaling"
+    },
+    {
+      "id": "mcp-tool:check_network_connectivity",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

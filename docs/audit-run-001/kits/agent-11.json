@@ -1,0 +1,55 @@
+{
+  "agent_id": 11,
+  "components": [
+    {
+      "id": "GETTING_STARTED.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "mcp-tool:get_recommendations",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:probe_tuning_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for connection-refused on startup"
+    },
+    {
+      "id": "mcp-tool:security_scan",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:trading_ns_hardblock",
+      "kind": "behavior",
+      "focus": "enforce: ibkr-live-trader, daxxon-trading, brightflow-live \u2192 PR-only never auto"
+    },
+    {
+      "id": "README.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "src/config.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "tests/production/test_pod_issues.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "k8s/rbac.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:image_tag_migration_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for bitnami/kubectl:1.30 yank class of issues"
+    }
+  ]
+}

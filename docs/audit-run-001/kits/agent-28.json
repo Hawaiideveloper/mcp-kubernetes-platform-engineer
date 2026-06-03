@@ -1,0 +1,55 @@
+{
+  "agent_id": 28,
+  "components": [
+    {
+      "id": "enhanced:kubectl_describe",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:analyzer_base",
+      "kind": "behavior",
+      "focus": "BaseAnalyzer abstract class: input=k8s state, output=Finding"
+    },
+    {
+      "id": "enhanced:kubectl_delete",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "mcp-tool:get_trending_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:gitops_pr_generation",
+      "kind": "behavior",
+      "focus": "PR body: finding ID + evidence + sandbox log. Title format. Labels."
+    },
+    {
+      "id": "src/logger.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:rbac_split",
+      "kind": "behavior",
+      "focus": "separate ServiceAccounts: read-only for diagnosis, namespaced-write for apply"
+    },
+    {
+      "id": "GETTING_STARTED.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "start.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "k8s/secret.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    }
+  ]
+}

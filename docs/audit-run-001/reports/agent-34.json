@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:done_definition",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No definition of 'done' exists anywhere in the repo; functional_unit_test.md and TEST_SUITE_IMPLEMENTATION_SUMMARY.md describe tests but never gate on image build, clean events, or zero failed pods",
+    "diagnosis": "There is no codified 'done' gate that requires green pytest, a successful image build, clean cluster events, and empty failed-pod count before a feature is marked complete.",
+    "fix_class": "design",
+    "proposed_fix": "Define a CI step named 'done-gate' with four sequential checks: (1) pytest --tb=short exits 0; (2) docker build --no-cache exits 0; (3) kubectl get events --field-selector type=Warning returns zero lines for the target namespace; (4) kubectl get pods --field-selector status.phase=Failed returns zero lines. Gate is a GitHub Actions job that depends on all four steps; PR merge is blocked until it passes.",
+    "test_plan": "Create a test PR that deliberately leaves a pod in Failed state; verify the gate blocks merge. Fix the pod; verify gate passes and merge is allowed."
+  },
+  {
+    "component_id": "src/__init__.py",
+    "kind": "python",
+    "severity": "low",
+    "evidence": "src/__init__.py:5 — `__version__ = \"1.0.0\"` hardcoded; no dynamic version from pyproject.toml or git tag",
+    "diagnosis": "The package init is a near-empty placeholder with a hardcoded version string and no real logic, which is not itself a bug but the version is decoupled from any release tooling.",
+    "fix_class": "document",
+    "proposed_fix": "Replace hardcoded version with `from importlib.metadata import version; __version__ = version('mcp-kubernetes-platform-engineer')` and add the package to pyproject.toml so the version flows from a single source of truth. No other changes needed to __init__.py.",
+    "test_plan": "Run `python -c 'import src; print(src.__version__)'` and assert it matches the version in pyproject.toml after the change."
+  },
+  {
+    "component_id": "mcp-tool:search_github_issues",
+    "kind": "mcp-tool",
+    "severity": "medium",
+    "evidence": "src/mcp_server.py:583-591 dispatches to `self.github_issues_manager.search_issues(...)` which at src/github_issues_manager.py:410-460 queries a local SQLite DB populated by real GitHub API calls — BUT the DB is empty on first run until `_fetch_recent_issues()` at line 65 completes; on rate-limit (403) at line 267 the fetch silently skips repos without retrying",
+    "diagnosis": "The tool is wired to a real SQLite store backed by real GitHub API fetches, but the DB is empty until initialization finishes and rate-limit failures are silently swallowed, causing the tool to return empty results with no user-visible indication.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In `_fetch_issues_page` (line 267): on 403 log the Retry-After header value and reschedule the fetch with exponential back-off instead of dropping it. In `search_issues` (line 456): when the result set is empty, query `SELECT COUNT(*) FROM github_issues` and if 0 return a structured message like `{\"status\": \"initializing\", \"message\": \"index not yet populated\"}`.",
+    "test_plan": "Mock aiohttp to return 403 for the first call; verify the manager retries and logs the delay. After initialization with a mocked 200 response, call search_issues and assert non-empty results."
+  },
+  {
+    "component_id": "mcp-tool:get_cluster_info",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:49-74 — comment `# Stub implementation - in real implementation, this would query the cluster` followed by hardcoded dict: `\"version\": \"v1.29.0\"`, `\"nodes\": {\"total\": 3, \"ready\": 3}`, `\"pods\": {\"total\": 45, \"running\": 42}`",
+    "diagnosis": "get_cluster_info returns entirely fabricated data; no kubernetes-client call is made; self.client is set to None at line 22 and never assigned.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In `initialize()` (line 26): call `kubernetes.config.load_incluster_config()` with fallback to `load_kube_config()`; assign `self.client = kubernetes.client.CoreV1Api()` and `self.apps_client = kubernetes.client.AppsV1Api()`. In `get_cluster_info`: replace the stub dict with calls to `self.client.list_node()`, `self.client.list_namespace()`, and `self.client.list_pod_for_all_namespaces()` aggregating real counts.",
+    "test_plan": "Mock the kubernetes.client with a fake response returning 2 nodes; assert the returned dict shows `nodes.total == 2`. Integration test: deploy to a real cluster and assert version string matches `kubectl version --short`."
+  },
+  {
+    "component_id": "mcp-tool:analyze_logs",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:99-145 — `\"total_entries\": 1247`, `\"filtered_entries\": 156`, hardcoded errors `\"Failed to connect to database\"` and `\"Authentication timeout\"` with fabricated timestamps `2025-08-09T09:15:00Z`",
+    "diagnosis": "analyze_logs returns completely fabricated log data regardless of the target, namespace, or time_range parameters; no kubernetes API or log aggregation system is called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the stub with a call to `self.core_v1.read_namespaced_pod_log(name=target, namespace=namespace, since_seconds=_parse_time_range(time_range), timestamps=True)`. Parse returned lines by log_level and search_pattern. Aggregate actual error/warn/info counts from parsed lines. For multi-container pods, iterate container names and merge results.",
+    "test_plan": "Mock `read_namespaced_pod_log` to return a 3-line log with one ERROR and one WARN; assert `error_count==1`, `warning_count==1`, and that the returned sample entries match the mocked content."
+  },
+  {
+    "component_id": "behavior:analyzer_ingress",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No IngressAnalyzer class exists anywhere in the repo (`grep -r 'IngressAnalyzer' src/` returns nothing); ingress resources are only mentioned in the RBAC rule at k8s/rbac.yaml:32",
+    "diagnosis": "IngressAnalyzer (no-backend detection, TLS expiry, host conflict) does not exist and needs to be designed from scratch.",
+    "fix_class": "design",
+    "proposed_fix": "Create `src/ingress_analyzer.py` with class `IngressAnalyzer(BaseAnalyzer)`. Interface: `async def analyze(namespace: Optional[str]) -> List[Finding]`. Data model: `Finding(rule, resource_ref, severity, detail)`. Rules: (1) no-backend — for each `spec.rules[].http.paths[].backend`, verify Service+port exists via CoreV1; (2) TLS expiry — fetch Secret named in `spec.tls[].secretName`, decode `tls.crt`, check NotAfter < utcnow+30d; (3) host conflict — group all Ingresses by host, flag duplicates. Emit one Finding per violation.",
+    "test_plan": "Unit: mock list_namespaced_ingress and list_namespaced_service; assert Finding is emitted for a backend Service that does not exist. Assert no Finding when backend exists. Assert TLS expiry Finding when cert expires within 7 days."
+  },
+  {
+    "component_id": "behavior:analyzer_deployment",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No DeploymentAnalyzer class exists anywhere in the repo (`grep -r 'DeploymentAnalyzer' src/` returns nothing); DiagnosticsManager at src/diagnostics_manager.py contains only stub implementations",
+    "diagnosis": "DeploymentAnalyzer (replica mismatch, rollout stuck) does not exist and needs to be designed from scratch.",
+    "fix_class": "design",
+    "proposed_fix": "Create `src/deployment_analyzer.py` with class `DeploymentAnalyzer(BaseAnalyzer)`. Interface: `async def analyze(namespace: Optional[str]) -> List[Finding]`. Rules: (1) replica-mismatch — compare `status.replicas` vs `spec.replicas`; emit Finding if `status.availableReplicas < spec.replicas` for more than 5 minutes (use `status.conditions[type=Available].lastTransitionTime`); (2) rollout-stuck — if `status.conditions[type=Progressing].reason == 'ProgressDeadlineExceeded'` emit critical Finding with deadline value. Dependency: `kubernetes.client.AppsV1Api.list_namespaced_deployment()`.",
+    "test_plan": "Mock AppsV1Api to return a Deployment with spec.replicas=3 and status.availableReplicas=1; assert Finding severity==high is returned. Mock ProgressDeadlineExceeded condition; assert Finding severity==critical."
+  },
+  {
+    "component_id": "k8s/rbac.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/rbac.yaml:48 — `resources: [\"podsecuritypolicies\", \"poddisruptionbudgets\"]` under `apiGroups: [\"policy\"]`; PodSecurityPolicy was removed in Kubernetes 1.25 (released Aug 2022)",
+    "diagnosis": "The RBAC manifest references the deprecated and removed PodSecurityPolicy resource, which will cause `kubectl apply` to produce a warning or fail on clusters running k8s >= 1.25, and the deployment.yaml (line 90) sets `readOnlyRootFilesystem: false` weakening container isolation.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove `podsecuritypolicies` from the policy apiGroup rule at line 48; keep only `poddisruptionbudgets`. In k8s/deployment.yaml line 90, change `readOnlyRootFilesystem: false` to `true` and add a writable emptyDir volume mounted at any path the app writes to (e.g. /tmp). Add a comment referencing PSS (Pod Security Standards) as the replacement for PSP.",
+    "test_plan": "Run `kubectl apply --dry-run=server -f k8s/rbac.yaml` against a 1.28+ cluster; assert no warnings about removed APIs. Run `kubectl apply --dry-run=server -f k8s/deployment.yaml`; assert no securityContext warnings."
+  },
+  {
+    "component_id": "mcp-tool:execute_remediation",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/k8s_manager.py:189-210 — for `pod_restart_loop` the actions_taken list contains string literals `\"Analyzed pod events and logs\"` and `\"Identified image pull errors\"` with no actual API calls; `self.client` is None (line 22) so any real API call would raise AttributeError",
+    "diagnosis": "execute_remediation performs no real cluster operations; it returns a hardcoded action list and the dry_run flag is only used to vary a string message, not to guard against actual mutations.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Gate all mutations behind `if not dry_run:` blocks that call real API (e.g. `self.core_v1.delete_namespaced_pod()` for pod_restart_loop). For dry_run, call read-only APIs and describe what would be done. Raise `ValueError` for unknown issue_type instead of returning `status: error` silently. Add an allowlist of supported issue_type values to the method docstring and the MCP tool schema.",
+    "test_plan": "Call execute_remediation with dry_run=True; assert no Pod delete API is called. Call with dry_run=False and mock delete API; assert mock was called once with correct pod name and namespace."
+  },
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "K8S_ANNOUNCEMENT.md:12 — 'AI-powered pattern recognition, issue categorization, and solution mining'; line 30 — 'Automated remediation for common issues'; line 18 — 'Production-Ready Kubernetes Deployment'; vs src/k8s_manager.py:49 stub comment and src/monitoring_manager.py:99 hardcoded log data",
+    "diagnosis": "The announcement makes four concrete production-grade claims (AI-powered pattern recognition, automated remediation, live cluster diagnostics, 1029+ docs integrated) that are directly contradicted by stub/hardcoded implementations in the source code.",
+    "fix_class": "document",
+    "proposed_fix": "Replace 'Production-Ready' with 'Early Preview / Alpha'. Replace 'AI-powered pattern recognition' with 'keyword-based issue categorization (heuristic)'. Replace 'Automated remediation for common issues' with 'Dry-run remediation stubs (real mutations not yet implemented)'. Add a Status table at the top listing each capability as: Implemented / Partial / Stub.",
+    "test_plan": "Review updated doc against the code; assert no claim in the doc is contradicted by a stub comment or hardcoded return value in any manager file."
+  }
+]

@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/health_check.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "health_check.py:38-46 — check_imports() validates only stdlib modules (asyncio, json, logging); health_check.py:49-55 — check_file_permissions() only verifies the app directory exists as a dir; no check that kubernetes client, mcp, or any real dependency is importable or reachable",
+    "diagnosis": "The health check tests only Python built-in availability and directory existence, never verifying that the kubernetes client, MCP library, or kubeconfig is present and valid, so it will return True even when the server cannot connect to any cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add check_kubernetes_client() that does `from kubernetes import client, config; config.load_incluster_config()` or `config.load_kube_config()` and catches exceptions. Add check_mcp_import() that imports `mcp.server`. Wire both into check(). Return False with a descriptive message on any failure rather than silently swallowing exceptions at line 29.",
+    "test_plan": "Run health_check.py with KUBECONFIG unset — should return False. Run with a valid kubeconfig to a live cluster — should return True. Inject an ImportError for the kubernetes package and confirm False is returned."
+  },
+  {
+    "component_id": "mcp-tool:security_scan",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:532-537 — dispatches to self.security_manager.security_scan(); src/security_manager.py:92-116 (_scan_rbac), 118-150 (_scan_pod_security), 152-176 (_scan_network_policies), 178-201 (_scan_secrets), 203-232 (_scan_container_images) — every private scan method returns a hardcoded dict literal with fabricated counts, CVEs, and percentages; no kubernetes client is imported in security_manager.py",
+    "diagnosis": "The security_scan tool returns entirely fabricated data (e.g., hardcoded 'total_pods: 45', 'overall_security_score: 85', CVE 'nginx:1.18') from stub methods that never call the Kubernetes API, making every scan result false regardless of actual cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In SecurityManager.__init__, accept a kubernetes CoreV1Api / RbacAuthorizationV1Api client. In _scan_rbac, call rbac_v1.list_cluster_role_binding() and rbac_v1.list_role_binding_for_all_namespaces(). In _scan_pod_security, call core_v1.list_pod_for_all_namespaces() and inspect spec.securityContext. In _scan_secrets, call core_v1.list_secret_for_all_namespaces(). Return real counts. Remove all hardcoded dicts.",
+    "test_plan": "Mock kubernetes client responses with known fixtures (e.g., one privileged pod, one wildcard role), call security_scan(['pods', 'rbac']), assert returned issues match exactly the fixture data. Run against a test cluster with no issues and assert issues_found is empty."
+  },
+  {
+    "component_id": "enhanced:kubectl_delete",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:106-128 — kubectl_delete Tool schema defined; grep confirms 'enhanced_tools' is never imported in src/mcp_server.py (grep returned no output); src/mcp_server.py handle_call_tool (lines 483-621) contains no 'kubectl_delete' branch",
+    "diagnosis": "The kubectl_delete tool schema is declared in enhanced_tools.py and the handler exists in kubectl_manager.py:152, but mcp_server.py never imports enhanced_tools nor includes a dispatch branch for kubectl_delete, so the tool is completely dead and unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add `from enhanced_tools import get_enhanced_kubectl_tools` and append the returned tools to the list_tools response. Add an elif branch in handle_call_tool: `elif name == 'kubectl_delete': result = await self.kubectl_manager.kubectl_delete(resource=arguments['resource'], name=arguments['name'], namespace=arguments.get('namespace', 'default'))`. Apply same pattern to all other enhanced kubectl/helm tools.",
+    "test_plan": "Call the MCP list_tools endpoint and assert kubectl_delete appears. Call kubectl_delete with a test resource and confirm the kubectl_manager.kubectl_delete method is invoked. In non-destructive mode, confirm the tool returns a disabled message rather than executing."
+  },
+  {
+    "component_id": "behavior:iteration_state_machine",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No state machine exists in the codebase; no iteration loop, stop condition, or persistent state store is implemented anywhere in src/",
+    "diagnosis": "There is no implementation or design for a review-PRD-split-implement-verify loop with stop conditions; this behavior must be fully designed for the auto-remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: IterationState(id: UUID, phase: Enum[REVIEW|PRD|SPLIT|IMPLEMENT|VERIFY], component_id: str, findings: List[Finding], attempt: int, max_attempts: int=3, status: Enum[PENDING|RUNNING|DONE|FAILED]). Interface: async def advance(state: IterationState) -> IterationState. Dependencies: persistent store (sqlite or redis), per-phase handler registry. Stop conditions: status==DONE when verify passes; status==FAILED after max_attempts; loop aborts if phase==VERIFY and all assertions pass. Edge cases: idempotent re-entry on crash recovery; timeout per phase (default 300s); human-approval gate before IMPLEMENT if dry_run=False.",
+    "test_plan": "Unit-test each phase transition with mock handlers. Integration-test the full loop on a synthetic Finding that fails VERIFY once then passes on retry. Confirm FAILED state is set after max_attempts are exhausted. Confirm the loop does not advance past SPLIT without a non-empty PRD artifact."
+  },
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:515-521 — dispatches to diagnostics_manager.check_network_connectivity(); src/diagnostics_manager.py:185-210 — comment reads '# Stub implementation for different test types' and every branch returns a hardcoded dict (e.g., latency_ms: 2.3, resolved_ip: '10.96.0.1', 'Connection timeout') regardless of actual source_pod or target values",
+    "diagnosis": "check_network_connectivity ignores the source_pod and target arguments entirely and returns canned latency and error data from a stub, so network diagnostics are always fabricated and misleading.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Use kubernetes CoreV1Api to verify source_pod exists and is Running. For ping/tcp tests, execute `kubectl exec {source_pod} -- nc -zv {target} {port}` via the kubernetes exec API (stream=True). For dns, exec `nslookup {target}`. For http, exec `curl -sI {target}`. Parse actual exit codes and stdout. Return real latency from time.monotonic() brackets around each exec call.",
+    "test_plan": "In a test cluster, assert a running pod can reach its own service (expect success). Assert a pod in a namespace with default-deny NetworkPolicy cannot reach an isolated target (expect failure). Confirm that passing a nonexistent pod_name returns an error dict rather than fabricated success."
+  },
+  {
+    "component_id": "src/security_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "security_manager.py:1-10 — imports are asyncio, json, typing, config, logger only; no kubernetes import present; security_manager.py:23-30 — initialize() logs two lines and does nothing; security_manager.py:251-272 — _check_compliance_status() returns hardcoded CIS score '82%', NIST scores, all fabricated; security_manager.py:274-309 — _generate_security_recommendations() returns a static list unrelated to any scan input",
+    "diagnosis": "SecurityManager has no Kubernetes client, performs zero real API calls, and produces entirely hardcoded compliance scores and recommendations, making every security report a fiction regardless of actual cluster configuration.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add kubernetes_client parameter to __init__. In initialize(), call config.load_incluster_config() or config.load_kube_config() and instantiate CoreV1Api, RbacAuthorizationV1Api, NetworkingV1Api. Replace each _scan_* stub with real API calls. Derive _check_compliance_status() from aggregated real findings rather than returning constants. Make _generate_security_recommendations() filter from a rules table keyed on actual issue types found.",
+    "test_plan": "Mock the kubernetes clients to return a cluster with one privileged pod; assert the scan returns exactly that one high-severity issue and overall_security_score is not 85. Assert that a cluster with no issues returns score 100 and empty issues_found list."
+  },
+  {
+    "component_id": "mcp-tool:get_cluster_info",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:489-492 — dispatches to k8s_manager.get_cluster_info(); src/k8s_manager.py:49-89 — comment at line 49 reads '# Stub implementation - in real implementation, this would query the cluster'; returns hardcoded version 'v1.29.0', nodes total:3, pods running:42, api_server 'https://kubernetes.default.svc.cluster.local', network_plugin 'calico' — none from real API calls",
+    "diagnosis": "get_cluster_info returns hardcoded cluster topology data that is always identical regardless of the actual connected cluster, so any consumer of this tool receives false information.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In KubernetesManager.initialize(), load kubeconfig and instantiate CoreV1Api and VersionApi. In get_cluster_info(), call version_api.get_code() for version, core_v1.list_node() for node counts and status, core_v1.list_namespace() for namespace count, core_v1.list_pod_for_all_namespaces() for pod phase counts, core_v1.list_service_for_all_namespaces() for service type counts. Remove all hardcoded literals.",
+    "test_plan": "Mock VersionApi.get_code() to return v1.30.1 and list_node() to return 2 nodes (1 Ready, 1 NotReady); assert get_cluster_info returns version 'v1.30.1' and nodes.not_ready == 1. Integration test: run against a real single-node cluster and confirm the response reflects actual state."
+  },
+  {
+    "component_id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md:5 — claims '390 Total Tests'; actual test counts by file: test_pod_issues.py=10, test_network_service_issues.py=9, test_cluster_management.py=8, test_security_compliance.py=7, test_issue_patterns.py=21 — total=55 tests. Line 36 claims '5 Test Categories' (Unit, Integration, Performance, Security, Production) with directories integration/, performance/, security/ — none of these three directories exist (only unit/ and production/ exist per filesystem listing). Line 110 claims 'Full integration with Kubernetes client libraries' — security_manager and k8s_manager have zero kubernetes client calls.",
+    "diagnosis": "The summary document overclaims 390 tests (actual: 55), fabricates three missing test category directories (integration/, performance/, security/), and falsely asserts full Kubernetes API integration that does not exist in any source file.",
+    "fix_class": "document",
+    "proposed_fix": "Replace statistics table with accurate counts (55 tests across 2 categories). Remove claims about integration/, performance/, security/ directories until they are created. Remove the 'Full integration with Kubernetes client libraries' claim and replace with 'Managers currently use stub implementations; real API integration is pending.' Add a 'Known gaps' section listing the three missing test directories and the stub-only managers.",
+    "test_plan": "After doc update, run `grep -c 'def test_' tests/**/*.py` and confirm the count matches what the doc states. CI lint step should diff claimed counts vs actual pytest --collect-only output."
+  },
+  {
+    "component_id": "k8s/service.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/service.yaml:1-48 — the file contains only two Service resources (ClusterIP and NodePort); no securityContext, no resource limits, no readiness/liveness probes, no NetworkPolicy, no RBAC objects. The NodePort service at line 28-48 exposes port 30001 externally with no authentication or network policy guard.",
+    "diagnosis": "The service manifest lacks all security hardening: no NetworkPolicy to restrict ingress, no RBAC ServiceAccount binding, no resource quotas, and the NodePort exposure at 30001 is unrestricted, creating an unauthenticated external attack surface.",
+    "fix_class": "implement",
+    "proposed_fix": "Add a NetworkPolicy resource that allows ingress to port 3001 only from labeled MCP-client pods. Add a ServiceAccount + ClusterRole + ClusterRoleBinding granting only list/get/watch on pods, nodes, namespaces, secrets, services, networkpolicies. Consider removing or disabling the NodePort service in production and replacing with an Ingress with TLS termination. Document that both services share a namespace and that namespace should have a default-deny NetworkPolicy.",
+    "test_plan": "Deploy the updated manifest to a test cluster; confirm a pod without the correct label cannot reach port 3001. Confirm the NodePort is absent or inaccessible from outside the cluster. Run `kubectl auth can-i list secrets --as=system:serviceaccount:mcp-kubernetes:mcp-server` and confirm it returns 'yes' only for the scoped resources."
+  },
+  {
+    "component_id": "enhanced:helm_upgrade",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:458-503 — upgrade_helm_chart Tool schema defined with name 'upgrade_helm_chart'; grep of src/mcp_server.py for 'enhanced_tools', 'helm_upgrade', 'upgrade_helm_chart' returns no output — the module is never imported and no dispatch branch exists; src/helm_manager.py:141 — async def upgrade_helm_chart() implementation exists but is unreachable via MCP",
+    "diagnosis": "The upgrade_helm_chart enhanced tool schema and the helm_manager.upgrade_helm_chart() implementation both exist but mcp_server.py never imports enhanced_tools and has no dispatch branch for 'upgrade_helm_chart', so Helm upgrade is completely inaccessible via the MCP protocol.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, import `get_enhanced_helm_tools` from enhanced_tools and extend the list_tools response. Add dispatch branch: `elif name == 'upgrade_helm_chart': result = await self.helm_manager.upgrade_helm_chart(release_name=arguments['release_name'], chart=arguments['chart'], namespace=arguments.get('namespace'), values=arguments.get('values'), chart_version=arguments.get('chart_version'), install=arguments.get('install', True), dry_run=arguments.get('dry_run', False))`. Apply the same wire-up to all other get_enhanced_helm_tools entries.",
+    "test_plan": "After wire-up, call list_tools and confirm upgrade_helm_chart is present. Mock helm_manager.upgrade_helm_chart() to return a success dict; call the tool via MCP and assert the response matches. Confirm that dry_run=True invokes helm with --dry-run flag and returns the rendered manifest without applying it."
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "agent_id": 37,
+  "components": [
+    {
+      "id": "README.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:worklist_sqlite",
+      "kind": "behavior",
+      "focus": "SQLite worklist for non-colliding agent claims; atomic claim/release"
+    },
+    {
+      "id": "k8s/ingress.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:analyzer_deployment",
+      "kind": "behavior",
+      "focus": "DeploymentAnalyzer: replica mismatch, rollout stuck"
+    },
+    {
+      "id": "behavior:analyzer_pdb",
+      "kind": "behavior",
+      "focus": "PDBAnalyzer: blocking evictions, mismatched selectors"
+    },
+    {
+      "id": "k8s/secret.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:safety_allowlist",
+      "kind": "behavior",
+      "focus": "allowlisted namespaces for auto-merge; everything else PR-only"
+    },
+    {
+      "id": "enhanced:kubectl_rollout",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "behavior:dpo_pair_extraction",
+      "kind": "behavior",
+      "focus": "given (rejected_actions, chosen_action, evidence), emit DPO issue body"
+    },
+    {
+      "id": "behavior:audit_log",
+      "kind": "behavior",
+      "focus": "every action by remediator \u2192 append to audit log with who/what/when/evidence"
+    }
+  ]
+}

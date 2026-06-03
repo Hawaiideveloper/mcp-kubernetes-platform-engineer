@@ -1,0 +1,55 @@
+{
+  "agent_id": 4,
+  "components": [
+    {
+      "id": "mcp-tool:performance_analysis",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "GettingStarted.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "coming_soon.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:trading_ns_hardblock",
+      "kind": "behavior",
+      "focus": "enforce: ibkr-live-trader, daxxon-trading, brightflow-live \u2192 PR-only never auto"
+    },
+    {
+      "id": "behavior:image_tag_migration_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for bitnami/kubectl:1.30 yank class of issues"
+    },
+    {
+      "id": "k8s/kustomization.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:finding_serialization",
+      "kind": "behavior",
+      "focus": "Finding type: structured JSON for issues, PRs, DPO pairs"
+    },
+    {
+      "id": "k8s/ingress.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "push-and-deploy.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "enhanced:kubectl_delete",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    }
+  ]
+}

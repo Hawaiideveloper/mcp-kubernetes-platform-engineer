@@ -1,0 +1,55 @@
+{
+  "agent_id": 5,
+  "components": [
+    {
+      "id": "behavior:analyzer_node",
+      "kind": "behavior",
+      "focus": "NodeAnalyzer: NotReady, disk pressure, memory pressure, PID pressure"
+    },
+    {
+      "id": "mcp-tool:execute_remediation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "k8s/configmap.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:image_tag_migration_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for bitnami/kubectl:1.30 yank class of issues"
+    },
+    {
+      "id": "mcp-tool:find_similar_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:backend_cache",
+      "kind": "behavior",
+      "focus": "LLM explanation cache: finding-hash \u2192 explanation, TTL"
+    },
+    {
+      "id": "behavior:nim_backend_integration",
+      "kind": "behavior",
+      "focus": "pluggable LLM backend interface; NIM as default; cache by finding-hash"
+    },
+    {
+      "id": "behavior:finding_serialization",
+      "kind": "behavior",
+      "focus": "Finding type: structured JSON for issues, PRs, DPO pairs"
+    },
+    {
+      "id": "mcp-tool:security_scan",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "k8s/kustomization.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    }
+  ]
+}

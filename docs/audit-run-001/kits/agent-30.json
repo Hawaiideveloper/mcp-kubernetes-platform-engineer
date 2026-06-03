@@ -1,0 +1,55 @@
+{
+  "agent_id": 30,
+  "components": [
+    {
+      "id": "src/config.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "k8s/pvc.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:probe_tuning_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for connection-refused on startup"
+    },
+    {
+      "id": "src/health_check.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:performance_analysis",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "k8s/kustomization.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "behavior:backend_cache",
+      "kind": "behavior",
+      "focus": "LLM explanation cache: finding-hash \u2192 explanation, TTL"
+    },
+    {
+      "id": "status.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "mcp-tool:get_troubleshooting_guide",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    }
+  ]
+}

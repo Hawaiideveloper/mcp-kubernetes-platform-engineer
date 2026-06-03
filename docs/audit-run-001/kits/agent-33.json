@@ -1,0 +1,55 @@
+{
+  "agent_id": 33,
+  "components": [
+    {
+      "id": "mcp-tool:execute_remediation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "tests/unit/test_issue_patterns.py",
+      "kind": "test",
+      "focus": "does this test real behavior or just stub returns? fixtures? coverage?"
+    },
+    {
+      "id": "functional_unit_test.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "behavior:nim_backend_integration",
+      "kind": "behavior",
+      "focus": "pluggable LLM backend interface; NIM as default; cache by finding-hash"
+    },
+    {
+      "id": "src/main.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "enhanced:helm_upgrade",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "GETTING_STARTED.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "mcp-tool:diagnose_cluster_health",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "setup-vscode-nodeport.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:analyzer_ingress",
+      "kind": "behavior",
+      "focus": "IngressAnalyzer: no backend, TLS expiry, host conflict"
+    }
+  ]
+}

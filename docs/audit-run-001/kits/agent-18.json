@@ -1,0 +1,55 @@
+{
+  "agent_id": 18,
+  "components": [
+    {
+      "id": "TEST_SUITE_IMPLEMENTATION_SUMMARY.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "deploy-k8s.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "GettingStarted.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "stop.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:analyzer_hpa",
+      "kind": "behavior",
+      "focus": "HPAAnalyzer: no metrics, capped at max, never scaling"
+    },
+    {
+      "id": "K8S_ANNOUNCEMENT.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    },
+    {
+      "id": "src/documentation_manager.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "src/logger.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "src/main.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "behavior:safety_allowlist",
+      "kind": "behavior",
+      "focus": "allowlisted namespaces for auto-merge; everything else PR-only"
+    }
+  ]
+}

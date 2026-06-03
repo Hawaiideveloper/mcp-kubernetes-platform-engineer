@@ -1,0 +1,55 @@
+{
+  "agent_id": 34,
+  "components": [
+    {
+      "id": "behavior:done_definition",
+      "kind": "behavior",
+      "focus": "what \"proven with output\" means: green pytest + image build + clean events + empty failed pods"
+    },
+    {
+      "id": "src/__init__.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:search_github_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "mcp-tool:get_cluster_info",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "mcp-tool:analyze_logs",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:analyzer_ingress",
+      "kind": "behavior",
+      "focus": "IngressAnalyzer: no backend, TLS expiry, host conflict"
+    },
+    {
+      "id": "behavior:analyzer_deployment",
+      "kind": "behavior",
+      "focus": "DeploymentAnalyzer: replica mismatch, rollout stuck"
+    },
+    {
+      "id": "k8s/rbac.yaml",
+      "kind": "manifest",
+      "focus": "security ctx, RBAC scope, image pinning, probe timing, resource limits"
+    },
+    {
+      "id": "mcp-tool:execute_remediation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "K8S_ANNOUNCEMENT.md",
+      "kind": "doc",
+      "focus": "every CLAIM in this doc \u2014 verify against actual code; flag overclaims"
+    }
+  ]
+}

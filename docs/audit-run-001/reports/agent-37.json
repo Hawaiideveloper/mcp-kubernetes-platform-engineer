@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "README.md",
+    "kind": "doc",
+    "severity": "critical",
+    "evidence": "README.md:58 — '> **🚀 Production Ready**: Successfully deployed in both Docker containers and Kubernetes clusters with full authentication, persistent storage, and comprehensive documentation integration (1,029+ official Kubernetes reference files).'; README.md:56 — 'monitors 17+ major Kubernetes repositories and automatically updates its knowledge base every hour'; k8s_manager.py:49-50 — '# Stub implementation - in real implementation, this would query the cluster'; k8s_manager.py:53 — '\"version\": \"v1.29.0\",  # Would get from actual cluster'",
+    "diagnosis": "README claims production-ready live deployment, hourly learning from 17 repos, and 45,720+ indexed issues, but every manager is a stub returning hardcoded fake data with no real Kubernetes client calls.",
+    "fix_class": "document",
+    "proposed_fix": "Replace all 'Production Ready', 'Successfully deployed', 'live', and metrics claims with accurate pre-release/prototype language. Remove the fake statistics block (lines 474-481). Add a prominent 'Status: Prototype / Not Production Ready' badge. Rewrite the 'Core Features' section to reflect what is actually implemented vs. what is planned.",
+    "test_plan": "After rewrite, diff README against actual manager code to verify no claim exists without a corresponding non-stub implementation; CI lint step to flag phrases like 'successfully deployed' or numeric stats without code references."
+  },
+  {
+    "component_id": "behavior:worklist_sqlite",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No file exists in the repo matching worklist, claim_table, or sqlite db for agent coordination. grep for 'sqlite' in src/ returns zero results.",
+    "diagnosis": "A SQLite-backed worklist for multi-agent, collision-free claim/release of remediation targets does not exist anywhere in the codebase and must be designed from scratch.",
+    "fix_class": "design",
+    "proposed_fix": "Create src/worklist_db.py. Schema: table `worklist(id TEXT PK, kind TEXT, namespace TEXT, name TEXT, claimed_by TEXT, claimed_at REAL, status TEXT CHECK(status IN ('open','claimed','done','failed'))`. Use `BEGIN IMMEDIATE` + UPDATE WHERE status='open' for atomic single-row claim. Expose: `claim(agent_id) -> Row|None`, `release(id, status)`, `list_open() -> List[Row]`. Dependencies: stdlib sqlite3 only. Edge cases: stale claims older than TTL (e.g. 300s) must be auto-released on each claim call.",
+    "test_plan": "Unit test: spawn N threads each calling claim() in a loop; assert each row is claimed exactly once. Integration test: simulate a crash mid-claim and verify TTL-based auto-release returns item to 'open' after TTL expires."
+  },
+  {
+    "component_id": "k8s/ingress.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/ingress.yaml:11 — 'nginx.ingress.kubernetes.io/ssl-redirect: \"false\"'; k8s/ingress.yaml:12-14 — TLS block fully commented out; k8s/ingress.yaml:21 — 'host: mcp-server.local  # Change to your domain'",
+    "diagnosis": "The ingress manifest ships with TLS disabled, no cert-manager annotation active, a placeholder hostname, and no annotations for rate-limiting or auth — making it unsuitable for any production or even staging deployment as committed.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Set ssl-redirect to 'true'. Uncomment and complete the tls block with a real secretName placeholder. Add annotation `nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'`. Add `nginx.ingress.kubernetes.io/limit-rps: '20'` to rate-limit the MCP endpoint. Replace 'mcp-server.local' with a parameterised value (e.g. via Kustomize overlay). Document that the host value must be overridden before deployment.",
+    "test_plan": "Deploy to a test cluster with cert-manager installed; verify the ingress receives a valid TLS certificate and that HTTP redirects to HTTPS. Confirm 429 responses at >20 rps."
+  },
+  {
+    "component_id": "behavior:analyzer_deployment",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No DeploymentAnalyzer class exists in src/. diagnostics_manager.py contains stubs. k8s_manager.py:49 — '# Stub implementation - in real implementation, this would query the cluster'",
+    "diagnosis": "A DeploymentAnalyzer that detects replica mismatch and stuck rollouts does not exist; it must be designed as a new component for the remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Add class `DeploymentAnalyzer` in src/analyzers/deployment.py. Method `analyze(namespace, name) -> DeploymentReport`. Use `kubernetes.client.AppsV1Api().read_namespaced_deployment()`. Replica mismatch: `spec.replicas != status.ready_replicas`. Stuck rollout: conditions where `status.conditions[type=Progressing].reason == 'ProgressDeadlineExceeded'`. Return structured dict: `{issue_type, deployment, namespace, desired, ready, conditions, recommendation}`. Dependencies: kubernetes Python client. Edge cases: deployment not found (404), unavailable metrics server.",
+    "test_plan": "Unit test with mocked AppsV1Api returning a deployment with ready_replicas < spec.replicas; assert issue_type='replica_mismatch'. Integration test against a real cluster with a deployment scaled to 0 via annotation."
+  },
+  {
+    "component_id": "behavior:analyzer_pdb",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No PDBAnalyzer class exists in src/. No PodDisruptionBudget handling in security_manager.py or diagnostics_manager.py.",
+    "diagnosis": "A PDBAnalyzer for detecting eviction-blocking PDBs and label-selector mismatches does not exist and must be designed for the remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Add class `PDBAnalyzer` in src/analyzers/pdb.py. Method `analyze(namespace) -> List[PDBReport]`. Use `kubernetes.client.PolicyV1Api().list_namespaced_pod_disruption_budget()`. Blocking eviction: `status.disruptions_allowed == 0 and status.expected_pods > 0`. Selector mismatch: cross-reference `spec.selector.matchLabels` against `CoreV1Api().list_namespaced_pod()` labels; report if zero pods match. Return: `{pdb_name, namespace, issue, pods_matched, disruptions_allowed, selector}`. Edge cases: PDB selecting across namespaces (unsupported by API, document), missing pods.",
+    "test_plan": "Unit test: mock a PDB with disruptions_allowed=0 and verify finding returned. Mock a PDB with a selector that matches no pods and verify selector_mismatch finding. Integration test: deploy a PDB with min_available equal to replica count, then trigger a drain and verify the analyzer reports blocking."
+  },
+  {
+    "component_id": "k8s/secret.yaml",
+    "kind": "manifest",
+    "severity": "critical",
+    "evidence": "k8s/secret.yaml:13 — 'GITHUB_TOKEN: \"\"'",
+    "diagnosis": "The secret manifest has an empty GITHUB_TOKEN value committed to the repo; any cluster applying k8s/ verbatim will create a secret with an empty token, silently breaking all GitHub API calls without a clear error.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the static Secret manifest with a Kustomize secretGenerator or a placeholder comment that prevents blind `kubectl apply`. At minimum change the value to a sentinel string like `REPLACE_ME_BASE64` and add a pre-apply validation script that aborts if the sentinel is detected. Alternatively, gate the secret on an external-secrets.io ExternalSecret CRD referencing a vault/SSM path.",
+    "test_plan": "Add a CI pre-flight script that base64-decodes all Secret data fields and fails the build if any value is empty or equals the sentinel. Verify the script triggers on the existing empty value."
+  },
+  {
+    "component_id": "behavior:safety_allowlist",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No allowlist config, safety gate, or namespace filter exists anywhere in src/. k8s_manager.py:166-210 — execute_remediation accepts any namespace/target without restriction.",
+    "diagnosis": "A safety allowlist controlling which namespaces the auto-remediator may act on (vs. creating a PR for human review) does not exist and must be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Add `REMEDIATOR_ALLOWLIST_NAMESPACES` env var (comma-separated, default empty). In execute_remediation, before any mutating action: `if namespace not in allowed_set: return {status: 'pr_required', reason: 'namespace not in allowlist'}`. Add a `SafetyGate` class in src/safety.py with `can_auto_apply(namespace, issue_type) -> bool`. Persist allowlist to ConfigMap so it can be updated without restart. Edge cases: wildcard '*' in allowlist (explicitly disallow), system namespaces (kube-system, kube-public) permanently blocklisted regardless of allowlist.",
+    "test_plan": "Unit test: allowlist=['staging'], call can_auto_apply('production', 'pod_restart') -> False; call with 'staging' -> True. Test that kube-system is always False even when '*' is set."
+  },
+  {
+    "component_id": "enhanced:kubectl_rollout",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "enhanced_tools.py:228 — Tool(name='kubectl_rollout', ...); grep of mcp_server.py for 'enhanced_tools' and 'kubectl_rollout' returns zero results; mcp_server.py handle_list_tools (lines 83-481) does not call get_enhanced_kubectl_tools()",
+    "diagnosis": "The kubectl_rollout tool schema is defined in enhanced_tools.py but mcp_server.py never imports or registers enhanced_tools, so the tool is completely dead and will never appear to an MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py, add `from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools`. In handle_list_tools, extend the returned list: `tools=[...existing..., *get_enhanced_kubectl_tools(), *get_enhanced_helm_tools()]`. In handle_call_tool, add an elif branch for 'kubectl_rollout' that delegates to `self.kubectl_manager.kubectl_rollout(action=..., resource=..., name=..., namespace=...)`. Repeat for all other enhanced tool names.",
+    "test_plan": "After wiring, call list_tools via MCP protocol and assert 'kubectl_rollout' appears. Call the tool with action='status', resource='deployment', name='test-deploy' against a real cluster and verify non-stub output."
+  },
+  {
+    "component_id": "behavior:dpo_pair_extraction",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No DPO-related code, class, or file exists in src/. No references to 'dpo', 'chosen', or 'rejected' in any source file.",
+    "diagnosis": "A DPO (Direct Preference Optimization) pair extractor that produces issue bodies from (rejected_actions, chosen_action, evidence) triples does not exist and must be designed for the PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Add src/dpo_exporter.py. Data model: `DPOPair(prompt: str, chosen: str, rejected: List[str], evidence: dict)`. Method `emit_issue_body(pair: DPOPair) -> str` renders a markdown GitHub issue body with sections: Prompt, Chosen Action (with evidence), Rejected Actions (each with reason). Method `extract_from_audit_log(log_path: str) -> List[DPOPair]` reads the audit log (see behavior:audit_log), groups entries by incident_id, and produces pairs where chosen=the action taken and rejected=alternatives that were considered but skipped (derived from analyzer output). Dependencies: stdlib only.",
+    "test_plan": "Unit test: construct a DPOPair manually, call emit_issue_body, assert all four sections present in output. Integration test: run the remediator against a seeded cluster incident, parse the resulting audit log, assert at least one DPO pair is extractable."
+  },
+  {
+    "component_id": "behavior:audit_log",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No audit log writer exists in src/. logger.py provides a standard Python logger only. execute_remediation in k8s_manager.py (lines 166-210) logs with self.logger.info but no structured who/what/when/evidence record is persisted.",
+    "diagnosis": "A tamper-evident, structured audit log for all remediator actions (who, what, when, evidence) does not exist; without it DPO pair extraction and compliance reviews are impossible.",
+    "fix_class": "design",
+    "proposed_fix": "Add src/audit_logger.py. Each entry: `{ts_iso: str, agent_id: str, action: str, namespace: str, resource_kind: str, resource_name: str, dry_run: bool, outcome: str, evidence: dict, incident_id: str}`. Append as NDJSON to a configurable log file (`AUDIT_LOG_PATH` env var, default /app/logs/audit.ndjson). Wrap the append in a file lock (fcntl.flock) for concurrent agents. Expose `AuditLogger.log(entry)`. Inject into execute_remediation and every other mutating manager method. Edge cases: log file rotation (use RotatingFileHandler with maxBytes), disk-full guard (catch OSError and emit to stderr).",
+    "test_plan": "Unit test: call log() twice with different agent_ids, read the file, parse NDJSON, assert both entries present with correct fields. Integration test: run a remediation cycle with dry_run=True, verify audit log contains one entry per action with outcome='dry_run'."
+  }
+]

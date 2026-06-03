@@ -1,0 +1,55 @@
+{
+  "agent_id": 31,
+  "components": [
+    {
+      "id": "mcp-tool:get_troubleshooting_guide",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "src/config.py",
+      "kind": "python",
+      "focus": "real-impl gaps, stubs, dead wiring, error handling, async safety"
+    },
+    {
+      "id": "mcp-tool:search_documentation",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:rbac_split",
+      "kind": "behavior",
+      "focus": "separate ServiceAccounts: read-only for diagnosis, namespaced-write for apply"
+    },
+    {
+      "id": "behavior:nim_backend_integration",
+      "kind": "behavior",
+      "focus": "pluggable LLM backend interface; NIM as default; cache by finding-hash"
+    },
+    {
+      "id": "mcp-tool:search_github_issues",
+      "kind": "mcp-tool",
+      "focus": "does the handler exist? does it call real k8s API? what does it actually return?"
+    },
+    {
+      "id": "behavior:probe_tuning_remediation",
+      "kind": "behavior",
+      "focus": "deterministic fix for connection-refused on startup"
+    },
+    {
+      "id": "enhanced:kubectl_describe",
+      "kind": "enhanced-tool",
+      "focus": "is this wired up? if not, dead schema \u2014 flag for delete or implementation"
+    },
+    {
+      "id": "start.sh",
+      "kind": "shell",
+      "focus": "idempotency, set -euo pipefail, error handling, secret leakage"
+    },
+    {
+      "id": "behavior:five_min_watchdog",
+      "kind": "behavior",
+      "focus": "watchdog impl: how do we know it healed? readiness + zero new warnings"
+    }
+  ]
+}

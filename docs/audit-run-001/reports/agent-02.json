@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "src/enhanced_tools.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:1-860 — file defines get_enhanced_kubectl_tools() and get_enhanced_helm_tools() but grep of entire repo returns zero imports of this module outside itself; src/mcp_server.py imports KubectlManager and HelmManager but never imports enhanced_tools",
+    "diagnosis": "enhanced_tools.py is entirely dead code — its 30+ Tool schema definitions are never registered with the MCP server, so no MCP client can discover or call them.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py _register_handlers(), import get_enhanced_kubectl_tools, get_enhanced_helm_tools from enhanced_tools and extend the tools list: `from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools`. In handle_list_tools() concatenate `get_enhanced_kubectl_tools() + get_enhanced_helm_tools()` to the existing list. Add dispatch branches in handle_call_tool() for each tool name routing to self.kubectl_manager / self.helm_manager methods.",
+    "test_plan": "After wiring, call the MCP list_tools RPC and assert that kubectl_rollout, kubectl_get, install_helm_chart, etc. appear in the response. Then call each tool and assert the kubectl_manager/helm_manager method is invoked (mock subprocess)."
+  },
+  {
+    "component_id": "behavior:worklist_sqlite",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No SQLite worklist exists anywhere in the repo (grep -r sqlite returns zero results); concurrent agent claims are unguarded.",
+    "diagnosis": "There is no atomic claim/release mechanism for parallel remediation agents, making it possible for two agents to remediate the same resource simultaneously.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/worklist.py with a WorklistDB class backed by SQLite WAL mode. Schema: `CREATE TABLE IF NOT EXISTS claims (item_id TEXT PRIMARY KEY, claimed_by TEXT NOT NULL, claimed_at REAL NOT NULL, ttl_seconds INTEGER DEFAULT 300)`. Expose `claim(item_id, agent_id) -> bool` (INSERT OR IGNORE, check rowcount==1) and `release(item_id, agent_id)` (DELETE WHERE item_id=? AND claimed_by=?). Add `reap_expired()` called on every claim to remove stale locks. Use `sqlite3` with `isolation_level=None` (autocommit) and `check_same_thread=False` guarded by a threading.Lock for thread safety.",
+    "test_plan": "Unit test: two threads call claim() for the same item_id; assert exactly one returns True. Integration test: claim, simulate crash (no release), advance time past TTL, call reap_expired(), assert item is claimable again."
+  },
+  {
+    "component_id": "behavior:restart_first_ladder",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No remediation state machine exists in the repo; src/k8s_manager.py execute_remediation returns hardcoded stub data (confirmed by audit context).",
+    "diagnosis": "No rollout-restart escalation ladder is implemented; the design for a staged remediation state machine (restart -> wait -> escalate) does not exist.",
+    "fix_class": "design",
+    "proposed_fix": "Design a RemediationStateMachine with states: IDLE -> RESTART_ISSUED -> WAITING (5 min timer) -> VERIFY -> ESCALATED -> RESOLVED. Data model: `{item_id, resource_kind, resource_name, namespace, state, restart_ts, verify_ts, escalation_level}` stored in SQLite via worklist. Interface: `async def advance(item_id) -> RemediationState`. On IDLE: call `kubectl rollout restart deployment/<name> -n <ns>`; transition to RESTART_ISSUED. On RESTART_ISSUED after 5 min: poll `kubectl rollout status`; if successful -> RESOLVED, if still failing -> ESCALATED. ESCALATED triggers alert via configurable webhook. Edge cases: resource deleted mid-ladder (catch ApiException 404 -> RESOLVED), cluster unreachable (retry with backoff, max 3).",
+    "test_plan": "Unit-test each state transition with mocked kubectl calls. Integration test: deploy a bad image, trigger ladder, assert rollout restart is called, then assert escalation fires when rollout does not converge within timeout."
+  },
+  {
+    "component_id": "setup-vscode-nodeport.sh",
+    "kind": "shell",
+    "severity": "medium",
+    "evidence": "setup-vscode-nodeport.sh:1 — no shebang present in first visible line; file starts with `#!/bin/bash` (line 1 is correct) but CLUSTER_IP/NODEPORT are derived from live kubectl at lines 13-14 with no error checking if commands fail; `set -euo pipefail` is present at line 6 which is good, but `CLUSTER_IP` and `NODEPORT` can expand to empty strings silently if kubectl returns empty jsonpath, causing `http://:0/health` URL construction",
+    "diagnosis": "CLUSTER_IP and NODEPORT are set from kubectl jsonpath with no guard against empty output, so the script silently constructs broken URLs and continues instead of failing fast.",
+    "fix_class": "rewrite",
+    "proposed_fix": "After lines 13-14, add: `[[ -z \"$CLUSTER_IP\" ]] && { echo 'ERROR: Could not determine cluster IP'; exit 1; }` and `[[ -z \"$NODEPORT\" ]] && { echo 'ERROR: Could not determine NodePort'; exit 1; }`. Also validate NODEPORT is numeric: `[[ \"$NODEPORT\" =~ ^[0-9]+$ ]] || { echo 'ERROR: Invalid NodePort value'; exit 1; }`.",
+    "test_plan": "Run the script against a cluster where the NodePort service does not exist; assert it exits non-zero with a clear error message rather than hitting an invalid URL."
+  },
+  {
+    "component_id": "enhanced:kubectl_rollout",
+    "kind": "enhanced-tool",
+    "severity": "critical",
+    "evidence": "src/enhanced_tools.py:229-257 — Tool(name='kubectl_rollout', ...) defined with actions [status, history, undo, restart]. src/mcp_server.py has no import of enhanced_tools and no dispatch branch for 'kubectl_rollout' (confirmed by grep returning zero matches for 'kubectl_rollout' in mcp_server.py).",
+    "diagnosis": "kubectl_rollout Tool schema is defined but never registered or dispatched; calling it from an MCP client would hit the 'Unknown tool' branch and return an error.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py handle_call_tool(), add: `elif name == 'kubectl_rollout': result = await asyncio.get_event_loop().run_in_executor(None, self.kubectl_manager.rollout, arguments['action'], arguments['resource'], arguments['name'], arguments.get('namespace'))`. Implement KubectlManager.rollout() to call `_run_kubectl(['rollout', action, f'{resource}/{name}'] + ns_args)`. Register the tool by including get_enhanced_kubectl_tools() in handle_list_tools().",
+    "test_plan": "Mock _run_kubectl; call handle_call_tool with name='kubectl_rollout' and action='status'; assert _run_kubectl is called with ['rollout','status','deployment/myapp'] and result is returned rather than 'Unknown tool'."
+  },
+  {
+    "component_id": "logs.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "logs.sh:1-3 — file is 3 lines: `#!/bin/bash`, `echo ...`, `docker logs k8s-mcp-server -f`. No `set -euo pipefail`. If the container does not exist, docker logs exits non-zero but the script has no error handling and will not inform the user clearly.",
+    "diagnosis": "logs.sh lacks error hardening (no set -euo pipefail, no container-existence check) and hard-codes the container name k8s-mcp-server which may differ from the actual deployed container name.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace with: `#!/bin/bash\\nset -euo pipefail\\nCONTAINER=${K8S_MCP_CONTAINER:-k8s-mcp-server}\\nif ! docker inspect \"$CONTAINER\" >/dev/null 2>&1; then echo \"ERROR: container $CONTAINER not found\"; exit 1; fi\\ndocker logs \"$CONTAINER\" -f`",
+    "test_plan": "Run the script when no Docker container exists; assert exit code is non-zero and error message is printed. Run when container exists; assert docker logs is called with correct name."
+  },
+  {
+    "component_id": "src/logger.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/logger.py:173 — `logger.bind(...).error(f'K8s Error...', exc_info=error)` and src/logger.py:181 — same pattern. Loguru's `.error()` does not accept an `exc_info` keyword argument; that argument belongs to stdlib logging. Loguru uses `.opt(exception=error).error()`.",
+    "diagnosis": "log_k8s_error() and log_diagnostic_error() pass exc_info=error as a keyword to loguru's .error(), which silently ignores it, meaning stack traces are never captured in error logs.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace both error calls: change `logger.bind(...).error(msg, exc_info=error)` to `logger.bind(...).opt(exception=error).error(msg)`. Same fix for log_diagnostic_error at line 180. Also remove the unused `from rich.console import Console` import at line 11 and the unused `console = Console()` at line 39 (Console is constructed but never used in setup_logging).",
+    "test_plan": "Call log_k8s_error() with a live Exception; assert the log output contains a traceback. Run `python -c 'from logger import log_k8s_error; log_k8s_error(\"test\", ValueError(\"x\"))'` and assert no TypeError is raised."
+  },
+  {
+    "component_id": "setup-vscode-k8s.sh",
+    "kind": "shell",
+    "severity": "critical",
+    "evidence": "setup-vscode-k8s.sh:77 — `with open(\"/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json\", 'r')` and line 89 same path. The Python heredoc uses a hardcoded path with a mangled username (`hawaiidevelopergmail.com` instead of `hawaiideveloper`) and ignores the `$SETTINGS_FILE` variable defined at line 9.",
+    "diagnosis": "The Python heredoc uses a single-quoted EOF marker (line 72: `<< 'EOF'`), which prevents variable expansion, so $SETTINGS_FILE is never substituted and a wrong hardcoded path is used instead, causing FileNotFoundError for every user.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Change `python3 << 'EOF'` to `python3 << EOF` so that `$SETTINGS_FILE` expands, then replace both hardcoded path strings in the heredoc with `$SETTINGS_FILE`. Alternatively, pass SETTINGS_FILE as an env var: `SETTINGS_FILE=\"$SETTINGS_FILE\" python3 -c 'import os,json; ...` reading from `os.environ[\"SETTINGS_FILE\"]`.",
+    "test_plan": "Run the script as a non-root user whose home directory is not /Users/hawaiidevelopergmail.com; assert the settings.json is read from and written to $HOME/Library/Application Support/Code/User/settings.json."
+  },
+  {
+    "component_id": "src/__init__.py",
+    "kind": "python",
+    "severity": "low",
+    "evidence": "src/__init__.py:1-8 — declares `__version__ = '1.0.0'` and `__author__ = 'Kubernetes Platform Engineer'`. No imports of sub-modules, no public API surface exported. The file is a passive namespace marker.",
+    "diagnosis": "__init__.py exports a static version string but does not expose any public API, making the src package unusable as a library and providing no version-sync with setup.py/pyproject.toml if one is added.",
+    "fix_class": "document",
+    "proposed_fix": "Either leave as-is with a comment explaining it is intentionally minimal, or add `from .mcp_server import KubernetesPlatformEngineerMCPServer` and `__all__ = ['KubernetesPlatformEngineerMCPServer']` to give the package a usable public entry point. If a pyproject.toml is added later, version should be read via `importlib.metadata.version('mcp-kubernetes-platform-engineer')` rather than hardcoded.",
+    "test_plan": "Import the src package and assert `src.__version__` equals the version in pyproject.toml/setup.cfg. If public exports are added, assert `from src import KubernetesPlatformEngineerMCPServer` succeeds without error."
+  },
+  {
+    "component_id": "behavior:event_stream_watcher",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No event stream watcher exists in the repo (grep -r 'watch\\|event_stream\\|EventWatcher' src/ returns no relevant matches). The monitoring_manager is a stub returning canned data.",
+    "diagnosis": "No implementation or design exists for watching the Kubernetes event stream, classifying events, or routing them to a remediation queue.",
+    "fix_class": "design",
+    "proposed_fix": "Design an EventStreamWatcher class using `kubernetes.watch.Watch().stream(core_v1.list_event_for_all_namespaces)`. Data model: `KubernetesEvent {type, reason, message, involved_object_kind, involved_object_name, namespace, count, first_time, last_time}`. Classification rules: map (reason, involvedObject.kind) -> EventClass enum (POD_CRASH_LOOP, OOM_KILL, IMAGE_PULL_ERROR, NODE_NOT_READY, PVC_PENDING). Routing: push classified events to an asyncio.Queue consumed by the RemediationStateMachine. Interface: `async def run()` (infinite loop with reconnect on ApiException). Edge cases: duplicate event suppression via (name, reason, count) dedup window of 60s; graceful shutdown via asyncio.Event; reconnect backoff (1s, 2s, 4s, max 30s).",
+    "test_plan": "Unit-test classification rules with fixture events for each EventClass. Integration test: mock Watch().stream() to emit a CrashLoopBackOff event; assert it appears in the remediation queue with correct classification within 1 second."
+  }
+]

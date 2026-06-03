@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "K8S_ANNOUNCEMENT.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "K8S_ANNOUNCEMENT.md:11-13 — 'Monitors 17+ major Kubernetes ecosystem repos ... Automatically updates its knowledge base every hour'; K8S_ANNOUNCEMENT.md:29-31 — 'Automated Remediation & Diagnostics: Deep cluster health checks ... Automated remediation for common issues'",
+    "diagnosis": "The announcement makes multiple production-grade behavioral claims (hourly learning, automated remediation, deep diagnostics) that the code does not implement — all relevant managers return hardcoded fake data with no real k8s client calls.",
+    "fix_class": "document",
+    "proposed_fix": "Replace all behavioral claims in K8S_ANNOUNCEMENT.md with accurate status: (1) mark learning engine as roadmap/not implemented; (2) replace 'Automated Remediation' with 'Planned remediation scaffolding'; (3) add a prominent 'Status: Alpha / Stub Implementation' banner at the top of the document.",
+    "test_plan": "Manually review every bullet-point claim in the announcement against actual code behavior after fixes are applied; a reviewer checklist in CI (grep for prohibited phrases like 'production-grade' and 'automated remediation') can enforce accuracy going forward."
+  },
+  {
+    "component_id": "mcp-tool:analyze_resource_usage",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:508-513 — 'result = await self.monitoring_manager.analyze_resource_usage(...)'; src/monitoring_manager.py:51-56 — 'results = { ... \"timestamp\": \"2025-08-09T10:30:00Z\", ... }'; monitoring_manager.py:197-217 — hardcoded values: 'total_cores: 12, used_cores: 5.4, utilization_percent: 45'",
+    "diagnosis": "The analyze_resource_usage handler dispatches to MonitoringManager which returns fully hardcoded static data with a hardcoded timestamp; no kubernetes metrics API or metrics-server client is called.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a kubernetes client (e.g., kubernetes-client/python) into MonitoringManager.__init__. In _analyze_cluster_resources, call CoreV1Api().list_node() and MetricsV1beta1Api().list_node_metrics() to retrieve live CPU/memory. Replace all hardcoded dicts with data parsed from the API response. Raise an explicit error if metrics-server is unavailable instead of silently returning fake numbers.",
+    "test_plan": "Unit-test with a mock kubernetes client asserting real API methods are called; integration test against a live kind cluster verifying the returned utilization_percent reflects actual node load."
+  },
+  {
+    "component_id": "behavior:gitops_pr_generation",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No existing implementation found anywhere in the repo (grep returns nothing for 'pull_request', 'pr_body', 'gitops').",
+    "diagnosis": "No GitOps PR generation behavior exists; this is a design gap that needs a full specification for the auto-remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: Finding(id, component, severity, evidence, sandbox_log: str). Interface: async def create_remediation_pr(finding: Finding, branch_prefix='fix/audit') -> str (returns PR URL). Dependencies: PyGithub or gh CLI subprocess, git subprocess. Title format: 'fix(<component_id>): <diagnosis[:60]>'. Labels: ['automated-remediation', severity]. Body sections: '## Finding', '## Evidence (file:line)', '## Sandbox log'. Edge cases: duplicate open PR check (list open PRs with same title prefix before creating); branch name sanitization (replace / and : with -).",
+    "test_plan": "Mock PyGithub in unit tests asserting PR title format, body sections, and label values; integration test creates a real PR on a fork and verifies label and branch naming."
+  },
+  {
+    "component_id": "behavior:done_definition",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No DONE gate, checklist, or CI step found anywhere in the repo (grep returns nothing for 'done_definition', 'definition_of_done', 'failed_pods').",
+    "diagnosis": "No machine-enforceable done definition exists; the project has no gate preventing a story from being marked done without passing evidence.",
+    "fix_class": "design",
+    "proposed_fix": "Define DoneGate as a CI step that asserts: (1) pytest exits 0 with no skipped tests; (2) docker build exits 0 and image digest is recorded; (3) kubectl get events -n mcp-kubernetes --field-selector type=Warning returns zero lines; (4) kubectl get pods -n mcp-kubernetes --field-selector status.phase!=Running,status.phase!=Succeeded returns no rows. Implement as a shell function done_gate() in a ci/done_gate.sh that returns non-zero if any assertion fails. Wire into the GitHub Actions workflow as a final required job.",
+    "test_plan": "Create a test that intentionally leaves a pod in CrashLoopBackOff and verify done_gate.sh exits non-zero; verify it exits 0 after resolving the pod."
+  },
+  {
+    "component_id": "deploy-k8s.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "deploy-k8s.sh:6 — 'set -e' (missing -u and -o pipefail); deploy-k8s.sh:62-63 — 'CLUSTER_SERVER=$(kubectl cluster-info | grep \"control plane\" | awk ...)' (pipeline failure ignored without pipefail); deploy-k8s.sh:75 — 'eval $(minikube docker-env)' (eval of unquoted command substitution); deploy-k8s.sh:146-158 — background port-forward PID not trapped on script exit (SIGINT/ERR leave orphan process)",
+    "diagnosis": "The script uses only 'set -e', omitting '-u' and '-o pipefail', allowing silent failures in pipelines; eval of minikube output is an injection vector; the background port-forward process is not cleaned up on abnormal exit.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 6: change to 'set -euo pipefail'. Line 75: quote minikube output or use 'minikube -p \"$CLUSTER_NAME\" docker-env --shell bash | source /dev/stdin'. Add a trap: 'trap \"kill \\$PORT_FORWARD_PID 2>/dev/null\" EXIT INT TERM' immediately after line 146. Add 'shellcheck' run to CI for this file.",
+    "test_plan": "Run shellcheck against the patched script with no warnings; write a bats test that kills the script midway and verifies no port-forward process remains in the process table."
+  },
+  {
+    "component_id": "mcp-tool:security_scan",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:532-537 — 'result = await self.security_manager.security_scan(...)'; src/security_manager.py:92-116 — '_scan_rbac returns hardcoded dict: total_roles: 15, issues: [{severity: high, resource: default:admin-sa}]'; src/security_manager.py:199 — 'encryption_at_rest: True' hardcoded unconditionally",
+    "diagnosis": "security_scan returns entirely fabricated data including fake CVEs, fake RBAC issues, and a hardcoded 'encryption_at_rest: True' flag — a user relying on this for compliance audits receives false assurance.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In _scan_rbac: call RbacAuthorizationV1Api().list_cluster_role_binding() and inspect subjects/roleRef for cluster-admin bindings. In _scan_secrets: call CoreV1Api().list_namespaced_secret() and inspect for plaintext-looking data values. Remove the hardcoded 'encryption_at_rest: True'; derive it from the kube-apiserver --encryption-provider-config flag if accessible, otherwise report 'unknown'. All hardcoded issue lists must be deleted.",
+    "test_plan": "Unit test with a mock RbacAuthorizationV1Api returning a known ClusterRoleBinding to cluster-admin; assert the scan output contains exactly that binding as a high-severity issue. Verify that 'encryption_at_rest' is never hardcoded True in the response."
+  },
+  {
+    "component_id": "behavior:backend_cache",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No caching layer found anywhere in src/ (grep for 'cache', 'ttl', 'lru' returns nothing relevant in the manager files).",
+    "diagnosis": "No LLM explanation cache exists; repeated calls for the same finding will re-invoke the LLM every time, causing unnecessary latency and cost.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: cache key = sha256(finding_id + evidence_text), value = {explanation: str, created_at: datetime, ttl_seconds: int=3600}. Store in a dict[str, CacheEntry] on a new ExplanationCache class. Interface: async def get_or_generate(finding: Finding, generator: Callable) -> str. On miss, call generator, store result with timestamp. On hit, check age against TTL and return cached value. Evict entries older than TTL on each read. Use asyncio.Lock per key to prevent cache stampede.",
+    "test_plan": "Unit test: call get_or_generate twice with the same finding; verify generator is called exactly once. Test TTL expiry by monkeypatching datetime. Test concurrent calls with asyncio.gather and verify generator is not called more than once per key."
+  },
+  {
+    "component_id": "src/config.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/config.py:47 — 'admission_controllers: List[str] = None' (mutable default using None sentinel, not field(default_factory=list)); src/config.py:59 — lists PodSecurityPolicy in default admission_controllers (PSP was removed in k8s 1.25+); src/config.py:143-149 — load_config() always returns a fresh ServerConfig() with no validation; no __post_init__ validation ensures kubeconfig_path actually exists or that port is in a valid range",
+    "diagnosis": "SecurityConfig uses a None-sentinel workaround instead of dataclass field(default_factory), includes a removed k8s admission controller (PodSecurityPolicy), and load_config performs no input validation.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Line 47: change to 'admission_controllers: List[str] = field(default_factory=list)' and add 'from dataclasses import field'. Line 59: remove 'PodSecurityPolicy' from default list; replace with 'NodeRestriction'. In ServerConfig.__post_init__: add range check 'if not (1 <= self.port <= 65535): raise ValueError(f\"Invalid port: {self.port}\")'. Add optional kubeconfig existence check with a logged warning.",
+    "test_plan": "Unit tests: verify SecurityConfig() default list does not contain PodSecurityPolicy; verify ServerConfig with port=0 raises ValueError; verify load_config() with KUBECONFIG pointing to a nonexistent path logs a warning without raising."
+  },
+  {
+    "component_id": "k8s/configmap.yaml",
+    "kind": "manifest",
+    "severity": "low",
+    "evidence": "k8s/configmap.yaml:1-19 — entire file shown; no sensitive values; k8s/deployment.yaml:37 — 'image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest' (latest tag, not pinned SHA or semver)",
+    "diagnosis": "The ConfigMap itself contains no sensitive data and is structurally correct, but it references 'latest' image tag in the companion Deployment (deployment.yaml:37) which can cause unpredictable rollouts; the ConfigMap has no ownerReferences and will survive namespace deletion if namespace is force-deleted.",
+    "fix_class": "document",
+    "proposed_fix": "In deployment.yaml line 37: pin the image to a specific semver tag or SHA digest, e.g. 'ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:1.0.0' or append '@sha256:<digest>'. Document in the README that 'latest' must never be used in production. The ConfigMap itself requires no structural changes beyond adding a 'app.kubernetes.io/version' label consistent with the Deployment.",
+    "test_plan": "CI lint step: run 'grep -r \":latest\"' across k8s/ and fail if any match is found; kustomize build and kubeval to confirm manifest schema validity."
+  },
+  {
+    "component_id": "enhanced:kubectl_apply",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:87-104 — Tool(name='kubectl_apply', ...) defined; grep across all src/ for 'enhanced_tools' or 'get_enhanced' returns only definitions within enhanced_tools.py itself — zero import lines in mcp_server.py or any other file",
+    "diagnosis": "The kubectl_apply tool schema is defined in enhanced_tools.py but the module is never imported by mcp_server.py, so the tool is never registered with the MCP server and is completely unreachable by any client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In src/mcp_server.py, add: 'from enhanced_tools import get_enhanced_kubectl_tools, get_enhanced_helm_tools'. In handle_list_tools(), extend the returned tools list: 'tools=[...existing..., *get_enhanced_kubectl_tools(), *get_enhanced_helm_tools()]'. In handle_call_tool(), add elif branches for each enhanced tool name dispatching to self.kubectl_manager or self.helm_manager methods. Alternatively, if the decision is to delete: remove enhanced_tools.py entirely and remove KubectlManager/HelmManager instantiation from __init__ since they serve no purpose without routing.",
+    "test_plan": "After wiring: call list_tools via the MCP protocol and assert 'kubectl_apply' appears in the response; call the tool with a minimal pod YAML and assert it reaches kubectl_manager.kubectl_apply without error. If deleted: assert the file no longer exists and no dead imports remain."
+  }
+]

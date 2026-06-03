@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "k8s/pvc.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/pvc.yaml:15 — storageClassName: local-path",
+    "diagnosis": "PVC hardcodes the `local-path` storage class, which is non-portable and absent on most production clusters, and no `volumeMode` or resource limit beyond a flat `5Gi` request is specified; additionally, no ownerReference or RBAC binding restricts who may mount the claim.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace `storageClassName: local-path` with a parameterised default (`storageClassName: \"\"` or a Helm value). Add `volumeMode: Filesystem`. Document the storage class dependency in a values comment. Add a namespace-scoped RBAC ResourceQuota to cap total PVC storage. Pin the claim to the mcp-kubernetes namespace in both the PVC and any referencing Pod spec.",
+    "test_plan": "Deploy the revised PVC against a cluster with a standard storage class (e.g., `standard`); verify `kubectl get pvc -n mcp-kubernetes` shows Bound. Attempt mounting from a pod in a different namespace and confirm the bind fails due to RBAC or quota."
+  },
+  {
+    "component_id": "src/logger.py",
+    "kind": "python",
+    "severity": "medium",
+    "evidence": "src/logger.py:39 — `console = Console()` (line 39); no subsequent use of `console` variable anywhere in the file",
+    "diagnosis": "The `Console` object is instantiated but never used — a Rich console handler is not actually wired into loguru, making the `rich` import dead weight; additionally, `InterceptHandler.emit` at line 84-85 dereferences `frame.f_back` in a loop without a `None` guard, which can raise `AttributeError` at the bottom of the call stack.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Remove the `console = Console()` line (39) and the unused `Console` import if no Rich sink is added. In `InterceptHandler.emit`, add `while frame and frame.f_code.co_filename == logging.__file__:` to guard against `frame` becoming `None`. If Rich output is desired, replace the raw `sys.stderr` loguru sink with `RichHandler` via `logging.basicConfig`.",
+    "test_plan": "Run `python -c 'from src.logger import setup_logging; setup_logging()'` and confirm no warnings about unused variables. Trigger a log call from a shallow call stack (e.g., top-level script) to exercise the `frame.f_back` path without error."
+  },
+  {
+    "component_id": "VSCODE_SETUP.md",
+    "kind": "doc",
+    "severity": "high",
+    "evidence": "VSCODE_SETUP.md:69 — `- 📋 References to actual GitHub issues and solutions`",
+    "diagnosis": "The doc claims the MCP server will surface references to \"actual GitHub issues\" and provide \"Enhanced Copilot responses with specific Kubernetes troubleshooting steps\" (line 68-69); however, all manager methods return hardcoded stub data — no live GitHub API call is made — making both claims false and misleading to users.",
+    "fix_class": "document",
+    "proposed_fix": "Replace lines 65-71 with an honest capability statement: 'The MCP server currently returns static/stub responses for all tools. Live GitHub issue lookup and real cluster data require configuring GITHUB_TOKEN and a reachable kubeconfig; see the README for current implementation status.' Remove or qualify the `github.copilot.advanced.debug.overrideEngine` JSON block with a note that it uses an undocumented Copilot debug flag.",
+    "test_plan": "Read the revised doc and confirm no assertions about 'actual' or 'real' data that the code cannot support. Cross-check each bullet in 'Expected Behavior' against the manager method implementations."
+  },
+  {
+    "component_id": "update.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "update.sh:1-6 — full file; line 1: `#!/bin/bash`; no `set -euo pipefail`",
+    "diagnosis": "The script lacks `set -euo pipefail`, suppresses git errors with `2>/dev/null || echo ...` masking failures silently, and calls `./stop.sh` and `./start.sh` without verifying their exit codes or existence, so a failed stop followed by a failed start will still print success.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `set -euo pipefail` after the shebang. Replace `2>/dev/null || echo ...` with explicit error handling: `git pull origin main || { echo 'git pull failed'; exit 1; }`. Check that `./stop.sh` and `./start.sh` exist before calling them (`[[ -x ./stop.sh ]] || { echo 'stop.sh not found'; exit 1; }`). Echo the final status only after confirming `./start.sh` exited 0.",
+    "test_plan": "Run the script in a directory without a git remote and verify it exits non-zero instead of printing success. Remove `stop.sh` and re-run to confirm the missing-script check triggers."
+  },
+  {
+    "component_id": "behavior:backend_cache",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No cache module exists in src/; no cache-related code found in any manager",
+    "diagnosis": "There is no LLM explanation cache implementation; repeated identical tool calls re-execute stub logic (or, once real backends exist, will re-invoke expensive LLM/API calls), with no deduplication or TTL.",
+    "fix_class": "design",
+    "proposed_fix": "Data model: `CacheEntry(key: str, value: Any, created_at: float, ttl_seconds: int)`. Interface: `class ExplanationCache: async def get(self, finding_hash: str) -> Optional[dict]; async def set(self, finding_hash: str, explanation: dict, ttl: int = 300) -> None; async def invalidate(self, finding_hash: str) -> None`. Finding hash = `sha256(tool_name + sorted(json(arguments)))`. Back-end: in-memory `dict` for MVP; Redis for multi-replica. Wire into `handle_call_tool` before each manager dispatch: check cache, return hit, else call manager and store result. TTL default 300 s configurable via `CACHE_TTL_SECONDS` env var.",
+    "test_plan": "Unit test: call `get` on empty cache returns `None`; call `set` then `get` within TTL returns value; call `get` after TTL returns `None`. Integration test: make the same tool call twice and assert the second returns in under 1 ms (cache hit) and the manager method is called only once."
+  },
+  {
+    "component_id": "mcp-tool:check_network_connectivity",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py:185 — `# Stub implementation for different test types`; lines 187-210 return hardcoded latency/IP values regardless of inputs",
+    "diagnosis": "The `check_network_connectivity` handler dispatches to `DiagnosticsManager.check_network_connectivity`, which is a complete stub — it never executes `kubectl exec` or any Kubernetes API call; it always returns fabricated connectivity results (e.g., ping latency 2.3 ms, resolved_ip 10.96.0.1) regardless of whether the source pod or target exist.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace stub body with real implementation: (1) verify source pod exists via `CoreV1Api.read_namespaced_pod`; (2) for `ping`/`tcp`/`http`, use `CoreV1Api.connect_get_namespaced_pod_exec` to run `curl`/`nc` inside the source container; (3) for `dns`, exec `nslookup <target>` inside the pod; (4) parse stdout/stderr to populate result fields; (5) set `overall_connectivity` based on actual test outcomes. Raise `PodNotFoundError` if source pod is absent.",
+    "test_plan": "Integration test against a real cluster: call with a valid source pod and a reachable target, assert `ping.status == 'success'` and `latency_ms` is a positive float. Call with a non-existent source pod and assert the response contains an error rather than fabricated data."
+  },
+  {
+    "component_id": "behavior:analyzer_network_policy",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No NetPolAnalyzer class exists in src/; no network policy analysis code found in any manager",
+    "diagnosis": "There is no implementation for analyzing NetworkPolicy resources to detect orphan policies (selectors that match no pods) or denied traffic flows; this capability is mentioned in cluster diagnostics but never built.",
+    "fix_class": "design",
+    "proposed_fix": "Class `NetPolAnalyzer`: method `analyze(namespace: Optional[str]) -> NetPolReport`. Steps: (1) list all NetworkPolicy objects via `NetworkingV1Api.list_namespaced_network_policy`; (2) list all pods; (3) for each policy, evaluate `spec.podSelector` against pod labels — if no pod matches, flag as orphan; (4) build an adjacency model of allowed ingress/egress pairs; (5) for each pod-pair not covered by any allow rule, emit a denied-flow finding. `NetPolReport` fields: `orphan_policies: List[str]`, `denied_flows: List[DeniedFlow]`, `total_policies: int`. Wire into `_check_networking()` in `DiagnosticsManager`.",
+    "test_plan": "Unit test with mocked API: create a policy with a selector `app=foo` and no pods with that label; assert it appears in `orphan_policies`. Create two pods with no policies; assert their pair appears in `denied_flows`. Integration test against a real cluster with known policies and compare output against manual `kubectl get netpol` inspection."
+  },
+  {
+    "component_id": "src/health_check.py",
+    "kind": "python",
+    "severity": "high",
+    "evidence": "src/health_check.py:40-44 — `check_imports` only tests `asyncio`, `json`, `logging` (stdlib); no k8s client, no server reachability, no config validation",
+    "diagnosis": "The health check never validates that the Kubernetes client is importable and configured, that a kubeconfig or in-cluster credentials are present, or that the MCP server process is actually running — it will report healthy even when the server cannot connect to any cluster.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add `check_k8s_client()`: attempt `from kubernetes import client, config; config.load_kube_config()` or `config.load_incluster_config()` and call `client.VersionApi().get_code()` with a 5-second timeout — return `False` on any exception. Add `check_mcp_imports()`: import `mcp`, `mcp.server`. Include both in the `checks` list. Surface a per-check status dict rather than a bare bool so callers can distinguish failure modes.",
+    "test_plan": "Run health check with a valid kubeconfig and assert it returns `True`. Run with `KUBECONFIG=/dev/null` and assert it returns `False` and the output names the failing check. Run with the MCP packages uninstalled and assert the import check fails."
+  },
+  {
+    "component_id": "k8s/namespace.yaml",
+    "kind": "manifest",
+    "severity": "high",
+    "evidence": "k8s/namespace.yaml:1-9 — full file; no `pod-security.kubernetes.io/enforce` label present",
+    "diagnosis": "The namespace manifest carries no Pod Security Admission labels, so pods deployed into `mcp-kubernetes` inherit the cluster-default permissive policy; for a security-focused MCP server namespace, `enforce: restricted` (or at minimum `baseline`) should be declared, and a `ResourceQuota` and `LimitRange` should accompany the namespace.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Add labels: `pod-security.kubernetes.io/enforce: baseline`, `pod-security.kubernetes.io/warn: restricted`, `pod-security.kubernetes.io/audit: restricted`. Add a companion `ResourceQuota` manifest capping CPU, memory, and PVC count. Add a `LimitRange` setting default CPU/memory requests and limits for containers in the namespace.",
+    "test_plan": "Apply the revised namespace to a cluster and attempt to deploy a pod with `privileged: true`; confirm the admission webhook rejects it. Apply the ResourceQuota and attempt to exceed the limits; confirm the API server rejects the excess resource request."
+  },
+  {
+    "component_id": "k8s/configmap.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/configmap.yaml:15-18 — `RBAC_ENABLED: \"true\"`, `POD_SECURITY_STANDARDS: \"true\"`, `NETWORK_POLICIES: \"true\"` stored as ConfigMap keys",
+    "diagnosis": "Security-critical feature flags (`RBAC_ENABLED`, `POD_SECURITY_STANDARDS`, `NETWORK_POLICIES`) are stored in a plain ConfigMap readable by any pod in the namespace; additionally, these flags are not consumed by any code in `src/` (no grep match), so they are either dead config or their enforcement is entirely absent, creating a false sense of security.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Audit each flag: (1) if unused, remove the key and add a TODO noting the missing enforcement code; (2) for flags that will be used, ensure the consuming code references them via `os.getenv`; (3) if any flag controls access control decisions, move it to a Secret or enforce it at the cluster/admission level rather than relying on an app-level boolean. Add a `# managed-by: config-validation-webhook` annotation to document the expected enforcer.",
+    "test_plan": "Grep all `src/` files for each ConfigMap key name; confirm each key has a corresponding `os.getenv` call. For removed dead keys, verify no code references them. For keys promoted to Secrets, verify the ConfigMap no longer exposes them in plaintext."
+  }
+]

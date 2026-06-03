@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "k8s/secret.yaml",
+    "kind": "manifest",
+    "severity": "critical",
+    "evidence": "k8s/secret.yaml:13 — `GITHUB_TOKEN: \"\"`",
+    "diagnosis": "Secret manifest ships with an empty token value and no external-secrets or sealed-secrets mechanism, meaning deployment with this file leaks a blank credential and provides no actual secret management.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Replace the static Secret with an ExternalSecret resource (external-secrets operator) or a Sealed Secret; add a comment block blocking accidental `kubectl apply` of the placeholder. At minimum add a CI gate: `if grep -q 'GITHUB_TOKEN: \"\"' k8s/secret.yaml; then exit 1; fi`.",
+    "test_plan": "Apply the manifest to a test cluster and confirm kubectl reports the secret is non-empty; run the CI gate check in CI and verify it fails on the placeholder value."
+  },
+  {
+    "component_id": "src/security_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/security_manager.py:93-116 — `_scan_rbac` returns hardcoded dict with `\"total_roles\": 15`, `\"total_role_bindings\": 23`; line 119-150 `_scan_pod_security` returns `\"total_pods\": 45`; line 178-201 `_scan_secrets` returns `\"total_secrets\": 12`; no kubernetes-client import anywhere in the file.",
+    "diagnosis": "All five scan sub-methods (`_scan_rbac`, `_scan_pod_security`, `_scan_network_policies`, `_scan_secrets`, `_scan_container_images`) return static fixture dicts; no Kubernetes API call is ever made, so `security_scan` always reports the same invented findings regardless of cluster state.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Inject a `kubernetes.client` instance (or the shared `KubernetesManager`) into `SecurityManager.__init__`. Replace each `_scan_*` stub with real API calls: `_scan_rbac` -> `RbacAuthorizationV1Api.list_cluster_role_binding`, `_scan_pod_security` -> `CoreV1Api.list_pod_for_all_namespaces`, etc. Raise `NotImplementedError` or return `{\"status\": \"not_implemented\"}` until each is wired.",
+    "test_plan": "Unit-test each scan method against a mocked kubernetes client; integration-test against a kind cluster and assert the returned counts match actual resource counts obtained via `kubectl`."
+  },
+  {
+    "component_id": "enhanced:kubectl_logs",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:129-159 — `kubectl_logs` Tool schema defined; grep of src/mcp_server.py for `enhanced_tools` returns zero matches (confirmed by grep returning empty output).",
+    "diagnosis": "`kubectl_logs` schema is declared in `enhanced_tools.py` but `mcp_server.py` never imports `enhanced_tools`, so the tool is never registered and can never be called; it is dead schema.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Either (a) import `get_enhanced_kubectl_tools` in `mcp_server.py` and merge its output into `handle_list_tools`, then add a dispatch branch that calls `self.kubectl_manager.get_logs(pod_name, namespace, container, tail)` — the KubectlManager already exists at line 73 — or (b) delete `enhanced_tools.py` entirely if the KubectlManager path is the intended one.",
+    "test_plan": "Call the MCP tool `kubectl_logs` via a test client and assert a non-empty log string is returned; confirm the tool appears in the `list_tools` response."
+  },
+  {
+    "component_id": "behavior:analyzer_ingress",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No IngressAnalyzer class exists anywhere in src/; design task for PRD.",
+    "diagnosis": "No backend, TLS expiry, or host-conflict analysis is implemented; this is a required design for the auto-remediator PRD.",
+    "fix_class": "design",
+    "proposed_fix": "Design: `IngressAnalyzer(k8s_client, tls_client)` with method `analyze(namespace=None) -> List[IngressFinding]`. Data model: `IngressFinding(ingress_name, namespace, issue_type: Enum[NO_BACKEND, TLS_EXPIRY, HOST_CONFLICT, MISSING_TLS], detail, severity)`. Steps: (1) `NetworkingV1Api.list_ingress_for_all_namespaces`; (2) for each rule, resolve backend Service + Endpoints — flag NO_BACKEND if endpoints empty; (3) for each tls block, fetch Secret, parse cert, check NotAfter < now+30d — flag TLS_EXPIRY; (4) build a host->ingress map across all namespaces — flag HOST_CONFLICT on duplicates. Edge cases: ingress with no rules, wildcard hosts, multi-cert SANs.",
+    "test_plan": "Unit test with mocked API responses covering each issue_type; integration test against a kind cluster with deliberately misconfigured ingresses confirming all four finding types are raised."
+  },
+  {
+    "component_id": "behavior:analyzer_node",
+    "kind": "behavior",
+    "severity": "medium",
+    "evidence": "No NodeAnalyzer class exists in src/; `_check_nodes` in diagnostics_manager.py returns hardcoded fixture data (line 218+); design task for PRD.",
+    "diagnosis": "Node condition analysis (NotReady, DiskPressure, MemoryPressure, PIDPressure) has no real implementation; the diagnostics stub always reports nodes as healthy.",
+    "fix_class": "design",
+    "proposed_fix": "Design: `NodeAnalyzer(k8s_client)` with `analyze() -> List[NodeFinding]`. Data model: `NodeFinding(node_name, condition: Enum[NOT_READY, DISK_PRESSURE, MEMORY_PRESSURE, PID_PRESSURE], status, last_transition_time, detail)`. Steps: (1) `CoreV1Api.list_node`; (2) for each node iterate `node.status.conditions`; (3) emit finding when `condition.status != 'False'` for pressure types or `status != 'True'` for Ready; (4) attach `node.status.allocatable` and `node.status.capacity` for context. Edge cases: node not yet joined (no conditions), cordoned nodes (add `Unschedulable` finding).",
+    "test_plan": "Mock CoreV1Api returning nodes with each pressure condition set; assert NodeAnalyzer emits exactly one finding per condition; assert healthy node produces zero findings."
+  },
+  {
+    "component_id": "mcp-port-forward.sh",
+    "kind": "shell",
+    "severity": "high",
+    "evidence": "mcp-port-forward.sh:6 — `set -euo pipefail` is present (good); line 56 — `kubectl port-forward ... &` PID is not captured; line 100-101 — `curl` is called twice: once silently to check, then again to read `$RESPONSE`, creating a TOCTOU race and double HTTP call; line 119 — `sleep 2` hard-coded between stop and start; line 43 and 84 — `pgrep -f` pattern is fragile on macOS where full command args may be truncated.",
+    "diagnosis": "The script has multiple reliability issues: the background PID is not stored so stop/restart cannot reliably target the exact process; `test_connectivity` makes two curl calls against a live endpoint; `pgrep -f` pattern matching is OS-dependent.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Capture PID on start: `kubectl port-forward ... & PF_PID=$!; echo $PF_PID > /tmp/mcp-pf.pid`. Stop reads the pidfile. Merge the two curl calls in `test_connectivity` into one: `RESPONSE=$(curl -sf http://localhost:$LOCAL_PORT/health) && echo \"healthy: $RESPONSE\"`. Replace `sleep 2` with a `until nc -z localhost $LOCAL_PORT; do sleep 0.5; done` loop with a timeout counter.",
+    "test_plan": "Run `start` then `status` and confirm the pidfile exists and the reported PID matches the live process; run `stop` and confirm the process is gone and pidfile removed; run `test_connectivity` and confirm only one HTTP request appears in server access logs."
+  },
+  {
+    "component_id": "k8s/namespace.yaml",
+    "kind": "manifest",
+    "severity": "medium",
+    "evidence": "k8s/namespace.yaml:1-9 — entire file; no `ResourceQuota`, no `LimitRange`, no `NetworkPolicy` default-deny, no Pod Security admission label.",
+    "diagnosis": "The namespace manifest creates the namespace with labels only; it sets no resource quotas, limit ranges, network isolation, or pod-security-standards enforcement label, leaving the namespace unrestricted by default.",
+    "fix_class": "implement",
+    "proposed_fix": "Add to the same file (or a companion kustomize overlay): (1) `pod-security.kubernetes.io/enforce: restricted` label on the Namespace; (2) a `ResourceQuota` capping CPU/memory; (3) a `LimitRange` with default container limits; (4) a default-deny `NetworkPolicy`. Example label addition: `pod-security.kubernetes.io/enforce: \"baseline\"` as a minimum.",
+    "test_plan": "Apply the updated manifest and verify `kubectl get ns mcp-kubernetes -o yaml` shows the pod-security label; deploy a privileged pod and confirm it is rejected by admission."
+  },
+  {
+    "component_id": "mcp-tool:find_kubectl_commands",
+    "kind": "mcp-tool",
+    "severity": "high",
+    "evidence": "src/mcp_server.py:571-575 — handler dispatches to `self.documentation_manager.find_commands(...)`; src/documentation_manager.py:382-399 — `find_commands` iterates `self.documentation_db` which is built by `_build_documentation_index` fetching live URLs at startup; if network is unavailable or docs site is unreachable, `documentation_db` is empty (no offline fallback), so `find_commands` always returns `[]`.",
+    "diagnosis": "`find_kubectl_commands` is wired to a handler that delegates to a live-web-scraping documentation index with no offline fallback, meaning in any air-gapped or rate-limited environment the tool silently returns an empty list rather than raising an error.",
+    "fix_class": "implement",
+    "proposed_fix": "Bundle a static command reference as a JSON file shipped with the package (generated at build time from `kubectl --help` and `helm --help`). In `DocumentationManager.__init__`, load this static file as a seed for `documentation_db` before attempting live fetching. If live fetching fails, log a warning and proceed with the static seed. This ensures the tool is functional offline.",
+    "test_plan": "Mock `aiohttp.ClientSession` to raise `ConnectionError` in tests; call `find_kubectl_commands` and assert it returns the static seed results rather than an empty list."
+  },
+  {
+    "component_id": "src/monitoring_manager.py",
+    "kind": "python",
+    "severity": "critical",
+    "evidence": "src/monitoring_manager.py:55 — `\"timestamp\": \"2025-08-09T10:30:00Z\"` hardcoded literal; line 99 — `\"total_entries\": 1247` hardcoded; line 197-215 — `_analyze_cluster_resources` returns `\"total_cores\": 12`, `\"used_cores\": 5.4` hardcoded; no kubernetes-client import in the file.",
+    "diagnosis": "All monitoring methods return static fixture data with a hardcoded past timestamp; no Kubernetes Metrics API, Prometheus, or log-aggregation client is ever called, so the tool always reports the same invented resource figures and log counts.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Import and use `kubernetes.client.CustomObjectsApi` to call the metrics-server API (`apis/metrics.k8s.io/v1beta1/nodes` and `/pods`) for real CPU/memory data. For `analyze_logs`, use `CoreV1Api.read_namespaced_pod_log` with `since_seconds` derived from `time_range`. Replace the hardcoded timestamp with `datetime.utcnow().isoformat() + 'Z'`. Return `{\"status\": \"metrics_server_unavailable\"}` when the API call fails rather than silently returning fake data.",
+    "test_plan": "Unit-test with a mocked `CustomObjectsApi` returning realistic metrics; integration-test against a kind cluster with metrics-server and assert returned CPU values match `kubectl top nodes` output within 5%."
+  },
+  {
+    "component_id": "mcp-tool:diagnose_cluster_health",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "src/mcp_server.py:494-498 — handler calls `self.diagnostics_manager.diagnose_cluster_health`; src/diagnostics_manager.py:46-50 — method pre-populates `\"overall_status\": \"healthy\"` and never updates it from actual check results; line 110-125 — `troubleshoot_pod_issues` hardcodes `\"status\": \"CrashLoopBackOff\"`, `\"restart_count\": 5` for every pod regardless of input; no kubernetes-client import in diagnostics_manager.py.",
+    "diagnosis": "`diagnose_cluster_health` dispatches to a manager that always reports `overall_status: healthy` from hardcoded fixture data with no real Kubernetes API call, meaning a genuinely broken cluster returns the same response as a healthy one.",
+    "fix_class": "rewrite",
+    "proposed_fix": "In `DiagnosticsManager.__init__` accept and store a `KubernetesManager` or raw `kubernetes.client` reference. In `_check_nodes` call `CoreV1Api.list_node` and scan `.status.conditions`; set `overall_status` to `degraded` or `critical` if any node condition is non-nominal. In `_check_pods` call `CoreV1Api.list_pod_for_all_namespaces` filtering by phase != Running|Succeeded. Derive `overall_status` from aggregated check results before returning.",
+    "test_plan": "Mock `CoreV1Api.list_node` to return one NotReady node; assert `diagnose_cluster_health` returns `overall_status != healthy` and `issues_found` is non-empty; assert a clean mock cluster returns `overall_status: healthy`."
+  }
+]

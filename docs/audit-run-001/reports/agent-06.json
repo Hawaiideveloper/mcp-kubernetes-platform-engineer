@@ -1,0 +1,102 @@
+[
+  {
+    "component_id": "behavior:analyzer_ingress",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No IngressAnalyzer class or module exists anywhere in src/; grep for 'IngressAnalyzer', 'ingress_analyzer', 'tls_expiry', 'host_conflict' returns nothing",
+    "diagnosis": "IngressAnalyzer is entirely unimplemented — no backend-reachability check, no TLS expiry detection, and no host-conflict detection exist anywhere in the codebase.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/ingress_analyzer.py with class IngressAnalyzer(config). Implement: (1) check_no_backend(ingress) — list Ingress, for each rule resolve Service+Endpoints via CoreV1Api, flag if Endpoints.subsets is empty; (2) check_tls_expiry(ingress) — for each tls[].secretName load Secret, parse cert PEM with ssl.PEM_cert_to_DER_cert, flag if expiry < now+30d; (3) check_host_conflicts(ingresses) — build dict[host->list[ingress_name]], flag duplicates. Wire into diagnostics_manager.diagnose_cluster_health under check_types=['ingress'].",
+    "test_plan": "Unit-test each method with a MockKubernetesClient that returns: (a) an Ingress with no endpoints, (b) a Secret containing a cert expiring in 5 days, (c) two Ingresses sharing the same host. Assert each method returns a finding dict with the expected severity and resource reference."
+  },
+  {
+    "component_id": "enhanced:kubectl_rollout",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:228 — Tool(name='kubectl_rollout', ...) defined; grep for 'import enhanced_tools' or 'from enhanced_tools' across all src/*.py returns zero matches; mcp_server.py never references 'kubectl_rollout' in its call_tool dispatch.",
+    "diagnosis": "The kubectl_rollout tool schema exists in enhanced_tools.py but the file is never imported, so the tool is never registered with MCP and its backing implementation in kubectl_manager.py:208 (kubectl_rollout method) is unreachable by any client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py: (1) add 'from enhanced_tools import get_enhanced_kubectl_tools' at top; (2) in handle_list_tools, extend the tools list with get_enhanced_kubectl_tools(); (3) in handle_call_tool, add 'elif name == \"kubectl_rollout\": result = await self.kubectl_manager.kubectl_rollout(action=arguments[\"action\"], resource=arguments[\"resource\"], name=arguments[\"name\"], namespace=arguments.get(\"namespace\"))'. No changes to enhanced_tools.py or kubectl_manager.py required.",
+    "test_plan": "Call handle_list_tools and assert 'kubectl_rollout' appears in the returned tool names. Call handle_call_tool with name='kubectl_rollout' and a valid argument dict; mock kubectl_manager.kubectl_rollout to return a known dict and assert the JSON response matches."
+  },
+  {
+    "component_id": "enhanced:kubectl_apply",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:87 — Tool(name='kubectl_apply', ...) defined; src/kubectl_manager.py:143 — async def kubectl_apply(...) implemented; grep for 'kubectl_apply' in mcp_server.py returns zero matches.",
+    "diagnosis": "kubectl_apply has both a schema and a real implementation but is never wired into mcp_server.py, making it inaccessible to MCP clients despite being the most critical write-path operation.",
+    "fix_class": "wire-up",
+    "proposed_fix": "Same enhanced_tools import as kubectl_rollout fix above. In handle_call_tool add: 'elif name == \"kubectl_apply\": result = await self.kubectl_manager.kubectl_apply(resource_yaml=arguments[\"resource_yaml\"], namespace=arguments.get(\"namespace\"))'. Ensure non_destructive_mode guard is honoured inside kubectl_manager.kubectl_apply (verify existing implementation enforces it).",
+    "test_plan": "Mock kubectl_manager.kubectl_apply; call handle_call_tool with name='kubectl_apply' and a minimal YAML string; assert the response JSON equals the mock return value and that no exception propagates."
+  },
+  {
+    "component_id": "tests/production/test_cluster_management.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_cluster_management.py:213,288,291,302,382,385 — tests use fixture 'cluster_manager' which does not exist in tests/conftest.py (grep returns zero matches); tests at line 108-119 and 199-210 call methods like resolve_node_not_ready and resolve_deployment_rollout_stuck which are AsyncMock-patched onto the manager immediately before invocation — every assertion validates the mock's own return value, not any real logic.",
+    "diagnosis": "Two tests reference a non-existent 'cluster_manager' fixture (will error at collection), and the remaining tests are self-validating mock round-trips that provide zero real coverage of the managers they purport to test.",
+    "fix_class": "rewrite",
+    "proposed_fix": "1. Add a 'cluster_manager' fixture to conftest.py that returns a KubernetesManager with a MockKubernetesClient. 2. Replace each test's AsyncMock pattern with: call the real manager method, and assert on the actual returned structure (keys present, no exception). 3. Where the real method is a stub returning hardcoded data, mark test xfail with reason='stub — see monitoring_manager issue' until the real impl lands.",
+    "test_plan": "Run pytest tests/production/test_cluster_management.py -v; collection must not raise FixtureError; at least the tests using k8s_manager fixture must pass without patching the method under test."
+  },
+  {
+    "component_id": "enhanced:kubectl_scale",
+    "kind": "enhanced-tool",
+    "severity": "high",
+    "evidence": "src/enhanced_tools.py:162 — Tool(name='kubectl_scale', ...); src/kubectl_manager.py:187 — async def kubectl_scale(...); grep for 'kubectl_scale' in mcp_server.py returns zero matches.",
+    "diagnosis": "kubectl_scale is defined in the schema and implemented in kubectl_manager but is not registered or dispatched in mcp_server.py, making it unreachable by any MCP client.",
+    "fix_class": "wire-up",
+    "proposed_fix": "In mcp_server.py handle_call_tool add: 'elif name == \"kubectl_scale\": result = await self.kubectl_manager.kubectl_scale(resource=arguments[\"resource\"], name=arguments[\"name\"], replicas=arguments[\"replicas\"], namespace=arguments.get(\"namespace\"))'. Apply the same enhanced_tools import patch required by the kubectl_rollout and kubectl_apply fixes. All three enhanced kubectl tools can be addressed in a single PR.",
+    "test_plan": "Mock kubectl_manager.kubectl_scale; call handle_call_tool with name='kubectl_scale', resource='deployment', name='myapp', replicas=3; assert response is a JSON string of the mock return value."
+  },
+  {
+    "component_id": "tests/conftest.py",
+    "kind": "test",
+    "severity": "high",
+    "evidence": "tests/conftest.py:94-98 — k8s_manager fixture sets manager.client, manager.v1, manager.apps_v1, manager.storage_v1 to Mock() objects but never calls await manager.initialize(); line 104-106 — diagnostics_manager fixture sets manager.k8s_client = Mock() but DiagnosticsManager has no k8s_client attribute; line 109-111 — monitoring_manager fixture sets manager.prometheus_client = Mock() but MonitoringManager has no prometheus_client attribute.",
+    "diagnosis": "Multiple fixtures inject mock attributes onto wrong or non-existent attribute names, meaning tests that use these fixtures do not actually exercise any real initialization path, and attribute assignments are silently ignored (Python does not error on arbitrary attribute addition).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Align fixture attribute names with actual manager __init__ signatures. For k8s_manager: patch kubernetes.client.CoreV1Api and AppsV1Api at the class level instead of setting post-init attributes. For diagnostics_manager and monitoring_manager: remove phantom attribute assignments. Add a conftest-level cluster_manager fixture returning a KubernetesManager wrapping MockKubernetesClient. Document each fixture's contract in its docstring.",
+    "test_plan": "After changes, run pytest tests/ --collect-only to confirm no fixture errors; run pytest tests/conftest.py in isolation to confirm fixture factories produce objects of the correct types."
+  },
+  {
+    "component_id": "behavior:analyzer_pvc",
+    "kind": "behavior",
+    "severity": "high",
+    "evidence": "No PVCAnalyzer, pvc_analyzer, or pvc_pending detection code found anywhere in src/; diagnostics_manager.py has no storage-specific check; monitoring_manager.py _analyze_storage_performance (line 303) returns hardcoded IOPS strings, not PVC status.",
+    "diagnosis": "PVCAnalyzer is entirely absent — no Pending detection, no mount-failure detection, and no capacity utilization check are implemented.",
+    "fix_class": "implement",
+    "proposed_fix": "Create src/pvc_analyzer.py with class PVCAnalyzer. Implement: (1) check_pending(namespace) — CoreV1Api.list_namespaced_persistent_volume_claim, filter phase=='Pending', return list of {pvc, storageClass, reason from events}; (2) check_mount_failed(pods) — iterate pod.status.conditions for reason=='ContainersNotReady' combined with events reason=='FailedMount', correlate PVC name; (3) check_capacity(pvcs) — for each bound PVC, query metrics-server or node exporter for kubelet_volume_stats_used_bytes, flag if used/capacity > 0.85. Wire into DiagnosticsManager under check_types=['storage'].",
+    "test_plan": "Unit test each method: (a) feed a PVC with phase=Pending and assert finding includes storageClass name; (b) feed a pod event with reason=FailedMount and assert the correlated PVC is returned; (c) feed a volume with 90% utilization and assert a capacity warning is emitted."
+  },
+  {
+    "component_id": "behavior:analyzer_pod",
+    "kind": "behavior",
+    "severity": "critical",
+    "evidence": "src/diagnostics_manager.py — troubleshoot_pod_issues method (called from mcp_server.py:501) exists but inspection (via monitoring_manager.py line 106 comment '# Stub implementation') confirms the entire diagnostics layer returns hardcoded data; no code in any src/ file calls kubernetes.client to inspect containerStatuses, lastState.terminated.reason, or probe failure events for real pods.",
+    "diagnosis": "PodAnalyzer behaviors (ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures) are claimed by the tool description but the diagnostics_manager returns static fake data instead of interrogating the real Kubernetes API.",
+    "fix_class": "implement",
+    "proposed_fix": "In DiagnosticsManager.troubleshoot_pod_issues: (1) call CoreV1Api.read_namespaced_pod(pod_name, namespace) to get live status; (2) inspect pod.status.container_statuses[].state.waiting.reason for 'ImagePullBackOff'/'CrashLoopBackOff' and .last_state.terminated.reason=='OOMKilled'; (3) call CoreV1Api.list_namespaced_event filtered by involvedObject.name=pod_name to extract probe failure events; (4) return structured dict with detected conditions, exit codes, restart counts, and relevant log tail from CoreV1Api.read_namespaced_pod_log. Remove hardcoded stub blocks.",
+    "test_plan": "Inject a MockKubernetesClient that returns a pod with containerStatuses[0].state.waiting.reason='CrashLoopBackOff'; call troubleshoot_pod_issues and assert the result contains issue_type='CrashLoopBackOff' and a non-empty recommendation. Repeat for OOMKilled (terminated.reason='OOMKilled', exit_code=137)."
+  },
+  {
+    "component_id": "tests/production/test_pod_issues.py",
+    "kind": "test",
+    "severity": "critical",
+    "evidence": "test_pod_issues.py:70 — 'mcp_server.resolve_issue_end_to_end = AsyncMock(return_value=mock_pipeline_result)'; line 74 — 'result = await mcp_server.resolve_issue_end_to_end(issue_context)'; line 362 — \"assert 'Check database connectivity' in resolution['solutions']\" but mock_resolution at line 333 contains 'Check database service and pods status', not 'Check database connectivity' — assertion will fail on any real run; all 10 tests follow the same pattern of asserting mock-injected data.",
+    "diagnosis": "All tests are self-referential mock round-trips that assert the exact values they injected, providing no coverage of real logic; additionally at least one assertion (line 362) will fail because the asserted string does not appear in the mock data.",
+    "fix_class": "rewrite",
+    "proposed_fix": "Fix immediate bug: line 362 change assert string to 'Check database service and pods status' to match mock at line 333. Longer term: replace AsyncMock pattern with real manager calls once stubs are implemented. For now, add pytest.mark.xfail(reason='stub backend') to each test that calls a stub method, so the suite is honest about what is and is not tested.",
+    "test_plan": "Run pytest tests/production/test_pod_issues.py -v; the test_init_container_failure_resolution test must pass (no AssertionError on line 362) after the string fix; remaining tests should report xfail rather than false-pass."
+  },
+  {
+    "component_id": "mcp-tool:analyze_logs",
+    "kind": "mcp-tool",
+    "severity": "critical",
+    "evidence": "mcp_server.py:523-530 — handler dispatches to self.monitoring_manager.analyze_logs(...); monitoring_manager.py:99 — 'total_entries': 1247 hardcoded; line 106 — '# Stub implementation'; lines 107-128 — returns static error messages 'Failed to connect to database' and 'Authentication timeout' with fixed timestamps '2025-08-09T09:15:00Z' regardless of target, namespace, time_range, log_level, or search_pattern input.",
+    "diagnosis": "analyze_logs dispatches correctly through mcp_server but the underlying implementation is a complete stub that returns hardcoded fake log data with no call to any Kubernetes API (no CoreV1Api.read_namespaced_pod_log or equivalent).",
+    "fix_class": "rewrite",
+    "proposed_fix": "Rewrite MonitoringManager.analyze_logs: (1) if target is a pod name, call CoreV1Api.read_namespaced_pod_log(target, namespace, since_seconds=_parse_time_range(time_range), timestamps=True); (2) if target is a deployment, list pods by label selector then aggregate logs; (3) parse lines for log_level filter; (4) apply re.search(search_pattern) if provided; (5) count real error/warn/info lines and return actual top-N error strings with real first_seen/last_seen from parsed timestamps. Remove all hardcoded numeric values and fake timestamps.",
+    "test_plan": "Provide a MockKubernetesClient whose read_namespaced_pod_log returns a fixed multiline string with known ERROR and WARN lines. Call analyze_logs with log_level='error' and assert total_entries equals the known count, top_errors[0].message matches the known ERROR text, and the hardcoded value 1247 does not appear in the response."
+  }
+]
