@@ -54,7 +54,7 @@ spec:
           args:
             - redis-server
             - --save
-            - ""
+            - "60 1"
             - --appendonly
             - "no"
             - --maxmemory
@@ -67,7 +67,7 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "64Mi"
+              memory: "128Mi"
             limits:
               cpu: "500m"
               memory: "320Mi"
@@ -90,5 +90,21 @@ spec:
               mountPath: /data
       volumes:
         - name: data
-          emptyDir:
-            sizeLimit: 512Mi
+          persistentVolumeClaim:
+            claimName: corey-fl-redis-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: corey-fl-redis-data
+  namespace: corey-coder
+  labels:
+    app: corey-fl-redis
+    component: task-queue
+    owner: corey-fl-loop
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

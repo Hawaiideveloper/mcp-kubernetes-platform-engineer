@@ -4,6 +4,23 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
+
+### Added
+- `scripts/runner/claim_task.py` — atomic ZPOPMIN claim against `corey-fl-redis`; idempotent on requeued tasks.
+- `scripts/runner/mark_done.py`, `mark_failed.py`, `heartbeat.py` — task lifecycle ops, used by sub-agents via `kubectl exec`.
+- `infra/redis/redis.yaml` — PVC `corey-fl-redis-data` (1Gi local-path) + RDB `save 60 1` + memory request bumped to 128Mi.
+
+### Removed
+- `scripts/claim_task.py`, `scripts/mark_done.py` — SQLite-era stubs, superseded by Redis runner.
+- `docs/audit-run-001/worklist.db` — SQLite worklist, superseded by Redis hashes + queue:pending zset.
+
+### Fixed
+- Redis lost all 25 tasks on first pod restart (no persistence). Documented in Lessons_Learned. RDB+PVC now in place.
+
+### Files changed
+- infra/redis/redis.yaml, Lessons_Learned.md, CHANGELOG.md, scripts/runner/*.py, scripts/claim_task.py (deleted), scripts/mark_done.py (deleted), docs/audit-run-001/worklist.db (deleted)
+
 ## [Alpha-1-ccfe7b-0-1_0-2026-06-03] — 2026-06-03
 
 ### Added
