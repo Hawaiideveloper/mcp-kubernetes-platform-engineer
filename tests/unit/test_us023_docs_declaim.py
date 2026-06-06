@@ -1,6 +1,11 @@
 """US-023: Verify documentation de-claim patches are applied correctly."""
 from pathlib import Path
 
+import os as _os
+REPO_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", ".."))
+def _repo(name):
+    return _os.path.join(REPO_ROOT, name)
+
 REPO = Path("/work/wt/US-023")
 
 

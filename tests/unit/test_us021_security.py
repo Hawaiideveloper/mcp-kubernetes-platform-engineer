@@ -19,7 +19,6 @@ import re
 import sys
 import sqlite3
 
-import os
 import pytest
 HELM_MANAGER_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "src", "helm_manager.py")
 helm_manager_present = pytest.mark.skipif(

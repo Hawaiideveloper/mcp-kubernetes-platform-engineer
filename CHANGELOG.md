@@ -3,6 +3,17 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-26-687312-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us023_docs_declaim.py — replaced hardcoded /work/wt/US-023/ paths with REPO_ROOT-relative helper.
+- tests/unit/test_us021_security.py — removed duplicate import os (F811).
+
+### Files changed
+- tests/unit/test_us021_security.py
+- tests/unit/test_us023_docs_declaim.py
+- CHANGELOG.md
+
 ## [Alpha-25-144b8c-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
