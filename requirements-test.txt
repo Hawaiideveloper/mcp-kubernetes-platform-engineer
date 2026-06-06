@@ -74,5 +74,5 @@ pytest-socket>=0.6.0
 pytest-httpserver>=1.0.8
 
 # Environment management
-python-dotenv>=1.0.0
+python-dotenv>=1.2.2
 pydantic-settings>=2.0.3
