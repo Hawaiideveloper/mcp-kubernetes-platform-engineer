@@ -6,7 +6,7 @@ REPO_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..
 def _repo(name):
     return _os.path.join(REPO_ROOT, name)
 
-REPO = Path("/work/wt/US-023")
+REPO = Path(__file__).resolve().parent.parent.parent
 
 
 def _text(filename: str) -> str:

@@ -3,6 +3,15 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us023_docs_declaim.py — REPO uses __file__ discovery (was hardcoded pod worktree path).
+
+### Files changed
+- tests/unit/test_us023_docs_declaim.py
+- CHANGELOG.md
+
 ## [Alpha-26-687312-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
