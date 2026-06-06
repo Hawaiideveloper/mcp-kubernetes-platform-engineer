@@ -1,0 +1,28 @@
+version: "1"
+
+trading_namespaces:
+  exact: [ibkr-live-trader, daxxon-trading, brightflow-live]
+  pattern: ["*-live", "*-trading", "*-trader", "ibkr-*"]
+
+system_namespaces:
+  exact: [kube-system, kube-public, kube-node-lease, calico-system, cert-manager, ingress-nginx]
+  pattern: []
+
+stateless_web_namespaces:
+  exact: [brightflow-dashboard]
+  pattern: ["*-dashboard", "*-ui"]
+
+batch_namespaces:
+  exact: [triton-inference]
+  pattern: ["cronjob-*", "*-batch", "*-jobs"]
+
+# Namespaces not matched by any category: pr_required, no auto-merge.
+default_policy: pr_required
+
+# Human override: operator sets enabled=true with a labeled PR + expiry.
+# Automation must never set this flag.
+override:
+  enabled: false
+  authorized_pr_label: "force-apply"
+  authorized_by: ""
+  expires_at: ""
