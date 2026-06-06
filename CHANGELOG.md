@@ -28,6 +28,31 @@ Pause point — capture the full picture so any future session can pick up cold.
 - the_goal-inprogress.md (new)
 - CHANGELOG.md
 
+## [Alpha-4-168973-0-1_0-2026-06-05] — 2026-06-05
+### Added
+- (US-019) Four-identity RBAC split: reader ClusterRole, namespaced applier Roles for brightflow-dashboard and triton-inference, sandbox Role template, and pr-bot ServiceAccount with automountServiceAccountToken=false. Trading namespaces have no applier binding.
+- (US-019) rbac_identities.py, rbac_audit_logger.py, rbac_ci_check.py modules with 28 passing unit tests covering namespace classification, §18 audit record schema, pre/post-action logging contracts, degraded-session detection, and CI violation detection.
+### Files
+- k8s/rbac/reader-cluster-role.yaml
+- k8s/rbac/reader-service-account.yaml
+- k8s/rbac/reader-cluster-role-binding.yaml
+- k8s/rbac/applier-role-template.yaml
+- k8s/rbac/applier-service-account.yaml
+- k8s/rbac/applier-role-binding-template.yaml
+- k8s/rbac/applier-role-brightflow-dashboard.yaml
+- k8s/rbac/applier-role-binding-brightflow-dashboard.yaml
+- k8s/rbac/applier-role-triton-inference.yaml
+- k8s/rbac/applier-role-binding-triton-inference.yaml
+- k8s/rbac/sandbox-role-template.yaml
+- k8s/rbac/sandbox-service-account.yaml
+- k8s/rbac/sandbox-role-binding-template.yaml
+- k8s/rbac/pr-bot-service-account.yaml
+- src/auto_remediate/rbac_identities.py
+- src/auto_remediate/rbac_audit_logger.py
+- src/auto_remediate/rbac_ci_check.py
+- tests/unit/test_US019_rbac_split.py
+- docs/audit-run-001/proofs/US-019/pytest-output.txt
+
 ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
 
 ### Added

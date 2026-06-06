@@ -1,0 +1,18 @@
+# Replace <SANDBOX_NAMESPACE> with the actual sandbox namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: auto-remediate-sandbox
+  namespace: <SANDBOX_NAMESPACE>
+  labels:
+    app.kubernetes.io/part-of: auto-remediate
+    app.kubernetes.io/component: rbac
+    auto-remediate/identity: sandbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: auto-remediate-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: auto-remediate-sandbox
+    namespace: auto-remediate
