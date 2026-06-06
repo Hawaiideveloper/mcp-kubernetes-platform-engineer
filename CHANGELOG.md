@@ -1,3 +1,13 @@
+## [Alpha-36-ade30d-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests US-009/US-016 — replaced asyncio.get_event_loop().run_until_complete() (deprecated, removed in Py 3.12) with asyncio.run().
+
+### Files changed
+- tests/unit/test_us009_analyzer_base_pod.py
+- tests/unit/test_us016_gitops_pr_generator.py
+- CHANGELOG.md
+
 ## [Alpha-35-68f27d-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed

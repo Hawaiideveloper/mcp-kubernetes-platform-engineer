@@ -33,7 +33,7 @@ def _analyzer(pods=None, events=None, log=""):
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_image_pull_backoff():
