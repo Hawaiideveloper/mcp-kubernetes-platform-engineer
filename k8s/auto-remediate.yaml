@@ -1,0 +1,78 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: corey-fl-loop
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    owner: corey-fl-loop
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auto-remediate-reader
+  namespace: corey-fl-loop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: auto-remediate-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+- kind: ServiceAccount
+  name: auto-remediate-reader
+  namespace: corey-fl-loop
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-remediate
+  namespace: corey-fl-loop
+  labels: { app: auto-remediate, owner: corey-fl-loop }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: auto-remediate }
+  template:
+    metadata:
+      labels: { app: auto-remediate, owner: corey-fl-loop }
+    spec:
+      serviceAccountName: auto-remediate-reader
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: runtime
+          image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:main
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          env:
+            - name: LOG_LEVEL
+              value: INFO
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          livenessProbe:
+            exec: { command: ["sh","-c","test -f /tmp/healthz && grep -q alive /tmp/healthz"] }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec: { command: ["sh","-c","test -f /tmp/healthz"] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}

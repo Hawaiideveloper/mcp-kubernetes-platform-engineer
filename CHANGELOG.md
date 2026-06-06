@@ -1,3 +1,16 @@
+## [Alpha-40-bf7634-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- Dockerfile rewritten to lean python:3.11-slim image targeting src/auto_remediate runtime.
+- src/auto_remediate/runtime.py — long-lived entrypoint that loads k8s client and heartbeats /tmp/healthz.
+- k8s/auto-remediate.yaml — Namespace corey-fl-loop with PSA baseline, reader ServiceAccount + ClusterRoleBinding to view, Deployment with non-root, readOnlyRootFilesystem, seccomp RuntimeDefault.
+
+### Files changed
+- Dockerfile (replaced)
+- src/auto_remediate/runtime.py (new)
+- k8s/auto-remediate.yaml (new)
+- CHANGELOG.md
+
 ## [Alpha-74-c1c9d5-0-1_0-20260606] — 2026-06-06
 
 ### Added (US-013)
