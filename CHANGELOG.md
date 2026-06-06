@@ -1,3 +1,12 @@
+## [Alpha-30-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### US-008 NIM Backend + Finding-Hash Cache
+
+- Add nim_models.py: Finding, FixCandidate, Explanation, FixKind, LlmBackend protocol
+- Add nim_backend.py: NimBackend, OllamaBackend, FakeBackend, make_backend factory
+- Add finding_cache.py: SQLite FindingCache with TTL, hit-rate metric, CachedBackend wrapper
+- Add deterministic_table.py: rule-based FixCandidate lookup used as LLM context and fallback
+
 # Changelog
 
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
