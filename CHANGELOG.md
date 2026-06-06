@@ -1,3 +1,12 @@
+## [Alpha-45-a77e17-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- src/auto_remediate/runtime.py: rewired from heartbeat-only to full observer loop calling PodAnalyzer.run_safe() every 30s, dedupes findings within 5-min rolling window, appends one-line summaries to /tmp/audit.log
+- tests/unit/test_runtime_v1.py: unit tests covering audit write, dedup within window, dedup expiry, and full loop invocation via stop-callable injection
+
+### Changed
+- Runtime now surfaces real Findings from the cluster; liveness heartbeat preserved
+
 ## [Alpha-43-5aa5fd-0-1_0-2026-06-06] — 2026-06-06
 
 ### Added
