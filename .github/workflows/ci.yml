@@ -60,7 +60,7 @@ jobs:
 
       - name: Run pytest with coverage gate
         run: |
-          pytest tests/unit/test_US*.py tests/unit/test_us*.py -v --tb=short --cov=src/auto_remediate --cov-report=term --cov-fail-under=0
+          PYTHONPATH=. pytest tests/unit/test_US*.py tests/unit/test_us*.py -v --tb=short --cov=src/auto_remediate --cov-report=term --cov-fail-under=0
 
   build-and-scan:
     name: Build image + Trivy scan

@@ -169,3 +169,5 @@ grafana_data/
 *.key
 *.crt
 secrets/
+data/*.db
+data/github_issues.db

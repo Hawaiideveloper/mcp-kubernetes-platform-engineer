@@ -26,13 +26,18 @@ class GitHubIssuesManager:
         # Use relative path that works both in development and production
         import tempfile
         import os
-        try:
-            data_dir = "./data"
-            os.makedirs(data_dir, exist_ok=True)
-            self.db_path = f"{data_dir}/github_issues.db"
-        except OSError:
-            # Fallback to temp directory if we can't write to ./data
-            self.db_path = os.path.join(tempfile.gettempdir(), "github_issues.db")
+        env_path = os.getenv("GITHUB_ISSUES_DB_PATH")
+        if env_path:
+            self.db_path = env_path
+            os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
+        else:
+            try:
+                data_dir = "./data"
+                os.makedirs(data_dir, exist_ok=True)
+                self.db_path = f"{data_dir}/github_issues.db"
+            except OSError:
+                # Fallback to temp directory if we can't write to ./data
+                self.db_path = os.path.join(tempfile.gettempdir(), "github_issues.db")
         self.github_repos = [
             "kubernetes/kubernetes",
             "kubernetes/kubectl",

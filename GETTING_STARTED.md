@@ -4,7 +4,7 @@
 
 ### 1. One-Command Setup
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/mcp-kubernetes-platform-engineer/main/start.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/main/start.sh | bash
 ```
 
 ### 2. Manual Setup (if you prefer)
@@ -67,7 +67,6 @@ After setup, verify everything works:
 
 2. **Check MCP Server**:
    ```bash
-   curl http://localhost:3001/health
    ```
 
 3. **Test in VS Code**:
@@ -138,15 +137,14 @@ Once configured, you can ask Copilot questions like:
 - "Explain this Kubernetes error: [paste error]"
 
 The MCP server will provide responses based on:
-- 45,720+ indexed Kubernetes GitHub issues
-- Real-time cluster analysis (if kubectl configured)
+- Issues indexed at runtime via GitHub API (count varies; requires GITHUB_TOKEN)
+- Cluster analysis (stub implementation; real API integration pending; see /docs/audit-run-001/)
 - Best practices and security recommendations
 - Step-by-step troubleshooting guides
 
 ## 🔍 Advanced Features
 
 ### Live Issue Monitoring
-The server automatically updates its knowledge base every hour by:
 - Fetching new GitHub issues from 17+ Kubernetes repositories
 - Analyzing issue patterns and solutions
 - Building searchable knowledge database
@@ -198,7 +196,6 @@ export GITHUB_TOKEN="your_token"
 ### Getting Help
 
 1. **Check Logs**: `docker logs k8s-mcp-server`
-2. **Check Health**: `curl http://localhost:3001/health`
 3. **Issue Tracker**: Create an issue on GitHub
 4. **Discord**: Join our community discord server
 
@@ -208,7 +205,6 @@ The MCP server automatically:
 - ✅ Updates GitHub issues every hour
 - ✅ Cleans up old data to stay performant  
 - ✅ Adapts to new Kubernetes versions and patterns
-- ✅ Learns from community solutions
 
 Your knowledge base grows automatically as the Kubernetes ecosystem evolves!
 
@@ -216,7 +212,6 @@ Your knowledge base grows automatically as the Kubernetes ecosystem evolves!
 
 View your MCP server stats:
 ```bash
-curl http://localhost:3001/stats | jq
 ```
 
 This shows:

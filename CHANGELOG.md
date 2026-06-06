@@ -3,6 +3,132 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us023_docs_declaim.py — REPO uses __file__ discovery (was hardcoded pod worktree path).
+
+### Files changed
+- tests/unit/test_us023_docs_declaim.py
+- CHANGELOG.md
+
+## [Alpha-26-687312-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us023_docs_declaim.py — replaced hardcoded /work/wt/US-023/ paths with REPO_ROOT-relative helper.
+- tests/unit/test_us021_security.py — removed duplicate import os (F811).
+
+### Files changed
+- tests/unit/test_us021_security.py
+- tests/unit/test_us023_docs_declaim.py
+- CHANGELOG.md
+
+## [Alpha-25-144b8c-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us021_security.py — added missing import pytest.
+
+### Files changed
+- tests/unit/test_us021_security.py
+- CHANGELOG.md
+
+## [Alpha-24-dca6bb-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us021_security.py — definitive SOH strip + class line restore.
+
+### Files changed
+- tests/unit/test_us021_security.py
+- CHANGELOG.md
+
+## [Alpha-23-c35b36-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us021_security.py — TestUS021HelmPassword now skipped when src/helm_manager.py absent. US-024 deleted that legacy file; security tests for non-existent code are vacuously safe.
+
+### Files changed
+- tests/unit/test_us021_security.py
+- CHANGELOG.md
+
+## [Alpha-22-7df76a-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- ci.yml — PYTHONPATH=. for pytest (US-024 added src/__init__.py, changing import semantics); psycopg[binary] in pip install for US-018/US-025 DB tests.
+
+### Files changed
+- .github/workflows/ci.yml
+- CHANGELOG.md
+
+## [Alpha-21-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-003: RemediationLadder class implementing restart-first state machine with 300s watchdog
+- Restart eligibility matrix with circuit breakers (per-resource 2/hr, per-namespace 10 cap)
+- ProtectedNamespaceError guard blocking mutations on ibkr-live-trader, daxxon-trading, brightflow-live
+- DPOPair emission on STILL_SICK → ESCALATE path capturing rejected restart vs chosen action
+
+### Files changed
+- src/auto_remediate/remediation_ladder.py (new)
+- tests/unit/test_US_003_remediation_ladder.py (new, 15 unit tests)
+
+
+
+## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Changed
+- Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md
+- README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims
+- GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints
+- CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)
+
+### Files changed
+- README.md
+- GETTING_STARTED.md
+- VSCODE_SETUP.md
+- VSCODE_K8S_INTEGRATION.md
+- functional_unit_test.md
+- .github/copilot-instructions.md
+- K8S_ANNOUNCEMENT.md (deleted)
+- TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)
+- coming_soon.md (deleted)
+- GettingStarted.md (deleted)
+- tests/unit/test_us023_docs_declaim.py (new)
+- CHANGELOG.md
+
+## [Alpha-17-b3f2e3-0-1_0-2026-06-06] - 2026-06-06
+
+### US-024: Dead-code removal
+
+- Deleted backup/stale files: `src/mcp_server.py.bak`, `src/mcp_server_backup.py`, `src/enhanced_tools.py`, `GettingStarted.md`
+- Removed dead wiring (`KubectlManager`, `HelmManager`) from `src/mcp_server.py`; deleted `kubectl_manager.py` and `helm_manager.py`
+- Removed `data/github_issues.db` from git tracking; added `GITHUB_ISSUES_DB_PATH` env-var override to `github_issues_manager.py`; removed stale `tests/__init__.py`; fixed `Dockerfile` `COPY docs/` line
+
+**Files changed:** `.gitignore`, `Dockerfile`, `src/github_issues_manager.py`, `src/mcp_server.py`, `tests/unit/test_US-024_dead_code.py`
+
+## [Alpha-16-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-022: Checklist.md (repo root) with all Done-Bar and Sprint criteria as unchecked boxes
+- src/auto_remediate/acceptance.py: programmatic acceptance-criteria verifier (C6a, CHANGELOG, C10 checks)
+- tests/unit/test_US022_acceptance.py: 18 unit tests covering AcceptanceReport, check_checklist, check_changelog_version, check_source_contains_k8s_call, and run_static_criteria
+
+### Files changed
+- Checklist.md
+- src/auto_remediate/acceptance.py
+- tests/unit/test_US022_acceptance.py
+- CHANGELOG.md
+
+
+## [Alpha-18-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- `src/auto_remediate/watchdog.py` — 5-minute post-remediation watchdog with healed/still-sick verdict (US-004)
+- `tests/unit/test_US_004_watchdog.py` — 12 unit tests covering healed, still-sick, deleted, namespace-deleted, and restart-count paths
+
+### Files changed
+- src/auto_remediate/watchdog.py (new)
+- tests/unit/test_US_004_watchdog.py (new)
+- CHANGELOG.md
 
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
