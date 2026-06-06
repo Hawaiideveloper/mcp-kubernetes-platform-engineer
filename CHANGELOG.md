@@ -1,3 +1,12 @@
+## [Alpha-47-6e5178-0-1_0-2026-06-06] — 2026-06-06
+
+### Verified
+- Runtime v1 LIVE in corey-fl-loop ns. Observer loop tick=1 found 22 real cluster findings across crash-loop / oom-killed / probe-failure / image-pull / failed-mount. Dedup working across ticks. Trading namespaces (ibkr-live-trader) detected but flagged for observe-only per US-006 hardblock. The auto-remediator is doing its job.
+
+### Files changed
+- docs/audit-run-001/proofs/acceptance/runtime-v1-live.md (new)
+- CHANGELOG.md
+
 ## [Alpha-46-58a9ac-0-1_0-2026-06-06] — 2026-06-06
 
 ### Changed
