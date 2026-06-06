@@ -28,6 +28,25 @@ Pause point — capture the full picture so any future session can pick up cold.
 - the_goal-inprogress.md (new)
 - CHANGELOG.md
 
+## [Alpha-8-168973-0-1_0-2026-06-05] — 2026-06-05
+### Added
+- (US-021) Applied 8 concrete security patches: SQL injection fix (parameterized queries in github_issues_manager), GITHUB_TOKEN moved to env-file in start.sh, empty secret placeholder removed from k8s/secret.yaml, hardcoded private IP replaced in docs, NetworkPolicy default-deny + allow-ingress-nginx created, setup-vscode-k8s.sh hardcoded path fixed, update.sh error handling hardened, and loguru logger exc_info replaced with opt(exception=).
+- (US-021) Kubernetes manifest hardening: readOnlyRootFilesystem=true, seccompProfile RuntimeDefault, KUBECONFIG dir-path env removed, PSA baseline/restricted labels on namespace, helm password passed via --password-stdin.
+### Files
+- src/github_issues_manager.py
+- src/logger.py
+- src/helm_manager.py
+- k8s/secret.yaml
+- k8s/namespace.yaml
+- k8s/deployment.yaml
+- k8s/networkpolicy.yaml (new)
+- VSCODE_K8S_INTEGRATION.md
+- README.md
+- setup-vscode-k8s.sh
+- start.sh
+- update.sh
+- tests/unit/test_us021_security.py (new)
+
 ## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05
 ### Added
 - (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.

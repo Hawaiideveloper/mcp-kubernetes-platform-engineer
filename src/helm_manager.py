@@ -7,7 +7,6 @@ import subprocess
 import json
 import yaml
 from typing import Dict, List, Optional, Any
-from pathlib import Path
 
 try:
     from logger import get_logger
@@ -297,10 +296,13 @@ class HelmManager:
         
         if username:
             args.extend(['--username', username])
+        # Pass password via stdin to avoid exposure in process argument list
+        password_input: str | None = None
         if password:
-            args.extend(['--password', password])
-        
-        return self._run_helm(args)
+            args.extend(['--password-stdin'])
+            password_input = password
+
+        return self._run_helm(args, input_data=password_input)
     
     async def update_helm_repositories(self) -> Dict[str, Any]:
         """Update Helm repositories"""

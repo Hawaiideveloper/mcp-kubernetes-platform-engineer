@@ -1098,7 +1098,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🎉 **Production Deployment Status**
 
 ### **✅ Currently Operational**
-- **🚀 Kubernetes Deployment**: Successfully running on cluster at `172.100.10.107:30001`
+- **🚀 Kubernetes Deployment**: Successfully running on cluster at `${NODE_IP}:${NODE_PORT}`
 - **📦 Container Registry**: `ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest`
 - **🏥 Health Status**: All endpoints responding with healthy status
 - **📚 Documentation**: 1,029 official Kubernetes reference files integrated
@@ -1106,7 +1106,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **💾 Storage**: 5Gi persistent volume for knowledge base
 
 ### **🔗 Live Access Points**
-- **External Health Check**: `curl http://172.100.10.107:30001/health`
+- **External Health Check**: `curl http://${NODE_IP}:${NODE_PORT}/health`
 - **Internal Service**: `kubernetes-mcp-server-service.mcp-kubernetes.svc.cluster.local:3001`
 - **Monitoring**: Prometheus metrics on port 8080
 - **Documentation**: Enhanced with official Kubernetes references
