@@ -1,3 +1,12 @@
+## [Alpha-41-6cea27-0-1_0-2026-06-06] — 2026-06-06
+
+### Changed
+- k8s/auto-remediate.yaml — switched to ConfigMap-mounted bootstrap pattern (python:3.11-slim base, pip-install + inline runtime) so deploy does not depend on a custom image being pushed to GHCR. Self-contained.
+
+### Files changed
+- k8s/auto-remediate.yaml
+- CHANGELOG.md
+
 ## [Alpha-40-bf7634-0-1_0-2026-06-06] — 2026-06-06
 
 ### Added
