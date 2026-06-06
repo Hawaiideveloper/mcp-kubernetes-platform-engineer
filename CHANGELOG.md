@@ -4,6 +4,17 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- CI runs-on switched from [self-hosted, Linux, X64] to ubuntu-latest. Repo is personal-account-owned; org self-hosted runners are not accessible. Real fix is transferring the repo to AlbrightLaboratories org; tracked in Lessons_Learned.
+
+### Files changed
+- .github/workflows/ci.yml
+- .github/workflows/release.yml
+- Lessons_Learned.md
+- CHANGELOG.md
+
 ## [Alpha-11-8873e1-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed

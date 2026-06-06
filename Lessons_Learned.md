@@ -31,3 +31,13 @@
 **Fix applied here (workaround):** Patched both CI workflows to `runs-on: [self-hosted, Linux, X64]` so they match the implicit labels every org runner already advertises. This unblocks Wave 1.
 
 **Real fix (follow-up):** Open a PR against the `arc` repo to add `albright-runners` to the RunnerSet labels, then revert these workflows back to `runs-on: albright-runners` per org convention.
+
+## 2026-06-06 — Personal-account repo cannot use org self-hosted runners
+
+**What happened:** Patched workflows from `runs-on: albright-runners` to `runs-on: [self-hosted, Linux, X64]` to match implicit org-runner labels. PR #3 checks still stayed queued 5+ minutes. Investigation: the repo is owned by user `Hawaiideveloper`, not the `AlbrightLaboratories` org. Org-level runners (in runner group \"Default\", visibility=all) only run jobs for org repos. The repo has no user-level self-hosted runners (`gh api /repos/.../actions/runners` returns empty).
+
+**Why:** GitHub Actions self-hosted runner scoping: org runners require the workflow repo to be inside the org. Personal-account repos must add runners at the user or repo level.
+
+**Fix applied (workaround):** Patched both workflows to `runs-on: ubuntu-latest`. GitHub-hosted runners are free for public repos and run immediately.
+
+**Real fix (follow-up):** Transfer `mcp-kubernetes-platform-engineer` to the `AlbrightLaboratories` org (matches the convention of every other repo + lets org runners + the Master TOC auto-updater + the claude-md-sweep workflows all apply automatically). Once transferred, revert workflows back to `runs-on: albright-runners` and complete the arc-RunnerSet label follow-up from the previous lesson.
