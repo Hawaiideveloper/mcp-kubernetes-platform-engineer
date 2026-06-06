@@ -1,3 +1,9 @@
+## [Alpha-39-c1c9d5-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- src/auto_remediate/deterministic_remediation.py — 10 pure-function fixers (ImageTagMigration, ProbeTuning, OrphanJobCleanup, OOMKilledRestartWithBumpProposal, PVCResize, DNSConfigFix, NodeSelectorMismatch, TolerationMissing, HPAEnableMetricsServer, PDBTooStrict) plus dispatch registry
+- tests/unit/test_us017_deterministic_remediation.py — 44 unit tests, all passing
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
