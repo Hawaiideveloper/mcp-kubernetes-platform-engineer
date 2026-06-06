@@ -1,3 +1,12 @@
+## [Alpha-35-68f27d-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- pytest.ini — asyncio_mode = auto under [pytest]. Previous script failed to append.
+
+### Files changed
+- pytest.ini
+- CHANGELOG.md
+
 ## [Alpha-34-c9440e-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
