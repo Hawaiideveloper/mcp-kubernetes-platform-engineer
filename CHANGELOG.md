@@ -1,3 +1,19 @@
+## [Alpha-1-c1c9d5-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+-  — NetworkPolicyAnalyzer detects orphan_policy, service_ingress_denied, egress_dns_blocked, no_default_deny
+-  — PDBAnalyzer detects eviction_blocked, selector_mismatch, no_owner_workload
+-  — HPAAnalyzer detects no_metrics, capped_at_max, never_scaling, target_missing
+-  — 5 unit tests for NetworkPolicyAnalyzer (all pass)
+-  — 3 unit tests for PDBAnalyzer (all pass)
+-  — 4 unit tests for HPAAnalyzer (all pass)
+
+### Changed
+- All analyzers extend BaseAnalyzer; asyncio.to_thread() wraps all kubernetes.client calls
+
+### Story
+US-014: NetworkPolicy + PDB + HPA analyzers
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
