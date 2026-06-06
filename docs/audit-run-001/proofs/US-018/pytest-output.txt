@@ -1,0 +1,94 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+metadata: {'Python': '3.11.15', 'Platform': 'Linux-5.15.0-179-generic-x86_64-with-glibc2.41', 'Packages': {'pytest': '9.0.3', 'pluggy': '1.6.0'}, 'Plugins': {'pyfakefs': '6.2.0', 'socket': '0.8.0', 'hypothesis': '6.155.2', 'Faker': '40.21.0', 'allure-pytest': '2.16.0', 'metadata': '3.1.1', 'json-report': '1.5.0', 'respx': '0.23.1', 'docker': '3.2.5', 'xdist': '3.8.0', 'asyncio': '1.4.0', 'html': '4.2.0', 'benchmark': '5.2.3', 'pytest_httpserver': '1.1.5', 'mock': '3.15.1', 'postgresql': '8.1.0', 'cov': '7.1.0', 'anyio': '4.13.0', 'locust': '2.44.1', 'timeout': '2.4.0'}}
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /work/wt/US-018
+configfile: pytest.ini
+plugins: pyfakefs-6.2.0, socket-0.8.0, hypothesis-6.155.2, Faker-40.21.0, allure-pytest-2.16.0, metadata-3.1.1, json-report-1.5.0, respx-0.23.1, docker-3.2.5, xdist-3.8.0, asyncio-1.4.0, html-4.2.0, benchmark-5.2.3, pytest_httpserver-1.1.5, mock-3.15.1, postgresql-8.1.0, cov-7.1.0, anyio-4.13.0, locust-2.44.1, timeout-2.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 300.0s
+timeout method: thread
+timeout func_only: False
+collecting ... collected 14 items
+
+tests/unit/test_us018_audit_log.py::test_append_1000_records PASSED      [  7%]
+tests/unit/test_us018_audit_log.py::test_write_failure_emits_to_stderr PASSED [ 14%]
+tests/unit/test_us018_audit_log.py::test_log_action_valid_verbs PASSED   [ 21%]
+tests/unit/test_us018_audit_log.py::test_log_action_invalid_verb PASSED  [ 28%]
+tests/unit/test_us018_audit_log.py::test_dedup_50_identical_findings PASSED [ 35%]
+tests/unit/test_us018_audit_log.py::test_different_findings_are_separate_rows PASSED [ 42%]
+tests/unit/test_us018_audit_log.py::test_query_audit_log_ns_filter PASSED [ 50%]
+tests/unit/test_us018_audit_log.py::test_query_audit_log_time_range PASSED [ 57%]
+tests/unit/test_us018_audit_log.py::test_query_requires_at_least_one_filter PASSED [ 64%]
+tests/unit/test_us018_audit_log.py::test_query_limit_max_500 PASSED      [ 71%]
+tests/unit/test_us018_audit_log.py::test_root_cause_hash_normalizes_uuid PASSED [ 78%]
+tests/unit/test_us018_audit_log.py::test_root_cause_hash_normalizes_ip PASSED [ 85%]
+tests/unit/test_us018_audit_log.py::test_root_cause_hash_normalizes_timestamp PASSED [ 92%]
+tests/unit/test_us018_audit_log.py::test_root_cause_hash_different_messages PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                                        Stmts   Miss  Cover   Missing
+-------------------------------------------------------------------------
+src/__init__.py                                 3      3     0%   5-7
+src/analyzers/__init__.py                       0      0   100%
+src/analyzers/base.py                          61     61     0%   1-107
+src/analyzers/pod_analyzer.py                  87     87     0%   1-157
+src/audit.py                                   24     24     0%   8-60
+src/audit_inventory.py                         85     85     0%   10-236
+src/auto_remediate/__init__.py                  4      0   100%
+src/auto_remediate/acceptance.py               59     59     0%   8-189
+src/auto_remediate/audit_logger.py             77     20    74%   52-53, 106, 128-134, 137, 152, 162-170, 174, 180-181
+src/auto_remediate/audit_query.py              38      6    84%   35, 42, 45-46, 63, 67
+src/auto_remediate/deterministic_table.py      17     17     0%   7-89
+src/auto_remediate/dpo_pair.py                 82     82     0%   8-330
+src/auto_remediate/finding_cache.py            51     51     0%   4-142
+src/auto_remediate/finding_store.py            29     12    59%   77-84, 89-96
+src/auto_remediate/namespace_guard.py          15      9    40%   34-35, 57-65
+src/auto_remediate/nim_backend.py              70     70     0%   4-194
+src/auto_remediate/nim_models.py               43     43     0%   6-78
+src/auto_remediate/rbac_audit_logger.py        40     40     0%   11-153
+src/auto_remediate/rbac_ci_check.py            37     37     0%   9-75
+src/auto_remediate/rbac_identities.py          20     20     0%   9-73
+src/auto_remediate/remediation_ladder.py      237    237     0%   2-525
+src/auto_remediate/roadmap.py                  47     15    68%   48-50, 62-193, 197-200, 204-207
+src/auto_remediate/root_cause.py               10      0   100%
+src/auto_remediate/vcluster_sandbox.py        104    104     0%   2-259
+src/auto_remediate/watchdog.py                136    136     0%   9-244
+src/config.py                                  71      0   100%
+src/diagnostics_manager.py                     80     66    18%   18-19, 23-28, 41-79, 95-152, 168-213, 217, 230, 244, 255, 266
+src/documentation_manager.py                  217    191    12%   24-36, 40-47, 51-64, 68-86, 90-136, 140-172, 176-188, 192-212, 216-247, 252-260, 264-276, 280, 328-372, 376-378, 382-397, 401-412
+src/github_issues_manager.py                  299    269    10%   24-62, 66-77, 81-147, 151-171, 175-191, 196-227, 231-237, 241-250, 254-276, 280-298, 302-310, 334-359, 363-388, 392-412, 417-464, 468-480, 484-521, 526-544, 548-576, 580-623
+src/gitops/__init__.py                          0      0   100%
+src/gitops/pr_generator.py                    128    128     0%   8-310
+src/health_check.py                            31     31     0%   5-63
+src/k8s_manager.py                             55     46    16%   18-21, 25-32, 44-87, 100-162, 176-208
+src/logger.py                                  53     37    30%   40-113, 126, 132-138, 143-148, 153-159, 164-169, 175, 182
+src/main.py                                   108    108     0%   17-217
+src/mcp_server.py                              95     76    20%   46-68, 73-610, 616-644
+src/monitoring_manager.py                      85     67    21%   18-19, 23-28, 43-71, 88-144, 159-188, 192-216, 220, 232, 244, 256, 275, 290, 303, 317
+src/safety_config.py                           41     41     0%   8-87
+src/safety_gate.py                             56     56     0%   14-169
+src/security_manager.py                        66     51    23%   18-19, 23-28, 43-87, 91, 118, 152, 178, 203, 235-247, 251, 274
+src/watchers/__init__.py                        0      0   100%
+src/watchers/event_watcher.py                 108    108     0%   3-194
+src/worklist.py                               109    109     0%   2-304
+src/worklist_seed.py                           25     25     0%   2-47
+-------------------------------------------------------------------------
+TOTAL                                        3003   2627    13%
+Coverage HTML written to dir reports/coverage
+============================= slowest 10 durations =============================
+0.63s call     tests/unit/test_us018_audit_log.py::test_dedup_50_identical_findings
+0.11s call     tests/unit/test_us018_audit_log.py::test_different_findings_are_separate_rows
+0.06s call     tests/unit/test_us018_audit_log.py::test_append_1000_records
+0.01s call     tests/unit/test_us018_audit_log.py::test_query_audit_log_ns_filter
+0.01s call     tests/unit/test_us018_audit_log.py::test_query_audit_log_time_range
+0.01s setup    tests/unit/test_us018_audit_log.py::test_append_1000_records
+0.00s call     tests/unit/test_us018_audit_log.py::test_query_requires_at_least_one_filter
+0.00s call     tests/unit/test_us018_audit_log.py::test_query_limit_max_500
+0.00s call     tests/unit/test_us018_audit_log.py::test_log_action_valid_verbs
+0.00s call     tests/unit/test_us018_audit_log.py::test_root_cause_hash_normalizes_uuid
+============================== 14 passed in 2.88s ==============================
