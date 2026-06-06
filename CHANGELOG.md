@@ -43,6 +43,15 @@ Pause point — capture the full picture so any future session can pick up cold.
 - tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)
 - docs/audit-run-001/proofs/US-001/pytest-output.txt (new)
 
+## [Alpha-5-168973-0-1_0-2026-06-05] — 2026-06-05
+### Added
+- (US-002) AuditInventory module (src/audit_inventory.py) parses all-findings.json and exposes severity/fix-class breakdowns, component summaries, and pattern analysis over the 480 audit findings.
+- (US-002) 29 unit tests (tests/unit/test_US_002_audit_inventory.py) covering fixture and real data; all pass including real-data assertions (critical=117, high=215, total=480).
+### Files
+- src/audit_inventory.py
+- tests/unit/test_US_002_audit_inventory.py
+- docs/audit-run-001/proofs/US-002/pytest-output.txt
+
 ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
 
 ### Added
