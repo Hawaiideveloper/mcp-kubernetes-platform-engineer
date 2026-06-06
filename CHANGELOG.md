@@ -1,3 +1,12 @@
+## [Alpha-28-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### US-005: DPO Pair Schema for corey-coder Ingest
+
+- Added : Pydantic models (DpoPair, RemediationAction, DpoPairContext, DpoPairMeta), redaction, emit guards, issue body renderer, label builder, and config loader.
+- Added : DPO emission config with repo override and enable/disable flag.
+- Added : 24 unit tests, all passing (ruff/mypy/pytest clean).
+
+
 # Changelog
 
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
