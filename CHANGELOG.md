@@ -1,18 +1,17 @@
-## [Alpha-28-df728e-0-1_0-2026-06-06] — 2026-06-06
+## [Alpha-30-df728e-0-1_0-2026-06-06] — 2026-06-06
 
-### US-005: DPO Pair Schema for corey-coder Ingest
+### US-008 NIM Backend + Finding-Hash Cache
 
-- Added : Pydantic models (DpoPair, RemediationAction, DpoPairContext, DpoPairMeta), redaction, emit guards, issue body renderer, label builder, and config loader.
-- Added : DPO emission config with repo override and enable/disable flag.
-- Added : 24 unit tests, all passing (ruff/mypy/pytest clean).
-
+- Add nim_models.py: Finding, FixCandidate, Explanation, FixKind, LlmBackend protocol
+- Add nim_backend.py: NimBackend, OllamaBackend, FakeBackend, make_backend factory
+- Add finding_cache.py: SQLite FindingCache with TTL, hit-rate metric, CachedBackend wrapper
+- Add deterministic_table.py: rule-based FixCandidate lookup used as LLM context and fallback
 
 # Changelog
 
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
-## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
 
 ## [Alpha-29-df728e-0-1_0-2026-06-06] — 2026-06-06
 
@@ -30,6 +29,23 @@ Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 ### Files changed
 - tests/unit/test_us023_docs_declaim.py
 - CHANGELOG.md
+
+## [Alpha-28-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### US-005: DPO Pair Schema for corey-coder Ingest
+
+- Added : Pydantic models (DpoPair, RemediationAction, DpoPairContext, DpoPairMeta), redaction, emit guards, issue body renderer, label builder, and config loader.
+- Added : DPO emission config with repo override and enable/disable flag.
+- Added : 24 unit tests, all passing (ruff/mypy/pytest clean).
+
+
+# Changelog
+
+All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
+Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+
+## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
 
 ## [Alpha-26-687312-0-1_0-2026-06-06] — 2026-06-06
 
@@ -90,8 +106,6 @@ Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 - src/auto_remediate/remediation_ladder.py (new)
 - tests/unit/test_US_003_remediation_ladder.py (new, 15 unit tests)
 
-
-
 ## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
 
 ### Changed
@@ -112,6 +126,17 @@ Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 - coming_soon.md (deleted)
 - GettingStarted.md (deleted)
 - tests/unit/test_us023_docs_declaim.py (new)
+- CHANGELOG.md
+
+## [Alpha-18-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- `src/auto_remediate/watchdog.py` — 5-minute post-remediation watchdog with healed/still-sick verdict (US-004)
+- `tests/unit/test_US_004_watchdog.py` — 12 unit tests covering healed, still-sick, deleted, namespace-deleted, and restart-count paths
+
+### Files changed
+- src/auto_remediate/watchdog.py (new)
+- tests/unit/test_US_004_watchdog.py (new)
 - CHANGELOG.md
 
 ## [Alpha-17-b3f2e3-0-1_0-2026-06-06] - 2026-06-06
@@ -135,18 +160,6 @@ Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 - Checklist.md
 - src/auto_remediate/acceptance.py
 - tests/unit/test_US022_acceptance.py
-- CHANGELOG.md
-
-
-## [Alpha-18-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
-
-### Added
-- `src/auto_remediate/watchdog.py` — 5-minute post-remediation watchdog with healed/still-sick verdict (US-004)
-- `tests/unit/test_US_004_watchdog.py` — 12 unit tests covering healed, still-sick, deleted, namespace-deleted, and restart-count paths
-
-### Files changed
-- src/auto_remediate/watchdog.py (new)
-- tests/unit/test_US_004_watchdog.py (new)
 - CHANGELOG.md
 
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
