@@ -1,3 +1,13 @@
+## [Alpha-74-c1c9d5-0-1_0-20260606] — 2026-06-06
+
+### Added (US-013)
+- src/models/cronjob_finding.py — CronJobFinding, OrphanJob, CleanupResult data models
+- src/analyzers/cronjob_analyzer.py — CronJobAnalyzer detecting missed_schedule, accidental_suspend, repeated_backoff, history_limit_orphan
+- src/analyzers/orphan_job_cleaner.py — OrphanJobCleaner with trading-namespace guard and Background-propagation delete
+- tests/analyzers/test_cronjob_analyzer.py — 7 unit tests for analyzer logic
+- tests/analyzers/test_orphan_job_cleaner.py — 8 unit tests including manual-cw5-003 fixture
+- docs/audit-run-001/proofs/US-013/pytest-output.txt — proof: 15 passed
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
