@@ -19,6 +19,13 @@ import re
 import sys
 import sqlite3
 
+import os
+HELM_MANAGER_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "src", "helm_manager.py")
+helm_manager_present = pytest.mark.skipif(
+    not os.path.exists(HELM_MANAGER_PATH),
+    reason="src/helm_manager.py deleted by US-024 dead-code removal",
+)
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -169,7 +176,8 @@ class TestUS021Logger:
 # 3. Helm Manager — no --password in subprocess args
 # ---------------------------------------------------------------------------
 
-class TestUS021HelmPassword:
+@helm_manager_present
+:
     """helm password passed via stdin, not as positional arg."""
 
     def test_no_password_positional_arg(self):
