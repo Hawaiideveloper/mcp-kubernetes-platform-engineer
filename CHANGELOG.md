@@ -1,3 +1,17 @@
+## [Alpha-48-ca362a-0-1_0-2026-06-06] - 2026-06-06 (session wrap-up)
+
+### Changed
+- README.md rewritten to reflect v0.1.0 release state: observer live in cluster, write side as v0.2 milestone. Drops legacy MCP-server marketing copy. Keeps the org TOC backlink.
+- CHANGELOG.md adds the release-marker entry for v0.1.0 (gold-prompt version stamp 47-ca362a-0-1_0-2026-06-06).
+
+### Files changed
+- README.md (replaced)
+- CHANGELOG.md (this entry)
+
+## [Release v0.1.0] - 2026-06-06
+
+First official release. corey-fl-loop observer running in cluster. Tag: v0.1.0. Gold-prompt version: 47-ca362a-0-1_0-2026-06-06. See https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/releases/tag/v0.1.0 for the full release notes.
+
 ## [Alpha-47-6e5178-0-1_0-2026-06-06] — 2026-06-06
 
 ### Verified
