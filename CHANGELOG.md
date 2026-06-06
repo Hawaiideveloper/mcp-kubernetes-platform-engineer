@@ -5,6 +5,16 @@ Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 ## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
 
+## [Alpha-29-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-007: EventStreamWatcher in src/watchers/event_watcher.py
+- Streams Warning events from Kubernetes API with dedup (60s window), classification table (11 fix_class mappings), and SQLite work-queue upsert
+- Backpressure at QUEUE_DEPTH_LIMIT=50 with prometheus_client counter event_watcher_backpressure_total
+- Replay fixture tests/fixtures/crashloop-stream.json; 16 unit tests all passing
+
+
+
 ### Fixed
 - tests/unit/test_us023_docs_declaim.py — REPO uses __file__ discovery (was hardcoded pod worktree path).
 
