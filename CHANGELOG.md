@@ -3,6 +3,15 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-22-7df76a-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- ci.yml — PYTHONPATH=. for pytest (US-024 added src/__init__.py, changing import semantics); psycopg[binary] in pip install for US-018/US-025 DB tests.
+
+### Files changed
+- .github/workflows/ci.yml
+- CHANGELOG.md
+
 ## [Alpha-21-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
 
 ### Added
