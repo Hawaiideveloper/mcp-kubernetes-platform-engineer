@@ -1,3 +1,19 @@
+## [Alpha-39-c1c9d5-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- src/analyzers/deployment_analyzer.py — DeploymentAnalyzer: replica-mismatch, rollout-stuck, image-not-found, impossible-resource-request rules
+- src/analyzers/replicaset_analyzer.py — ReplicaSetAnalyzer: dangling-replicaset, rollout-in-progress rules
+- src/analyzers/statefulset_analyzer.py — StatefulSetAnalyzer: pvc-binding-pending, ordinal-gap, pvc-template-failure rules
+- tests/unit/test_us012_workload_analyzers.py — 12 unit tests, all passing
+- docs/audit-run-001/proofs/US-012/pytest-output.txt — test run proof
+
+### Files changed
+- src/analyzers/deployment_analyzer.py (new)
+- src/analyzers/replicaset_analyzer.py (new)
+- src/analyzers/statefulset_analyzer.py (new)
+- tests/unit/test_us012_workload_analyzers.py (new)
+- CHANGELOG.md
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
