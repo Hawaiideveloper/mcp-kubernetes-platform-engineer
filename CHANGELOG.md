@@ -4,6 +4,18 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-20-b3f2e3-0-1_0-2026-06-06] -- 2026-06-06
+
+### US-025: Iteration state machine + SQLite worklist
+
+- Add `src/worklist.py`: WorklistDB with WAL-mode SQLite, BEGIN IMMEDIATE atomic claim, audit-run state machine, and escalation at iteration_count >= 5
+- Add `src/worklist_seed.py`: topological_sort (Kahn's algorithm) + canonical 25-task seed payload from PRD section 7
+- Add `tests/unit/test_US025_worklist.py`: 18 unit tests covering atomicity (10-thread), blocker enforcement, idempotent seed, state machine phases, and topo-sort cycle detection
+
+**Files changed:** src/worklist.py, src/worklist_seed.py, tests/unit/test_US025_worklist.py
+
+---
+
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
