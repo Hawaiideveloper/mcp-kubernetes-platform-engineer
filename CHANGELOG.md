@@ -1,3 +1,11 @@
+## [Alpha-31-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### US-009: BaseAnalyzer + PodAnalyzer
+
+- Added `src/analyzers/base.py`: `ResourceRef`, `Evidence`, `Finding` frozen dataclasses with `fingerprint()`/`to_json()`, and abstract `BaseAnalyzer` with `run_safe()` deduplication
+- Added `src/analyzers/pod_analyzer.py`: `PodAnalyzer` detects ImagePullBackOff, CrashLoopBackOff, OOMKilled, probe failures, FailedMount, and pending scheduling
+- 12 unit tests covering all failure modes, severity rubric, hashability, and dedup
+
 # Changelog
 
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
