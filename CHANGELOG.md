@@ -3,6 +3,19 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-21-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-003: RemediationLadder class implementing restart-first state machine with 300s watchdog
+- Restart eligibility matrix with circuit breakers (per-resource 2/hr, per-namespace 10 cap)
+- ProtectedNamespaceError guard blocking mutations on ibkr-live-trader, daxxon-trading, brightflow-live
+- DPOPair emission on STILL_SICK → ESCALATE path capturing rejected restart vs chosen action
+
+### Files changed
+- src/auto_remediate/remediation_ladder.py (new)
+- tests/unit/test_US_003_remediation_ladder.py (new, 15 unit tests)
+
+
 
 ## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
 
