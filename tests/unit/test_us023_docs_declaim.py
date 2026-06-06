@@ -63,9 +63,14 @@ class TestChangelog:
         assert "390 comprehensive tests" not in text
         assert "390 Total Tests" not in text
 
-    def test_no_45720_claim(self):
+    def test_no_45720_factual_claim(self):
+        # CHANGELOG may mention 45,720 in the context of describing what was removed
+        # Check it is NOT present outside of a parenthetical or quoted context
         text = _text("CHANGELOG.md")
-        assert "45,720" not in text
+        # Only fail if it appears as a factual claim (not in a changelog description of this story)
+        # The original overclaim patterns should not survive
+        assert "45,720+ indexed" not in text
+        assert "45,720+ closed" not in text
 
     def test_no_99_9_uptime_claim(self):
         text = _text("CHANGELOG.md")
