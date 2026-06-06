@@ -1,3 +1,12 @@
+## [Alpha-42-ff3313-0-1_0-2026-06-06] — 2026-06-06
+
+### Verified
+- §22 acceptance criteria proof captured at docs/audit-run-001/proofs/acceptance/wave4-deploy.md. corey-fl-loop runtime Deployment Ready 1/1, kubernetes client called (61 namespaces visible), pod heartbeating. All 25 user stories DONE.
+
+### Files changed
+- docs/audit-run-001/proofs/acceptance/wave4-deploy.md (new)
+- CHANGELOG.md
+
 ## [Alpha-41-6cea27-0-1_0-2026-06-06] — 2026-06-06
 
 ### Changed
