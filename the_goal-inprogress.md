@@ -354,3 +354,269 @@ The system as it stands is end-to-end functional for the parallel-agent loop. Wh
 ---
 
 *This file is meant to be readable cold. If you are picking this up from a fresh session and want to continue: read this top to bottom, then look at the latest CHANGELOG entry, then look at `redis-cli ZCARD queue:pending` to see how much work is left.*
+
+---
+
+## 9. Resume runbook (operational — everything you need to close + reopen)
+
+### 9.1 Discover the current pods
+
+Pod names carry a generated suffix that changes on restart. Always look up by label, never by hardcoded name:
+
+```bash
+AGENT_POD=$(kubectl -n corey-coder get pods -l app=corey-fl-agent \
+  -o jsonpath='{.items[0].metadata.name}')
+REDIS_POD=$(kubectl -n corey-coder get pods -l app=corey-fl-redis \
+  -o jsonpath='{.items[0].metadata.name}')
+echo "AGENT=$AGENT_POD  REDIS=$REDIS_POD"
+```
+
+### 9.2 Health check (run this first on any resume)
+
+```bash
+# Cluster services up?
+kubectl -n corey-coder rollout status deploy/corey-fl-agent --timeout=30s
+kubectl -n corey-coder rollout status deploy/corey-fl-redis --timeout=30s
+
+# Redis reachable and has data?
+kubectl -n corey-coder exec "$AGENT_POD" -- redis-cli -h corey-fl-redis PING
+kubectl -n corey-coder exec "$AGENT_POD" -- redis-cli -h corey-fl-redis ZCARD queue:pending
+kubectl -n corey-coder exec "$AGENT_POD" -- redis-cli -h corey-fl-redis GET build_counter
+
+# Tools in agent pod still present? (Should be — PVC keeps /work, bootstrap re-installs apt/pip on restart.)
+kubectl -n corey-coder exec "$AGENT_POD" -- bash -lc \
+  'git --version; redis-cli --version; ruff --version; mypy --version; pytest --version | head -1'
+
+# Repo at HEAD?
+kubectl -n corey-coder exec "$AGENT_POD" -- bash -lc \
+  'cd /work/mcp-kubernetes-platform-engineer && git fetch --quiet && git log --oneline -3'
+```
+
+### 9.3 If Redis lost data on restart (re-seed)
+
+Redis has RDB `save 60 1` + PVC, so this should be rare, but if `ZCARD queue:pending` returns 0 and the work is not in fact done:
+
+```bash
+kubectl -n corey-coder exec "$AGENT_POD" -- bash -lc '
+cd /work/mcp-kubernetes-platform-engineer && git pull --quiet
+python3 <<EOF
+import json, redis, pathlib
+prd = json.loads(pathlib.Path("prd.json").read_text())
+r = redis.Redis(host="corey-fl-redis", port=6379, decode_responses=True)
+for s in prd["userStories"]:
+    sid = s["id"]; key = f"task:{sid}"
+    r.hset(key, mapping={
+        "problem": s["title"],
+        "proposed_solution": s["description"],
+        "assigned_agent": "", "status": "pending", "file_scope": "[]",
+        "priority": str(s["priority"]),
+        "validation_required": json.dumps(["syntax","unit","runtime","integration","performance","security"]),
+        "result": "", "error_log": "", "patch_ref": "",
+        "validator_results": "{}", "parent_task": "",
+        "story_id": sid, "notes": s["notes"],
+        "acceptance_criteria": json.dumps(s["acceptanceCriteria"]),
+    })
+    r.expire(key, 86400)
+    r.zadd("queue:pending", {sid: s["priority"]})
+r.expire("queue:pending", 86400)
+# Mark already-pushed Wave 1 branches as done so they are not re-claimed
+for sid in ("US-001","US-002","US-006","US-019","US-020","US-021"):
+    r.zrem("queue:pending", sid)
+    r.hset(f"task:{sid}", mapping={"status":"done"})
+print("re-seeded; queue =", r.zcard("queue:pending"))
+print("build_counter unchanged =", r.get("build_counter"))
+EOF
+'
+```
+
+If `build_counter` is also missing, set it to the highest build seen in `git log --all --grep='Version: Alpha-' | grep -oE 'Alpha-[0-9]+' | sort -V | tail -1` and `redis-cli SET build_counter <N>`.
+
+### 9.4 The 19 remaining tasks (as of Wave 1 close, sorted by priority)
+
+| Priority | Story | Title | PRD chunk |
+|---|---|---|---|
+| 1 | US-022 | Acceptance criteria + Checklist.md | docs/audit-run-001/prd-chunks/22-acceptance.md |
+| 1 | US-023 | Docs de-claim + Master TOC backlink | docs/audit-run-001/prd-chunks/23-docs-declaim.md |
+| 1 | US-024 | Dead-code removal (.bak, enhanced_tools) | docs/audit-run-001/prd-chunks/24-dead-code.md |
+| 1 | US-025 | Iteration state machine + Redis worklist | docs/audit-run-001/prd-chunks/25-state-machine-and-worklist.md |
+| 2 | US-003 | Restart-first remediation ladder | docs/audit-run-001/prd-chunks/03-restart-first-ladder.md |
+| 2 | US-004 | 5-minute watchdog | docs/audit-run-001/prd-chunks/04-watchdog.md |
+| 2 | US-005 | DPO pair emission to GitHub issues | docs/audit-run-001/prd-chunks/05-dpo-pair-schema.md |
+| 2 | US-007 | Cluster event-stream watcher | docs/audit-run-001/prd-chunks/07-event-watcher.md |
+| 2 | US-008 | NIM/Ollama/Fake LLM backend with cache | docs/audit-run-001/prd-chunks/08-nim-backend.md |
+| 2 | US-009 | BaseAnalyzer + PodAnalyzer | docs/audit-run-001/prd-chunks/09-analyzer-base-pod.md |
+| 2 | US-015 | vcluster sandbox lifecycle | docs/audit-run-001/prd-chunks/15-vcluster-sandbox.md |
+| 2 | US-016 | GitOps auto-PR generation | docs/audit-run-001/prd-chunks/16-gitops-pr.md |
+| 2 | US-017 | Deterministic remediation table (10 fixes) | docs/audit-run-001/prd-chunks/17-deterministic-remediation.md |
+| 2 | US-018 | Audit log + finding persistence + dedup | docs/audit-run-001/prd-chunks/18-audit-log.md |
+| 3 | US-010 | Service + Ingress analyzers | docs/audit-run-001/prd-chunks/10-analyzers-service-ingress.md |
+| 3 | US-011 | PVC + Node analyzers | docs/audit-run-001/prd-chunks/11-analyzers-pvc-node.md |
+| 3 | US-012 | Deployment/RS/StatefulSet analyzers | docs/audit-run-001/prd-chunks/12-analyzers-workloads.md |
+| 3 | US-013 | CronJob analyzer + orphan-job cleaner | docs/audit-run-001/prd-chunks/13-cronjob-and-orphan-jobs.md |
+| 3 | US-014 | NetworkPolicy + PDB + HPA analyzers | docs/audit-run-001/prd-chunks/14-analyzers-netpol-pdb-hpa.md |
+
+Live source of truth: `redis-cli -h corey-fl-redis ZRANGE queue:pending 0 -1 WITHSCORES`.
+
+### 9.5 Sub-agent prompt template (verbatim — use this for Waves 2 through 5)
+
+Fire six `Agent` tool calls in parallel in one message. Each gets this prompt with `{N}` and the `AGENT_ID` suffix swapped. Pick `subagent_type=general-purpose`, `model=sonnet`.
+
+```
+You are corey-fl-loop sub-agent {N} of 6. Cold start, no parent context.
+
+YOUR ID: corey-fl-{YYYYMMDD}-sub{N}
+POD: discover via `kubectl -n corey-coder get pods -l app=corey-fl-agent -o jsonpath='{.items[0].metadata.name}'`
+RUNNER: /work/runner/{claim_task,mark_done,mark_failed,heartbeat}.py
+REPO IN POD: /work/mcp-kubernetes-platform-engineer (already cloned, git auth wired)
+PRD chunks: docs/audit-run-001/prd-chunks/01..25-*.md
+
+STRICT RULE: every file write, git op, validator run, and shell command MUST happen INSIDE the pod via kubectl exec. NEVER write to the Mac filesystem. NEVER use Read/Write/Edit/NotebookEdit on local paths. Use ONLY the Bash tool, and every Bash invocation must start with `kubectl -n corey-coder exec <pod> -- bash -lc '...'` or `kubectl -n corey-coder exec -i <pod> -- tee <path> >/dev/null <<'EOF'`.
+
+YOUR LOOP — DO EXACTLY ONCE, NOT A SECOND TASK:
+
+STEP 1 CLAIM:
+Run `kubectl -n corey-coder exec <pod> -- env AGENT_ID=corey-fl-{YYYYMMDD}-sub{N} python3 /work/runner/claim_task.py`.
+Parse the JSON. If `"claimed": false`, return `"no work — queue empty"` and exit.
+Extract: story_id, task.notes (contains PRD path), task.problem (title), task.acceptance_criteria.
+
+STEP 2 READ PRD:
+`task.notes` is like `"PRD section: docs/audit-run-001/prd-chunks/06-trading-hardblock.md"`. Cat that file from the pod.
+
+STEP 3 WORKTREE:
+Make a short kebab slug from the story title (lowercase, alnum+dash, ≤30 chars). Set BRANCH="corey-fl-loop/${story_id}-${slug}". WORKTREE="/work/wt/${story_id}".
+`cd /work/mcp-kubernetes-platform-engineer && git fetch --quiet && git checkout main && git pull --quiet && git worktree add "$WORKTREE" -b "$BRANCH"`.
+
+STEP 4 IMPLEMENT:
+Read the PRD section. It tells you which files to create and what they should contain (class signatures, code, tests). Author each deliverable file with a kubectl exec -i tee heredoc into $WORKTREE/<path>. Keep each file ≤200 lines; split into sub-modules if needed. Write tests under $WORKTREE/tests/. Author = git config already set in the pod — DO NOT override. NO AI ATTRIBUTION anywhere ("Generated by", "Claude", "Anthropic", etc).
+
+STEP 5 VALIDATORS (in the pod, in $WORKTREE):
+a) Syntax: `find $WORKTREE/src $WORKTREE/tests -name '*.py' -newer $WORKTREE/.git/HEAD 2>/dev/null | xargs -I{} python3 -c "import ast; ast.parse(open('{}').read())"` — must succeed for every file.
+b) Lint: `cd $WORKTREE && ruff check . --output-format=concise` — must return 0 violations on changed files.
+c) Type: `cd $WORKTREE && mypy --ignore-missing-imports src/ 2>&1` if src/ changed — capture but don't fail on warnings; fail on errors.
+d) Unit: `cd $WORKTREE && PYTHONPATH=. pytest tests/ -k ${story_id} -v --tb=short` — must pass (skip ok if no tests with that keyword, but you should HAVE written tests).
+e) Runtime: for each new module under src/auto_remediate, `cd $WORKTREE && PYTHONPATH=. python3 -c "import <module>"` — must import without error.
+f) Security: `cd $WORKTREE && ruff check . --select S --no-fix` returns 0; `grep -rE '(token|secret|password|api_key)\s*=\s*["\047][A-Za-z0-9]{6,}' $WORKTREE/src $WORKTREE/tests` returns no matches.
+
+ON ANY VALIDATOR FAILURE: capture error to a one-line summary, save full log to $WORKTREE/.fail.log, then `python3 /work/runner/mark_failed.py ${story_id} '<one-line>'`, return `"FAILED ${story_id} validator=<which> reason=<short>"` and exit.
+
+STEP 6 COMMIT WITH VERSION + CHANGELOG:
+In the worktree:
+BUILD=$(redis-cli -h corey-fl-redis INCR build_counter)
+PARENT_SHA6=$(git rev-parse --short=6 HEAD)
+DATE=$(date -u +%Y-%m-%d)
+VERSION="Alpha-${BUILD}-${PARENT_SHA6}-0-1_0-${DATE}"
+
+Prepend $WORKTREE/CHANGELOG.md (insert above the most recent `## [` line) with a new entry:
+## [${VERSION}] — ${DATE}
+### Added/Changed
+- (${story_id}) <2-sentence summary of what landed>
+### Files
+- <list of new/modified paths>
+
+`git add -A && git commit -m "feat(${story_id}): <title>
+
+Version: ${VERSION}
+
+<2-line summary>"`
+
+STEP 7 PUSH:
+`git push -u origin HEAD` — capture the commit SHA from `git rev-parse HEAD`.
+
+STEP 8 MARK DONE:
+`python3 /work/runner/mark_done.py ${story_id} 'pushed' "${BRANCH}:${SHA}"`
+
+STEP 9 RETURN SUMMARY (single line, plain text — no markdown):
+`DONE ${story_id} branch=${BRANCH} sha=${SHA:0:7} validators=pass`
+
+HARD CONSTRAINTS:
+- Time budget: 12 minutes max wall clock; if exceeded, mark_failed with "timeout".
+- ONE task per agent invocation. Do not loop.
+- Bash tool only. No Read/Write/Edit/NotebookEdit.
+- Every file path you touch must start with `/work/` inside the pod.
+- No emoji. No AI attribution. Author = git config user in pod.
+- Output to me at the end: only the summary line. Nothing else.
+```
+
+### 9.6 The CHANGELOG insertion algorithm (sub-agents follow this exactly)
+
+```python
+import pathlib, re
+cl = pathlib.Path("CHANGELOG.md").read_text()
+entry = f"""
+## [{VERSION}] — {DATE}
+
+### Added/Changed
+- ({STORY_ID}) {SUMMARY}
+
+### Files
+- {FILES}
+"""
+m = re.search(r"\n## \[", cl)
+cl = cl[:m.start()] + entry + cl[m.start():] if m else cl + entry
+pathlib.Path("CHANGELOG.md").write_text(cl)
+```
+
+Inserts the new entry above the most recent `## [` line (i.e. right under the header). Each entry is keyed by version string so order is preserved automatically.
+
+### 9.7 Open Wave 1 PRs in one batch (optional, run from dev workstation)
+
+```bash
+cd ~/Documents/github/albright-labs/corey-toolbox/mcp-kubernetes-platform-engineer
+gh auth status  # must be authenticated
+git fetch --all --quiet
+for br in US-001-exec-summary-roadmap US-002-current-state-inventory \
+          US-006-trading-hardblock US-019-rbac-split \
+          US-020-cicd-albright-runners US-021-security-hardening; do
+  title=$(git log -1 --format=%s "origin/corey-fl-loop/$br")
+  gh pr create --base main --head "corey-fl-loop/$br" \
+    --title "$title" \
+    --body "Wave 1 of corey-fl-loop. Version + summary in commit body; details in CHANGELOG and the_goal-inprogress.md."
+done
+```
+
+### 9.8 If a pod is missing entirely
+
+```bash
+cd ~/Documents/github/albright-labs/corey-toolbox/mcp-kubernetes-platform-engineer
+kubectl apply -f infra/redis/redis.yaml
+kubectl apply -f infra/agent/corey-fl-agent.yaml
+# Wait until the agent pod's bootstrap log prints '[bootstrap] ... ready':
+AGENT_POD=$(kubectl -n corey-coder get pods -l app=corey-fl-agent -o jsonpath='{.items[0].metadata.name}')
+kubectl -n corey-coder logs -f "$AGENT_POD"
+# Then re-seed (section 9.3) if Redis is empty.
+```
+
+### 9.9 If the corey-fl-agent pod restarted
+
+The PVC persists `/work` (repo, worktrees, runner scripts). The container's `/usr/bin` and `/usr/local/bin` do NOT persist — apt-installed git/redis-cli/kubectl/jq and pip-installed ruff/mypy/pytest/redis-py vanish. The ConfigMap-driven bootstrap script re-installs them on every container start. Wait for `[bootstrap] ... ready` in the pod log before issuing any `kubectl exec` commands that depend on those tools.
+
+### 9.10 Critic loop (not yet built — pick this up on next session if any task has status=needs_fix)
+
+When a sub-agent fails validators, it calls `mark_failed.py` which sets `status=needs_fix` and requeues at `priority - 0.5`. There is currently no agent that filters for `needs_fix`. To add a critic agent:
+
+1. Fire one `Agent` call with model=sonnet, prompt template similar to the sub-agent but with STEP 1 modified to claim only tasks where `status==needs_fix` (use `ZRANGEBYSCORE queue:pending -inf 1.5` to find requeued items).
+2. Critic reads `error_log` from the task hash, reads the existing branch's failing commit, proposes a patch, applies it in the same worktree, re-runs validators.
+3. On second pass: mark_done. On second failure: escalate (open a draft PR with label `human-review-required`).
+
+### 9.11 Session-close checklist
+
+Before closing the session, confirm:
+
+```bash
+# All Wave 1 commits pushed?
+cd ~/Documents/github/albright-labs/corey-toolbox/mcp-kubernetes-platform-engineer
+git fetch --all --quiet
+git log --all --oneline | head -10
+git ls-remote --heads origin 'corey-fl-loop/*'
+
+# All updates on main pushed?
+git log origin/main..HEAD  # should be empty
+
+# Redis state preserved?
+AGENT_POD=$(kubectl -n corey-coder get pods -l app=corey-fl-agent -o jsonpath='{.items[0].metadata.name}')
+kubectl -n corey-coder exec "$AGENT_POD" -- redis-cli -h corey-fl-redis BGSAVE
+kubectl -n corey-coder exec "$AGENT_POD" -- redis-cli -h corey-fl-redis LASTSAVE
+# LASTSAVE timestamp should be within the last 60s
+```
+
+If all three pass: safe to close. Resume by reading this file top to bottom, running section 9.2, and firing Wave 2 via the prompt in 9.5.

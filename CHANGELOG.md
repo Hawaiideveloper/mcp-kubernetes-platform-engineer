@@ -4,6 +4,18 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-10-aaf4e4-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- the_goal-inprogress.md §9 Resume runbook: pod-discovery one-liners, health check, re-seed procedure, 19-task table, verbatim sub-agent prompt template for Waves 2-5, CHANGELOG insertion algorithm, batch-PR command, full-rebuild procedure, post-restart recovery, critic-loop notes, session-close checklist.
+
+### Reason
+Make the_goal-inprogress.md self-sufficient for cold resume after session close.
+
+### Files changed
+- the_goal-inprogress.md (append §9)
+- CHANGELOG.md
+
 ## [Alpha-9-168973-0-1_0-2026-06-05] — 2026-06-05
 
 ### Added
