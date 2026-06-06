@@ -1,0 +1,52 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /work/wt/US-020
+configfile: pytest.ini
+plugins: Faker-40.21.0, asyncio-1.4.0, mock-3.15.1, cov-7.1.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 29 items
+
+tests/test_US_020_cicd.py::test_US_020_ci_workflow_exists PASSED         [  3%]
+tests/test_US_020_cicd.py::test_US_020_release_workflow_exists PASSED    [  6%]
+tests/test_US_020_cicd.py::test_US_020_ci_workflow_valid_yaml PASSED     [ 10%]
+tests/test_US_020_cicd.py::test_US_020_release_workflow_valid_yaml PASSED [ 13%]
+tests/test_US_020_cicd.py::test_US_020_ci_no_ubuntu_latest PASSED        [ 17%]
+tests/test_US_020_cicd.py::test_US_020_release_no_ubuntu_latest PASSED   [ 20%]
+tests/test_US_020_cicd.py::test_US_020_ci_uses_albright_runners PASSED   [ 24%]
+tests/test_US_020_cicd.py::test_US_020_release_uses_albright_runners PASSED [ 27%]
+tests/test_US_020_cicd.py::test_US_020_ci_has_required_jobs PASSED       [ 31%]
+tests/test_US_020_cicd.py::test_US_020_ci_triggers_on_push_and_pr PASSED [ 34%]
+tests/test_US_020_cicd.py::test_US_020_ci_has_trivy_scan_step PASSED     [ 37%]
+tests/test_US_020_cicd.py::test_US_020_ci_coverage_gate_present PASSED   [ 41%]
+tests/test_US_020_cicd.py::test_US_020_release_triggers_on_semver_tag PASSED [ 44%]
+tests/test_US_020_cicd.py::test_US_020_release_pins_digest_in_deployment PASSED [ 48%]
+tests/test_US_020_cicd.py::test_US_020_release_uses_albright_bot_identity PASSED [ 51%]
+tests/test_US_020_cicd.py::test_US_020_deployment_no_latest_tag PASSED   [ 55%]
+tests/test_US_020_cicd.py::test_US_020_deployment_pull_policy_not_always PASSED [ 58%]
+tests/test_US_020_cicd.py::test_US_020_deployment_pull_policy_is_if_not_present PASSED [ 62%]
+tests/test_US_020_cicd.py::test_US_020_pre_commit_config_exists PASSED   [ 65%]
+tests/test_US_020_cicd.py::test_US_020_pre_commit_config_valid_yaml PASSED [ 68%]
+tests/test_US_020_cicd.py::test_US_020_pre_commit_has_ruff PASSED        [ 72%]
+tests/test_US_020_cicd.py::test_US_020_pre_commit_has_mypy PASSED        [ 75%]
+tests/test_US_020_cicd.py::test_US_020_dependabot_exists PASSED          [ 79%]
+tests/test_US_020_cicd.py::test_US_020_dependabot_valid_yaml PASSED      [ 82%]
+tests/test_US_020_cicd.py::test_US_020_dependabot_covers_pip PASSED      [ 86%]
+tests/test_US_020_cicd.py::test_US_020_dependabot_covers_github_actions PASSED [ 89%]
+tests/test_US_020_cicd.py::test_US_020_dependabot_weekly_schedule PASSED [ 93%]
+tests/test_US_020_cicd.py::test_US_020_no_hardcoded_secrets_in_ci PASSED [ 96%]
+tests/test_US_020_cicd.py::test_US_020_no_hardcoded_secrets_in_release PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 29 passed, 2 warnings in 0.21s ========================

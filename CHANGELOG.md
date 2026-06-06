@@ -28,6 +28,18 @@ Pause point — capture the full picture so any future session can pick up cold.
 - the_goal-inprogress.md (new)
 - CHANGELOG.md
 
+## [Alpha-3-168973-0-1_0-2026-06-05] — 2026-06-05
+### Added
+- (US-020) Added CI/CD GitHub Actions workflows using albright-runners with lint, type-check, test, build/Trivy scan, and GHCR push jobs. Deployment image pinned to digest, imagePullPolicy set to IfNotPresent, pre-commit hooks configured, and Dependabot enabled for pip and GitHub Actions.
+### Files
+- .github/workflows/ci.yml
+- .github/workflows/release.yml
+- .github/dependabot.yml
+- .pre-commit-config.yaml
+- k8s/deployment.yaml (image digest pin + pull policy)
+- tests/test_US_020_cicd.py
+- docs/audit-run-001/proofs/US-020/test-output.txt
+
 ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
 
 ### Added
