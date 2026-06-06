@@ -1,0 +1,58 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+hypothesis profile 'default'
+metadata: {'Python': '3.11.15', 'Platform': 'Linux-5.15.0-179-generic-x86_64-with-glibc2.41', 'Packages': {'pytest': '9.0.3', 'pluggy': '1.6.0'}, 'Plugins': {'pyfakefs': '6.2.0', 'socket': '0.8.0', 'hypothesis': '6.155.2', 'Faker': '40.21.0', 'allure-pytest': '2.16.0', 'metadata': '3.1.1', 'json-report': '1.5.0', 'respx': '0.23.1', 'docker': '3.2.5', 'xdist': '3.8.0', 'asyncio': '1.4.0', 'html': '4.2.0', 'benchmark': '5.2.3', 'pytest_httpserver': '1.1.5', 'mock': '3.15.1', 'postgresql': '8.1.0', 'cov': '7.1.0', 'anyio': '4.13.0', 'locust': '2.44.1', 'timeout': '2.4.0'}}
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /work/wt/US-013
+configfile: pytest.ini
+plugins: pyfakefs-6.2.0, socket-0.8.0, hypothesis-6.155.2, Faker-40.21.0, allure-pytest-2.16.0, metadata-3.1.1, json-report-1.5.0, respx-0.23.1, docker-3.2.5, xdist-3.8.0, asyncio-1.4.0, html-4.2.0, benchmark-5.2.3, pytest_httpserver-1.1.5, mock-3.15.1, postgresql-8.1.0, cov-7.1.0, anyio-4.13.0, locust-2.44.1, timeout-2.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+timeout: 300.0s
+timeout method: thread
+timeout func_only: False
+collecting ... collected 15 items
+
+tests/analyzers/test_cronjob_analyzer.py::test_missed_schedule_detected PASSED [  6%]
+tests/analyzers/test_cronjob_analyzer.py::test_suspend_skips_missed_schedule_and_flags_suspend PASSED [ 13%]
+tests/analyzers/test_cronjob_analyzer.py::test_no_finding_when_on_schedule PASSED [ 20%]
+tests/analyzers/test_cronjob_analyzer.py::test_repeated_backoff_detected PASSED [ 26%]
+tests/analyzers/test_cronjob_analyzer.py::test_repeated_backoff_below_threshold PASSED [ 33%]
+tests/analyzers/test_cronjob_analyzer.py::test_history_limit_orphan_detected PASSED [ 40%]
+tests/analyzers/test_cronjob_analyzer.py::test_no_last_schedule_time_no_missed_finding PASSED [ 46%]
+tests/analyzers/test_orphan_job_cleaner.py::test_find_orphan_manual_cw5_003 PASSED [ 53%]
+tests/analyzers/test_orphan_job_cleaner.py::test_active_job_never_deleted 
+-------------------------------- live log call ---------------------------------
+2026-06-06 00:12:32 [    INFO] src.analyzers.orphan_job_cleaner: Skipping orphan job default/manual-cw5-003 — still has active pods
+PASSED                                                                   [ 60%]
+tests/analyzers/test_orphan_job_cleaner.py::test_trading_namespace_blocked 
+-------------------------------- live log call ---------------------------------
+2026-06-06 00:12:32 [ WARNING] src.analyzers.orphan_job_cleaner: Skipping orphan job trading/manual-cw5-003 — trading namespace; manual review required
+PASSED                                                                   [ 66%]
+tests/analyzers/test_orphan_job_cleaner.py::test_dry_run_no_api_calls 
+-------------------------------- live log call ---------------------------------
+2026-06-06 00:12:32 [    INFO] src.analyzers.orphan_job_cleaner: DRY RUN: would delete orphan job default/manual-cw5-003
+PASSED                                                                   [ 73%]
+tests/analyzers/test_orphan_job_cleaner.py::test_real_delete_called_for_stale_orphan 
+-------------------------------- live log call ---------------------------------
+2026-06-06 00:12:32 [    INFO] src.analyzers.orphan_job_cleaner: Deleted orphan job default/manual-cw5-003
+PASSED                                                                   [ 80%]
+tests/analyzers/test_orphan_job_cleaner.py::test_grace_period_skips_fresh_job PASSED [ 86%]
+tests/analyzers/test_orphan_job_cleaner.py::test_known_owner_not_orphan PASSED [ 93%]
+tests/analyzers/test_orphan_job_cleaner.py::test_brightflow_live_blocked 
+-------------------------------- live log call ---------------------------------
+2026-06-06 00:12:32 [ WARNING] src.analyzers.orphan_job_cleaner: Skipping orphan job brightflow-live/live-job — trading namespace; manual review required
+PASSED                                                                   [100%]
+
+============================= slowest 10 durations =============================
+0.08s call     tests/analyzers/test_cronjob_analyzer.py::test_no_finding_when_on_schedule
+0.01s call     tests/analyzers/test_cronjob_analyzer.py::test_missed_schedule_detected
+0.01s call     tests/analyzers/test_cronjob_analyzer.py::test_history_limit_orphan_detected
+0.01s call     tests/analyzers/test_cronjob_analyzer.py::test_repeated_backoff_detected
+0.01s call     tests/analyzers/test_cronjob_analyzer.py::test_repeated_backoff_below_threshold
+0.01s call     tests/analyzers/test_orphan_job_cleaner.py::test_real_delete_called_for_stale_orphan
+0.00s call     tests/analyzers/test_orphan_job_cleaner.py::test_dry_run_no_api_calls
+0.00s call     tests/analyzers/test_orphan_job_cleaner.py::test_trading_namespace_blocked
+0.00s call     tests/analyzers/test_cronjob_analyzer.py::test_suspend_skips_missed_schedule_and_flags_suspend
+0.00s call     tests/analyzers/test_orphan_job_cleaner.py::test_active_job_never_deleted
+============================== 15 passed in 0.97s ==============================

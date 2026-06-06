@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+collecting ... collected 12 items
+
+tests/unit/test_us012_workload_analyzers.py::test_replica_mismatch_after_five_min PASSED [  8%]
+tests/unit/test_us012_workload_analyzers.py::test_replica_mismatch_suppressed_under_five_min PASSED [ 16%]
+tests/unit/test_us012_workload_analyzers.py::test_rollout_stuck_progress_deadline PASSED [ 25%]
+tests/unit/test_us012_workload_analyzers.py::test_impossible_resource_request PASSED [ 33%]
+tests/unit/test_us012_workload_analyzers.py::test_image_not_found_fires_when_probe_returns_false PASSED [ 41%]
+tests/unit/test_us012_workload_analyzers.py::test_image_not_found_skipped_when_no_probe PASSED [ 50%]
+tests/unit/test_us012_workload_analyzers.py::test_dangling_replicaset PASSED [ 58%]
+tests/unit/test_us012_workload_analyzers.py::test_multiple_active_replicasets PASSED [ 66%]
+tests/unit/test_us012_workload_analyzers.py::test_pvc_binding_pending PASSED [ 75%]
+tests/unit/test_us012_workload_analyzers.py::test_ordinal_gap_detected PASSED [ 83%]
+tests/unit/test_us012_workload_analyzers.py::test_pvc_template_failure_lost PASSED [ 91%]
+tests/unit/test_us012_workload_analyzers.py::test_no_findings_healthy_deployment PASSED [100%]
+
+============================= slowest 10 durations =============================
+0.01s call     tests/unit/test_us012_workload_analyzers.py::test_pvc_binding_pending
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_impossible_resource_request
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_no_findings_healthy_deployment
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_ordinal_gap_detected
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_image_not_found_fires_when_probe_returns_false
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_pvc_template_failure_lost
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_multiple_active_replicasets
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_replica_mismatch_after_five_min
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_replica_mismatch_suppressed_under_five_min
+0.00s call     tests/unit/test_us012_workload_analyzers.py::test_rollout_stuck_progress_deadline
+============================== 12 passed in 0.84s ==============================
