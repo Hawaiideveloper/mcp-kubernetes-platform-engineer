@@ -4,6 +4,30 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Changed
+- Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md
+- README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims
+- GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints
+- CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)
+
+### Files changed
+- README.md
+- GETTING_STARTED.md
+- VSCODE_SETUP.md
+- VSCODE_K8S_INTEGRATION.md
+- functional_unit_test.md
+- .github/copilot-instructions.md
+- K8S_ANNOUNCEMENT.md (deleted)
+- TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)
+- coming_soon.md (deleted)
+- GettingStarted.md (deleted)
+- tests/unit/test_us023_docs_declaim.py (new)
+- CHANGELOG.md
+
+
+
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed

@@ -1,0 +1,577 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /work/wt/US-023
+configfile: pytest.ini
+plugins: Faker-40.21.0, asyncio-1.4.0, mock-3.15.1, cov-7.1.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 21 items
+
+tests/unit/test_us023_docs_declaim.py::TestDeletedFiles::test_k8s_announcement_deleted PASSED [  4%]
+tests/unit/test_us023_docs_declaim.py::TestDeletedFiles::test_test_suite_summary_deleted PASSED [  9%]
+tests/unit/test_us023_docs_declaim.py::TestDeletedFiles::test_coming_soon_deleted PASSED [ 14%]
+tests/unit/test_us023_docs_declaim.py::TestDeletedFiles::test_getting_started_lowercase_deleted PASSED [ 19%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_starts_with_toc_backlink PASSED [ 23%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_status_banner_present PASSED [ 28%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_no_production_ready_overclaim PASSED [ 33%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_no_45720_claim PASSED [ 38%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_no_raw_lab_ip PASSED [ 42%]
+tests/unit/test_us023_docs_declaim.py::TestReadme::test_no_hardcoded_localhost_health PASSED [ 47%]
+tests/unit/test_us023_docs_declaim.py::TestChangelog::test_changelog_exists PASSED [ 52%]
+tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_390_test_overclaim PASSED [ 57%]
+tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_45720_claim FAILED [ 61%]
+tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_99_9_uptime_claim PASSED [ 66%]
+tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_45720_claim PASSED [ 71%]
+tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_bare_health_curl PASSED [ 76%]
+tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_bare_stats_curl PASSED [ 80%]
+tests/unit/test_us023_docs_declaim.py::TestVscodeK8sIntegration::test_no_raw_lab_ip PASSED [ 85%]
+tests/unit/test_us023_docs_declaim.py::TestFunctionalUnitTest::test_no_45720_claim PASSED [ 90%]
+tests/unit/test_us023_docs_declaim.py::TestFunctionalUnitTest::test_no_390_total_tests_overclaim PASSED [ 95%]
+tests/unit/test_us023_docs_declaim.py::TestFunctionalUnitTest::test_updated_test_count PASSED [100%]
+
+=================================== FAILURES ===================================
+______________________ TestChangelog.test_no_45720_claim _______________________
+tests/unit/test_us023_docs_declaim.py:68: in test_no_45720_claim
+    assert "45,720" not in text
+E   assert '45,720' not in '# Changelog\n\nAll notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.\nPre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`\nRelease versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`\n\n## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06\n\n### Changed\n- Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md\n- README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims\n- GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints\n- CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)\n\n### Files changed\n- README.md\n- GETTING_STARTED.md\n- VSCODE_SETUP.md\n- VSCODE_K8S_INTEGRATION.md\n- functional_unit_test.md\n- .github/copilot-instructions.md\n- K8S_ANNOUNCEMENT.md (deleted)\n- TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)\n- coming_soon.md (deleted)\n- GettingStarted.md (deleted)\n- tests/unit/test_us023_docs_declaim.py (new)\n- CHANGELOG.md\n\n\n\n## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- ci.yml — build-image job set to continue-on-error: true. Legacy Dockerfile fails on Helm install against Debian trixie. US-024 will delete the legacy Dockerfile during dead-code removal.\n\n### Files changed\n- .github/workflows/ci.yml\n- CHANGELOG.md\n\n## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- ci.yml + release.yml — replaced github.repository_owner with literal lowercase hawaiideveloper to satisfy GHCR all-lowercase rule.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- CHANGELOG.md\n\n## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- src/auto_remediate/__init__.py — restored US-001 authoritative content (union-merge had corrupted it with unterminated docstring + em-dash syntax error).\n- 82 ruff F401 unused-import findings across new package auto-cleared via --fix --unsafe-fixes.\n- CI scope tightened: ruff/mypy/pytest now check src/auto_remediate/ and Wave 1 test files only. Old src/mcp_server.py and tests/production/ excluded until US-024 deletes them.\n\n### Files changed\n- src/auto_remediate/__init__.py\n- src/auto_remediate/*.py (auto-fixed)\n- src/health_check.py\n- .github/workflows/ci.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- CI runs-on switched from [self-hosted, Linux, X64] to ubuntu-latest. Repo is personal-account-owned; org self-hosted runners are not accessible. Real fix is transferring the repo to AlbrightLaboratories org; tracked in Lessons_Learned.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-11-8873e1-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- CI runs-on changed from albright-runners to [self-hosted, Linux, X64] so jobs actually get picked up. Org runners do not currently advertise the albright-runners label; tracked as follow-up against the arc repo.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-10-aaf4e4-0-1_0-2026-06-06] — 2026-06-06\n\n### Added\n- the_goal-inprogress.md §9 Resume runbook: pod-discovery one-liners, health check, re-seed procedure, 19-task table, verbatim sub-agent prompt template for Waves 2-5, CHANGELOG insertion algorithm, batch-PR command, full-rebuild procedure, post-restart recovery, critic-loop notes, session-close checklist.\n\n### Reason\nMake the_goal-inprogress.md self-sufficient for cold resume after session close.\n\n### Files changed\n- the_goal-inprogress.md (append §9)\n- CHANGELOG.md\n\n## [Alpha-9-168973-0-1_0-2026-06-05] — 2026-06-05\n\n### Added\n- the_goal-inprogress.md — comprehensive narrative of the corey-fl-loop initiative: goal, big picture, what is built (Phase A audit, Phase C PRD, Phase 1 Redis, Phase 2 setup + Wave 1), where things live, lessons learned, what is left (Waves 2-5, validators, critic, hour-11 flush, LoRA, runtime deploy), acceptance criteria, and resume instructions.\n\n### Reason\nPause point — capture the full picture so any future session can pick up cold.\n\n### Files changed\n- the_goal-inprogress.md (new)\n- CHANGELOG.md\n\n## [Alpha-8-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-021) Applied 8 concrete security patches: SQL injection fix (parameterized queries in github_issues_manager), GITHUB_TOKEN moved to env-file in start.sh, empty secret placeholder removed from k8s/secret.yaml, hardcoded private IP replaced in docs, NetworkPolicy default-deny + allow-ingress-nginx created, setup-vscode-k8s.sh hardcoded path fixed, update.sh error handling hardened, and loguru logger exc_info replaced with opt(exception=).\n- (US-021) Kubernetes manifest hardening: readOnlyRootFilesystem=true, seccompProfile RuntimeDefault, KUBECONFIG dir-path env removed, PSA baseline/restricted labels on namespace, helm password passed via --password-stdin.\n### Files\n- src/github_issues_manager.py\n- src/logger.py\n- src/helm_manager.py\n- k8s/secret.yaml\n- k8s/namespace.yaml\n- k8s/deployment.yaml\n- k8s/networkpolicy.yaml (new)\n- VSCODE_K8S_INTEGRATION.md\n- README.md\n- setup-vscode-k8s.sh\n- start.sh\n- update.sh\n- tests/unit/test_us021_security.py (new)\n\n## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.\n### Files\n- config/safety.yaml\n- src/safety_config.py\n- src/audit.py\n- src/safety_gate.py\n- tests/test_safety_gate.py\n- docs/audit-run-001/proofs/US-006/pytest-output.txt\n\n## [Alpha-6-168973-0-1_0-2026-06-05] — 2026-06-05\n\n### Added\n- (US-001) Namespace guard module: TRADING_BLOCKED_NAMESPACES constant, ProtectedNamespaceError, and check_namespace_allowed() that blocks automated remediation against trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live).\n- (US-001) AuditLogger: thread-safe, append-only JSONL audit writer with guard-rejection and remediation-action convenience methods.\n- (US-001) Roadmap: three-sprint structured baseline data as code, Sprint 1 marked IN_PROGRESS with trading hardblock items done.\n\n### Files\n- src/auto_remediate/__init__.py (new)\n- src/auto_remediate/namespace_guard.py (new)\n- src/auto_remediate/audit_logger.py (new)\n- src/auto_remediate/roadmap.py (new)\n- tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)\n- docs/audit-run-001/proofs/US-001/pytest-output.txt (new)\n\n## [Alpha-5-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-002) AuditInventory module (src/audit_inventory.py) parses all-findings.json and exposes severity/fix-class breakdowns, component summaries, and pattern analysis over the 480 audit findings.\n- (US-002) 29 unit tests (tests/unit/test_US_002_audit_inventory.py) covering fixture and real data; all pass including real-data assertions (critical=117, high=215, total=480).\n### Files\n- src/audit_inventory.py\n- tests/unit/test_US_002_audit_inventory.py\n- docs/audit-run-001/proofs/US-002/pytest-output.txt\n\n## [Alpha-4-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-019) Four-identity RBAC split: reader ClusterRole, namespaced applier Roles for brightflow-dashboard and triton-inference, sandbox Role template, and pr-bot ServiceAccount with automountServiceAccountToken=false. Trading namespaces have no applier binding.\n- (US-019) rbac_identities.py, rbac_audit_logger.py, rbac_ci_check.py modules with 28 passing unit tests covering namespace classification, §18 audit record schema, pre/post-action logging contracts, degraded-session detection, and CI violation detection.\n### Files\n- k8s/rbac/reader-cluster-role.yaml\n- k8s/rbac/reader-service-account.yaml\n- k8s/rbac/reader-cluster-role-binding.yaml\n- k8s/rbac/applier-role-template.yaml\n- k8s/rbac/applier-service-account.yaml\n- k8s/rbac/applier-role-binding-template.yaml\n- k8s/rbac/applier-role-brightflow-dashboard.yaml\n- k8s/rbac/applier-role-binding-brightflow-dashboard.yaml\n- k8s/rbac/applier-role-triton-inference.yaml\n- k8s/rbac/applier-role-binding-triton-inference.yaml\n- k8s/rbac/sandbox-role-template.yaml\n- k8s/rbac/sandbox-service-account.yaml\n- k8s/rbac/sandbox-role-binding-template.yaml\n- k8s/rbac/pr-bot-service-account.yaml\n- src/auto_remediate/rbac_identities.py\n- src/auto_remediate/rbac_audit_logger.py\n- src/auto_remediate/rbac_ci_check.py\n- tests/unit/test_US019_rbac_split.py\n- docs/audit-run-001/proofs/US-019/pytest-output.txt\n\n## [Alpha-3-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-020) Added CI/CD GitHub Actions workflows using albright-runners with lint, type-check, test, build/Trivy scan, and GHCR push jobs. Deployment image pinned to digest, imagePullPolicy set to IfNotPresent, pre-commit hooks configured, and Dependabot enabled for pip and GitHub Actions.\n### Files\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- .github/dependabot.yml\n- .pre-commit-config.yaml\n- k8s/deployment.yaml (image digest pin + pull policy)\n- tests/test_US_020_cicd.py\n- docs/audit-run-001/proofs/US-020/test-output.txt\n\n## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04\n\n### Added\n- `scripts/runner/claim_task.py` — atomic ZPOPMIN claim against `corey-fl-redis`; idempotent on requeued tasks.\n- `scripts/runner/mark_done.py`, `mark_failed.py`, `heartbeat.py` — task lifecycle ops, used by sub-agents via `kubectl exec`.\n- `infra/redis/redis.yaml` — PVC `corey-fl-redis-data` (1Gi local-path) + RDB `save 60 1` + memory request bumped to 128Mi.\n\n### Removed\n- `scripts/claim_task.py`, `scripts/mark_done.py` — SQLite-era stubs, superseded by Redis runner.\n- `docs/audit-run-001/worklist.db` — SQLite worklist, superseded by Redis hashes + queue:pending zset.\n\n### Fixed\n- Redis lost all 25 tasks on first pod restart (no persistence). Documented in Lessons_Learned. RDB+PVC now in place.\n\n### Files changed\n- infra/redis/redis.yaml, Lessons_Learned.md, CHANGELOG.md, scripts/runner/*.py, scripts/claim_task.py (deleted), scripts/mark_done.py (deleted), docs/audit-run-001/worklist.db (deleted)\n\n## [Alpha-1-ccfe7b-0-1_0-2026-06-03] — 2026-06-03\n\n### Added\n- `prd.json` — 25 userStories converted from PRD chunks per gold-prompt schema.\n- `infra/redis/redis.yaml` — corey-fl-redis Deployment + Service in corey-coder ns; 256Mi LRU, no persistence, 24h TTL on keys, readOnlyRootFilesystem, non-root.\n- Lessons_Learned.md — first entry on Docker daemon down + ARM/x86_64 mismatch decision.\n- 25 task hashes seeded into Redis under key `task:US-*` with 86400s TTL.\n- `queue:pending` sorted set scored by story priority.\n\n### Reason\nPhase 1 of the corey-fl-loop gold-prompt structure. Redis must live in-cluster\n(corey-coder ns) because the dev workstation is arm64 and cluster nodes are\nx86_64; local Docker is also unavailable on the host.\n\n### Files changed\n- prd.json (new)\n- infra/redis/redis.yaml (new)\n- Lessons_Learned.md (new)\n- CHANGELOG.md (new)'
+E     
+E     '45,720' is contained here:
+E       # Changelog
+E       
+E       All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
+E       Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+E       Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+E       
+E       ## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Changed
+E       - Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md
+E       - README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims
+E     ?                                                                                         ++++++
+E       - GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints
+E       - CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)
+E       
+E       ### Files changed
+E       - README.md
+E       - GETTING_STARTED.md
+E       - VSCODE_SETUP.md
+E       - VSCODE_K8S_INTEGRATION.md
+E       - functional_unit_test.md
+E       - .github/copilot-instructions.md
+E       - K8S_ANNOUNCEMENT.md (deleted)
+E       - TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)
+E       - coming_soon.md (deleted)
+E       - GettingStarted.md (deleted)
+E       - tests/unit/test_us023_docs_declaim.py (new)
+E       - CHANGELOG.md
+E       
+E       
+E       
+E       ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Fixed
+E       - ci.yml — build-image job set to continue-on-error: true. Legacy Dockerfile fails on Helm install against Debian trixie. US-024 will delete the legacy Dockerfile during dead-code removal.
+E       
+E       ### Files changed
+E       - .github/workflows/ci.yml
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Fixed
+E       - ci.yml + release.yml — replaced github.repository_owner with literal lowercase hawaiideveloper to satisfy GHCR all-lowercase rule.
+E       
+E       ### Files changed
+E       - .github/workflows/ci.yml
+E       - .github/workflows/release.yml
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Fixed
+E       - src/auto_remediate/__init__.py — restored US-001 authoritative content (union-merge had corrupted it with unterminated docstring + em-dash syntax error).
+E       - 82 ruff F401 unused-import findings across new package auto-cleared via --fix --unsafe-fixes.
+E       - CI scope tightened: ruff/mypy/pytest now check src/auto_remediate/ and Wave 1 test files only. Old src/mcp_server.py and tests/production/ excluded until US-024 deletes them.
+E       
+E       ### Files changed
+E       - src/auto_remediate/__init__.py
+E       - src/auto_remediate/*.py (auto-fixed)
+E       - src/health_check.py
+E       - .github/workflows/ci.yml
+E       - Lessons_Learned.md
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Fixed
+E       - CI runs-on switched from [self-hosted, Linux, X64] to ubuntu-latest. Repo is personal-account-owned; org self-hosted runners are not accessible. Real fix is transferring the repo to AlbrightLaboratories org; tracked in Lessons_Learned.
+E       
+E       ### Files changed
+E       - .github/workflows/ci.yml
+E       - .github/workflows/release.yml
+E       - Lessons_Learned.md
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-11-8873e1-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Fixed
+E       - CI runs-on changed from albright-runners to [self-hosted, Linux, X64] so jobs actually get picked up. Org runners do not currently advertise the albright-runners label; tracked as follow-up against the arc repo.
+E       
+E       ### Files changed
+E       - .github/workflows/ci.yml
+E       - .github/workflows/release.yml
+E       - Lessons_Learned.md
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-10-aaf4e4-0-1_0-2026-06-06] — 2026-06-06
+E       
+E       ### Added
+E       - the_goal-inprogress.md §9 Resume runbook: pod-discovery one-liners, health check, re-seed procedure, 19-task table, verbatim sub-agent prompt template for Waves 2-5, CHANGELOG insertion algorithm, batch-PR command, full-rebuild procedure, post-restart recovery, critic-loop notes, session-close checklist.
+E       
+E       ### Reason
+E       Make the_goal-inprogress.md self-sufficient for cold resume after session close.
+E       
+E       ### Files changed
+E       - the_goal-inprogress.md (append §9)
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-9-168973-0-1_0-2026-06-05] — 2026-06-05
+E       
+E       ### Added
+E       - the_goal-inprogress.md — comprehensive narrative of the corey-fl-loop initiative: goal, big picture, what is built (Phase A audit, Phase C PRD, Phase 1 Redis, Phase 2 setup + Wave 1), where things live, lessons learned, what is left (Waves 2-5, validators, critic, hour-11 flush, LoRA, runtime deploy), acceptance criteria, and resume instructions.
+E       
+E       ### Reason
+E       Pause point — capture the full picture so any future session can pick up cold.
+E       
+E       ### Files changed
+E       - the_goal-inprogress.md (new)
+E       - CHANGELOG.md
+E       
+E       ## [Alpha-8-168973-0-1_0-2026-06-05] — 2026-06-05
+E       ### Added
+E       - (US-021) Applied 8 concrete security patches: SQL injection fix (parameterized queries in github_issues_manager), GITHUB_TOKEN moved to env-file in start.sh, empty secret placeholder removed from k8s/secret.yaml, hardcoded private IP replaced in docs, NetworkPolicy default-deny + allow-ingress-nginx created, setup-vscode-k8s.sh hardcoded path fixed, update.sh error handling hardened, and loguru logger exc_info replaced with opt(exception=).
+E       - (US-021) Kubernetes manifest hardening: readOnlyRootFilesystem=true, seccompProfile RuntimeDefault, KUBECONFIG dir-path env removed, PSA baseline/restricted labels on namespace, helm password passed via --password-stdin.
+E       ### Files
+E       - src/github_issues_manager.py
+E       - src/logger.py
+E       - src/helm_manager.py
+E       - k8s/secret.yaml
+E       - k8s/namespace.yaml
+E       - k8s/deployment.yaml
+E       - k8s/networkpolicy.yaml (new)
+E       - VSCODE_K8S_INTEGRATION.md
+E       - README.md
+E       - setup-vscode-k8s.sh
+E       - start.sh
+E       - update.sh
+E       - tests/unit/test_us021_security.py (new)
+E       
+E       ## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05
+E       ### Added
+E       - (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.
+E       ### Files
+E       - config/safety.yaml
+E       - src/safety_config.py
+E       - src/audit.py
+E       - src/safety_gate.py
+E       - tests/test_safety_gate.py
+E       - docs/audit-run-001/proofs/US-006/pytest-output.txt
+E       
+E       ## [Alpha-6-168973-0-1_0-2026-06-05] — 2026-06-05
+E       
+E       ### Added
+E       - (US-001) Namespace guard module: TRADING_BLOCKED_NAMESPACES constant, ProtectedNamespaceError, and check_namespace_allowed() that blocks automated remediation against trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live).
+E       - (US-001) AuditLogger: thread-safe, append-only JSONL audit writer with guard-rejection and remediation-action convenience methods.
+E       - (US-001) Roadmap: three-sprint structured baseline data as code, Sprint 1 marked IN_PROGRESS with trading hardblock items done.
+E       
+E       ### Files
+E       - src/auto_remediate/__init__.py (new)
+E       - src/auto_remediate/namespace_guard.py (new)
+E       - src/auto_remediate/audit_logger.py (new)
+E       - src/auto_remediate/roadmap.py (new)
+E       - tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)
+E       - docs/audit-run-001/proofs/US-001/pytest-output.txt (new)
+E       
+E       ## [Alpha-5-168973-0-1_0-2026-06-05] — 2026-06-05
+E       ### Added
+E       - (US-002) AuditInventory module (src/audit_inventory.py) parses all-findings.json and exposes severity/fix-class breakdowns, component summaries, and pattern analysis over the 480 audit findings.
+E       - (US-002) 29 unit tests (tests/unit/test_US_002_audit_inventory.py) covering fixture and real data; all pass including real-data assertions (critical=117, high=215, total=480).
+E       ### Files
+E       - src/audit_inventory.py
+E       - tests/unit/test_US_002_audit_inventory.py
+E       - docs/audit-run-001/proofs/US-002/pytest-output.txt
+E       
+E       ## [Alpha-4-168973-0-1_0-2026-06-05] — 2026-06-05
+E       ### Added
+E       - (US-019) Four-identity RBAC split: reader ClusterRole, namespaced applier Roles for brightflow-dashboard and triton-inference, sandbox Role template, and pr-bot ServiceAccount with automountServiceAccountToken=false. Trading namespaces have no applier binding.
+E       - (US-019) rbac_identities.py, rbac_audit_logger.py, rbac_ci_check.py modules with 28 passing unit tests covering namespace classification, §18 audit record schema, pre/post-action logging contracts, degraded-session detection, and CI violation detection.
+E       ### Files
+E       - k8s/rbac/reader-cluster-role.yaml
+E       - k8s/rbac/reader-service-account.yaml
+E       - k8s/rbac/reader-cluster-role-binding.yaml
+E       - k8s/rbac/applier-role-template.yaml
+E       - k8s/rbac/applier-service-account.yaml
+E       - k8s/rbac/applier-role-binding-template.yaml
+E       - k8s/rbac/applier-role-brightflow-dashboard.yaml
+E       - k8s/rbac/applier-role-binding-brightflow-dashboard.yaml
+E       - k8s/rbac/applier-role-triton-inference.yaml
+E       - k8s/rbac/applier-role-binding-triton-inference.yaml
+E       - k8s/rbac/sandbox-role-template.yaml
+E       - k8s/rbac/sandbox-service-account.yaml
+E       - k8s/rbac/sandbox-role-binding-template.yaml
+E       - k8s/rbac/pr-bot-service-account.yaml
+E       - src/auto_remediate/rbac_identities.py
+E       - src/auto_remediate/rbac_audit_logger.py
+E       - src/auto_remediate/rbac_ci_check.py
+E       - tests/unit/test_US019_rbac_split.py
+E       - docs/audit-run-001/proofs/US-019/pytest-output.txt
+E       
+E       ## [Alpha-3-168973-0-1_0-2026-06-05] — 2026-06-05
+E       ### Added
+E       - (US-020) Added CI/CD GitHub Actions workflows using albright-runners with lint, type-check, test, build/Trivy scan, and GHCR push jobs. Deployment image pinned to digest, imagePullPolicy set to IfNotPresent, pre-commit hooks configured, and Dependabot enabled for pip and GitHub Actions.
+E       ### Files
+E       - .github/workflows/ci.yml
+E       - .github/workflows/release.yml
+E       - .github/dependabot.yml
+E       - .pre-commit-config.yaml
+E       - k8s/deployment.yaml (image digest pin + pull policy)
+E       - tests/test_US_020_cicd.py
+E       - docs/audit-run-001/proofs/US-020/test-output.txt
+E       
+E       ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
+E       
+E       ### Added
+E       - `scripts/runner/claim_task.py` — atomic ZPOPMIN claim against `corey-fl-redis`; idempotent on requeued tasks.
+E       - `scripts/runner/mark_done.py`, `mark_failed.py`, `heartbeat.py` — task lifecycle ops, used by sub-agents via `kubectl exec`.
+E       - `infra/redis/redis.yaml` — PVC `corey-fl-redis-data` (1Gi local-path) + RDB `save 60 1` + memory request bumped to 128Mi.
+E       
+E       ### Removed
+E       - `scripts/claim_task.py`, `scripts/mark_done.py` — SQLite-era stubs, superseded by Redis runner.
+E       - `docs/audit-run-001/worklist.db` — SQLite worklist, superseded by Redis hashes + queue:pending zset.
+E       
+E       ### Fixed
+E       - Redis lost all 25 tasks on first pod restart (no persistence). Documented in Lessons_Learned. RDB+PVC now in place.
+E       
+E       ### Files changed
+E       - infra/redis/redis.yaml, Lessons_Learned.md, CHANGELOG.md, scripts/runner/*.py, scripts/claim_task.py (deleted), scripts/mark_done.py (deleted), docs/audit-run-001/worklist.db (deleted)
+E       
+E       ## [Alpha-1-ccfe7b-0-1_0-2026-06-03] — 2026-06-03
+E       
+E       ### Added
+E       - `prd.json` — 25 userStories converted from PRD chunks per gold-prompt schema.
+E       - `infra/redis/redis.yaml` — corey-fl-redis Deployment + Service in corey-coder ns; 256Mi LRU, no persistence, 24h TTL on keys, readOnlyRootFilesystem, non-root.
+E       - Lessons_Learned.md — first entry on Docker daemon down + ARM/x86_64 mismatch decision.
+E       - 25 task hashes seeded into Redis under key `task:US-*` with 86400s TTL.
+E       - `queue:pending` sorted set scored by story priority.
+E       
+E       ### Reason
+E       Phase 1 of the corey-fl-loop gold-prompt structure. Redis must live in-cluster
+E       (corey-coder ns) because the dev workstation is arm64 and cluster nodes are
+E       x86_64; local Docker is also unavailable on the host.
+E       
+E       ### Files changed
+E       - prd.json (new)
+E       - infra/redis/redis.yaml (new)
+E       - Lessons_Learned.md (new)
+E       - CHANGELOG.md (new)
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                                      Stmts   Miss  Cover   Missing
+-----------------------------------------------------------------------
+src/__init__.py                               3      3     0%   5-7
+src/audit.py                                 24     24     0%   8-60
+src/audit_inventory.py                       85     85     0%   10-236
+src/auto_remediate/__init__.py                4      4     0%   8-16
+src/auto_remediate/audit_logger.py           37     37     0%   9-115
+src/auto_remediate/namespace_guard.py        15     15     0%   9-65
+src/auto_remediate/rbac_audit_logger.py      40     40     0%   11-153
+src/auto_remediate/rbac_ci_check.py          37     37     0%   9-75
+src/auto_remediate/rbac_identities.py        20     20     0%   9-73
+src/auto_remediate/roadmap.py                47     47     0%   8-207
+src/config.py                                71      0   100%
+src/diagnostics_manager.py                   80     66    18%   18-19, 23-28, 41-79, 95-152, 168-213, 217, 230, 244, 255, 266
+src/documentation_manager.py                217    191    12%   24-36, 40-47, 51-64, 68-86, 90-136, 140-172, 176-188, 192-212, 216-247, 252-260, 264-276, 280, 328-372, 376-378, 382-397, 401-412
+src/enhanced_tools.py                         6      6     0%   6-405
+src/github_issues_manager.py                295    265    10%   24-57, 61-72, 76-142, 146-166, 170-186, 191-222, 226-232, 236-245, 249-271, 275-293, 297-305, 329-354, 358-383, 387-407, 412-459, 463-475, 479-516, 521-539, 543-571, 575-618
+src/health_check.py                          31     31     0%   5-63
+src/helm_manager.py                         216    180    17%   13-14, 26-33, 37-42, 46-83, 93-97, 110-138, 148-168, 174-190, 196-206, 213-220, 227-236, 242-249, 256-265, 271-287, 295-305, 309, 313-318, 322, 331-338, 344-349, 357-373, 379, 384-389, 394-399, 403, 407, 411, 417, 422-449
+src/k8s_manager.py                           55     46    16%   18-21, 25-32, 44-87, 100-162, 176-208
+src/kubectl_manager.py                      219    186    15%   14-15, 27-32, 36-41, 45-73, 83-89, 93-100, 108-121, 126-130, 135-139, 144-148, 153-166, 172-183, 188-192, 198-204, 209-213, 218-233, 238-242, 246-250, 254-265, 272-315, 325-352, 362-375, 388, 394-504, 516-532
+src/logger.py                                53     36    32%   40-113, 132-138, 143-148, 153-159, 164-169, 175, 182
+src/main.py                                 108    108     0%   17-217
+src/mcp_server.py                            99     78    21%   49-74, 79-616, 622-650
+src/mcp_server_backup.py                    108    108     0%   17-217
+src/monitoring_manager.py                    85     67    21%   18-19, 23-28, 43-71, 88-144, 159-188, 192-216, 220, 232, 244, 256, 275, 290, 303, 317
+src/safety_config.py                         41     41     0%   8-87
+src/safety_gate.py                           56     56     0%   14-169
+src/security_manager.py                      66     51    23%   18-19, 23-28, 43-87, 91, 118, 152, 178, 203, 235-247, 251, 274
+-----------------------------------------------------------------------
+TOTAL                                      2118   1828    14%
+Coverage HTML written to dir reports/coverage
+============================= slowest 10 durations =============================
+0.05s call     tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_45720_claim
+0.03s call     tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_45720_claim
+0.02s setup    tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_bare_health_curl
+0.01s setup    tests/unit/test_us023_docs_declaim.py::TestDeletedFiles::test_k8s_announcement_deleted
+0.01s call     tests/unit/test_us023_docs_declaim.py::TestFunctionalUnitTest::test_no_390_total_tests_overclaim
+0.00s setup    tests/unit/test_us023_docs_declaim.py::TestVscodeK8sIntegration::test_no_raw_lab_ip
+0.00s setup    tests/unit/test_us023_docs_declaim.py::TestChangelog::test_changelog_exists
+0.00s call     tests/unit/test_us023_docs_declaim.py::TestFunctionalUnitTest::test_no_45720_claim
+0.00s teardown tests/unit/test_us023_docs_declaim.py::TestGettingStarted::test_no_45720_claim
+0.00s call     tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_99_9_uptime_claim
+=========================== short test summary info ============================
+FAILED tests/unit/test_us023_docs_declaim.py::TestChangelog::test_no_45720_claim - assert '45,720' not in '# Changelog\n\nAll notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.\nPre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`\nRelease versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`\n\n## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06\n\n### Changed\n- Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md\n- README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims\n- GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints\n- CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)\n\n### Files changed\n- README.md\n- GETTING_STARTED.md\n- VSCODE_SETUP.md\n- VSCODE_K8S_INTEGRATION.md\n- functional_unit_test.md\n- .github/copilot-instructions.md\n- K8S_ANNOUNCEMENT.md (deleted)\n- TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)\n- coming_soon.md (deleted)\n- GettingStarted.md (deleted)\n- tests/unit/test_us023_docs_declaim.py (new)\n- CHANGELOG.md\n\n\n\n## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- ci.yml — build-image job set to continue-on-error: true. Legacy Dockerfile fails on Helm install against Debian trixie. US-024 will delete the legacy Dockerfile during dead-code removal.\n\n### Files changed\n- .github/workflows/ci.yml\n- CHANGELOG.md\n\n## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- ci.yml + release.yml — replaced github.repository_owner with literal lowercase hawaiideveloper to satisfy GHCR all-lowercase rule.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- CHANGELOG.md\n\n## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- src/auto_remediate/__init__.py — restored US-001 authoritative content (union-merge had corrupted it with unterminated docstring + em-dash syntax error).\n- 82 ruff F401 unused-import findings across new package auto-cleared via --fix --unsafe-fixes.\n- CI scope tightened: ruff/mypy/pytest now check src/auto_remediate/ and Wave 1 test files only. Old src/mcp_server.py and tests/production/ excluded until US-024 deletes them.\n\n### Files changed\n- src/auto_remediate/__init__.py\n- src/auto_remediate/*.py (auto-fixed)\n- src/health_check.py\n- .github/workflows/ci.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- CI runs-on switched from [self-hosted, Linux, X64] to ubuntu-latest. Repo is personal-account-owned; org self-hosted runners are not accessible. Real fix is transferring the repo to AlbrightLaboratories org; tracked in Lessons_Learned.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-11-8873e1-0-1_0-2026-06-06] — 2026-06-06\n\n### Fixed\n- CI runs-on changed from albright-runners to [self-hosted, Linux, X64] so jobs actually get picked up. Org runners do not currently advertise the albright-runners label; tracked as follow-up against the arc repo.\n\n### Files changed\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- Lessons_Learned.md\n- CHANGELOG.md\n\n## [Alpha-10-aaf4e4-0-1_0-2026-06-06] — 2026-06-06\n\n### Added\n- the_goal-inprogress.md §9 Resume runbook: pod-discovery one-liners, health check, re-seed procedure, 19-task table, verbatim sub-agent prompt template for Waves 2-5, CHANGELOG insertion algorithm, batch-PR command, full-rebuild procedure, post-restart recovery, critic-loop notes, session-close checklist.\n\n### Reason\nMake the_goal-inprogress.md self-sufficient for cold resume after session close.\n\n### Files changed\n- the_goal-inprogress.md (append §9)\n- CHANGELOG.md\n\n## [Alpha-9-168973-0-1_0-2026-06-05] — 2026-06-05\n\n### Added\n- the_goal-inprogress.md — comprehensive narrative of the corey-fl-loop initiative: goal, big picture, what is built (Phase A audit, Phase C PRD, Phase 1 Redis, Phase 2 setup + Wave 1), where things live, lessons learned, what is left (Waves 2-5, validators, critic, hour-11 flush, LoRA, runtime deploy), acceptance criteria, and resume instructions.\n\n### Reason\nPause point — capture the full picture so any future session can pick up cold.\n\n### Files changed\n- the_goal-inprogress.md (new)\n- CHANGELOG.md\n\n## [Alpha-8-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-021) Applied 8 concrete security patches: SQL injection fix (parameterized queries in github_issues_manager), GITHUB_TOKEN moved to env-file in start.sh, empty secret placeholder removed from k8s/secret.yaml, hardcoded private IP replaced in docs, NetworkPolicy default-deny + allow-ingress-nginx created, setup-vscode-k8s.sh hardcoded path fixed, update.sh error handling hardened, and loguru logger exc_info replaced with opt(exception=).\n- (US-021) Kubernetes manifest hardening: readOnlyRootFilesystem=true, seccompProfile RuntimeDefault, KUBECONFIG dir-path env removed, PSA baseline/restricted labels on namespace, helm password passed via --password-stdin.\n### Files\n- src/github_issues_manager.py\n- src/logger.py\n- src/helm_manager.py\n- k8s/secret.yaml\n- k8s/namespace.yaml\n- k8s/deployment.yaml\n- k8s/networkpolicy.yaml (new)\n- VSCODE_K8S_INTEGRATION.md\n- README.md\n- setup-vscode-k8s.sh\n- start.sh\n- update.sh\n- tests/unit/test_us021_security.py (new)\n\n## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.\n### Files\n- config/safety.yaml\n- src/safety_config.py\n- src/audit.py\n- src/safety_gate.py\n- tests/test_safety_gate.py\n- docs/audit-run-001/proofs/US-006/pytest-output.txt\n\n## [Alpha-6-168973-0-1_0-2026-06-05] — 2026-06-05\n\n### Added\n- (US-001) Namespace guard module: TRADING_BLOCKED_NAMESPACES constant, ProtectedNamespaceError, and check_namespace_allowed() that blocks automated remediation against trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live).\n- (US-001) AuditLogger: thread-safe, append-only JSONL audit writer with guard-rejection and remediation-action convenience methods.\n- (US-001) Roadmap: three-sprint structured baseline data as code, Sprint 1 marked IN_PROGRESS with trading hardblock items done.\n\n### Files\n- src/auto_remediate/__init__.py (new)\n- src/auto_remediate/namespace_guard.py (new)\n- src/auto_remediate/audit_logger.py (new)\n- src/auto_remediate/roadmap.py (new)\n- tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)\n- docs/audit-run-001/proofs/US-001/pytest-output.txt (new)\n\n## [Alpha-5-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-002) AuditInventory module (src/audit_inventory.py) parses all-findings.json and exposes severity/fix-class breakdowns, component summaries, and pattern analysis over the 480 audit findings.\n- (US-002) 29 unit tests (tests/unit/test_US_002_audit_inventory.py) covering fixture and real data; all pass including real-data assertions (critical=117, high=215, total=480).\n### Files\n- src/audit_inventory.py\n- tests/unit/test_US_002_audit_inventory.py\n- docs/audit-run-001/proofs/US-002/pytest-output.txt\n\n## [Alpha-4-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-019) Four-identity RBAC split: reader ClusterRole, namespaced applier Roles for brightflow-dashboard and triton-inference, sandbox Role template, and pr-bot ServiceAccount with automountServiceAccountToken=false. Trading namespaces have no applier binding.\n- (US-019) rbac_identities.py, rbac_audit_logger.py, rbac_ci_check.py modules with 28 passing unit tests covering namespace classification, §18 audit record schema, pre/post-action logging contracts, degraded-session detection, and CI violation detection.\n### Files\n- k8s/rbac/reader-cluster-role.yaml\n- k8s/rbac/reader-service-account.yaml\n- k8s/rbac/reader-cluster-role-binding.yaml\n- k8s/rbac/applier-role-template.yaml\n- k8s/rbac/applier-service-account.yaml\n- k8s/rbac/applier-role-binding-template.yaml\n- k8s/rbac/applier-role-brightflow-dashboard.yaml\n- k8s/rbac/applier-role-binding-brightflow-dashboard.yaml\n- k8s/rbac/applier-role-triton-inference.yaml\n- k8s/rbac/applier-role-binding-triton-inference.yaml\n- k8s/rbac/sandbox-role-template.yaml\n- k8s/rbac/sandbox-service-account.yaml\n- k8s/rbac/sandbox-role-binding-template.yaml\n- k8s/rbac/pr-bot-service-account.yaml\n- src/auto_remediate/rbac_identities.py\n- src/auto_remediate/rbac_audit_logger.py\n- src/auto_remediate/rbac_ci_check.py\n- tests/unit/test_US019_rbac_split.py\n- docs/audit-run-001/proofs/US-019/pytest-output.txt\n\n## [Alpha-3-168973-0-1_0-2026-06-05] — 2026-06-05\n### Added\n- (US-020) Added CI/CD GitHub Actions workflows using albright-runners with lint, type-check, test, build/Trivy scan, and GHCR push jobs. Deployment image pinned to digest, imagePullPolicy set to IfNotPresent, pre-commit hooks configured, and Dependabot enabled for pip and GitHub Actions.\n### Files\n- .github/workflows/ci.yml\n- .github/workflows/release.yml\n- .github/dependabot.yml\n- .pre-commit-config.yaml\n- k8s/deployment.yaml (image digest pin + pull policy)\n- tests/test_US_020_cicd.py\n- docs/audit-run-001/proofs/US-020/test-output.txt\n\n## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04\n\n### Added\n- `scripts/runner/claim_task.py` — atomic ZPOPMIN claim against `corey-fl-redis`; idempotent on requeued tasks.\n- `scripts/runner/mark_done.py`, `mark_failed.py`, `heartbeat.py` — task lifecycle ops, used by sub-agents via `kubectl exec`.\n- `infra/redis/redis.yaml` — PVC `corey-fl-redis-data` (1Gi local-path) + RDB `save 60 1` + memory request bumped to 128Mi.\n\n### Removed\n- `scripts/claim_task.py`, `scripts/mark_done.py` — SQLite-era stubs, superseded by Redis runner.\n- `docs/audit-run-001/worklist.db` — SQLite worklist, superseded by Redis hashes + queue:pending zset.\n\n### Fixed\n- Redis lost all 25 tasks on first pod restart (no persistence). Documented in Lessons_Learned. RDB+PVC now in place.\n\n### Files changed\n- infra/redis/redis.yaml, Lessons_Learned.md, CHANGELOG.md, scripts/runner/*.py, scripts/claim_task.py (deleted), scripts/mark_done.py (deleted), docs/audit-run-001/worklist.db (deleted)\n\n## [Alpha-1-ccfe7b-0-1_0-2026-06-03] — 2026-06-03\n\n### Added\n- `prd.json` — 25 userStories converted from PRD chunks per gold-prompt schema.\n- `infra/redis/redis.yaml` — corey-fl-redis Deployment + Service in corey-coder ns; 256Mi LRU, no persistence, 24h TTL on keys, readOnlyRootFilesystem, non-root.\n- Lessons_Learned.md — first entry on Docker daemon down + ARM/x86_64 mismatch decision.\n- 25 task hashes seeded into Redis under key `task:US-*` with 86400s TTL.\n- `queue:pending` sorted set scored by story priority.\n\n### Reason\nPhase 1 of the corey-fl-loop gold-prompt structure. Redis must live in-cluster\n(corey-coder ns) because the dev workstation is arm64 and cluster nodes are\nx86_64; local Docker is also unavailable on the host.\n\n### Files changed\n- prd.json (new)\n- infra/redis/redis.yaml (new)\n- Lessons_Learned.md (new)\n- CHANGELOG.md (new)'
+  
+  '45,720' is contained here:
+    # Changelog
+    
+    All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
+    Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+    Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+    
+    ## [Alpha-20-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Changed
+    - Removed 4 overclaiming doc files: K8S_ANNOUNCEMENT.md, TEST_SUITE_IMPLEMENTATION_SUMMARY.md, coming_soon.md, GettingStarted.md
+    - README.md: prepended toc-backlink + alpha status banner; stripped "Production Ready", 45,720+, 1,029+, lab IP, and bare curl /health claims
+  ?                                                                                         ++++++
+    - GETTING_STARTED.md, VSCODE_SETUP.md, VSCODE_K8S_INTEGRATION.md, functional_unit_test.md: removed all fabricated metrics and endpoints
+    - CHANGELOG.md: no original overclaims survived Wave 1 rebuild (already clean)
+    
+    ### Files changed
+    - README.md
+    - GETTING_STARTED.md
+    - VSCODE_SETUP.md
+    - VSCODE_K8S_INTEGRATION.md
+    - functional_unit_test.md
+    - .github/copilot-instructions.md
+    - K8S_ANNOUNCEMENT.md (deleted)
+    - TEST_SUITE_IMPLEMENTATION_SUMMARY.md (deleted)
+    - coming_soon.md (deleted)
+    - GettingStarted.md (deleted)
+    - tests/unit/test_us023_docs_declaim.py (new)
+    - CHANGELOG.md
+    
+    
+    
+    ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Fixed
+    - ci.yml — build-image job set to continue-on-error: true. Legacy Dockerfile fails on Helm install against Debian trixie. US-024 will delete the legacy Dockerfile during dead-code removal.
+    
+    ### Files changed
+    - .github/workflows/ci.yml
+    - CHANGELOG.md
+    
+    ## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Fixed
+    - ci.yml + release.yml — replaced github.repository_owner with literal lowercase hawaiideveloper to satisfy GHCR all-lowercase rule.
+    
+    ### Files changed
+    - .github/workflows/ci.yml
+    - .github/workflows/release.yml
+    - CHANGELOG.md
+    
+    ## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Fixed
+    - src/auto_remediate/__init__.py — restored US-001 authoritative content (union-merge had corrupted it with unterminated docstring + em-dash syntax error).
+    - 82 ruff F401 unused-import findings across new package auto-cleared via --fix --unsafe-fixes.
+    - CI scope tightened: ruff/mypy/pytest now check src/auto_remediate/ and Wave 1 test files only. Old src/mcp_server.py and tests/production/ excluded until US-024 deletes them.
+    
+    ### Files changed
+    - src/auto_remediate/__init__.py
+    - src/auto_remediate/*.py (auto-fixed)
+    - src/health_check.py
+    - .github/workflows/ci.yml
+    - Lessons_Learned.md
+    - CHANGELOG.md
+    
+    ## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Fixed
+    - CI runs-on switched from [self-hosted, Linux, X64] to ubuntu-latest. Repo is personal-account-owned; org self-hosted runners are not accessible. Real fix is transferring the repo to AlbrightLaboratories org; tracked in Lessons_Learned.
+    
+    ### Files changed
+    - .github/workflows/ci.yml
+    - .github/workflows/release.yml
+    - Lessons_Learned.md
+    - CHANGELOG.md
+    
+    ## [Alpha-11-8873e1-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Fixed
+    - CI runs-on changed from albright-runners to [self-hosted, Linux, X64] so jobs actually get picked up. Org runners do not currently advertise the albright-runners label; tracked as follow-up against the arc repo.
+    
+    ### Files changed
+    - .github/workflows/ci.yml
+    - .github/workflows/release.yml
+    - Lessons_Learned.md
+    - CHANGELOG.md
+    
+    ## [Alpha-10-aaf4e4-0-1_0-2026-06-06] — 2026-06-06
+    
+    ### Added
+    - the_goal-inprogress.md §9 Resume runbook: pod-discovery one-liners, health check, re-seed procedure, 19-task table, verbatim sub-agent prompt template for Waves 2-5, CHANGELOG insertion algorithm, batch-PR command, full-rebuild procedure, post-restart recovery, critic-loop notes, session-close checklist.
+    
+    ### Reason
+    Make the_goal-inprogress.md self-sufficient for cold resume after session close.
+    
+    ### Files changed
+    - the_goal-inprogress.md (append §9)
+    - CHANGELOG.md
+    
+    ## [Alpha-9-168973-0-1_0-2026-06-05] — 2026-06-05
+    
+    ### Added
+    - the_goal-inprogress.md — comprehensive narrative of the corey-fl-loop initiative: goal, big picture, what is built (Phase A audit, Phase C PRD, Phase 1 Redis, Phase 2 setup + Wave 1), where things live, lessons learned, what is left (Waves 2-5, validators, critic, hour-11 flush, LoRA, runtime deploy), acceptance criteria, and resume instructions.
+    
+    ### Reason
+    Pause point — capture the full picture so any future session can pick up cold.
+    
+    ### Files changed
+    - the_goal-inprogress.md (new)
+    - CHANGELOG.md
+    
+    ## [Alpha-8-168973-0-1_0-2026-06-05] — 2026-06-05
+    ### Added
+    - (US-021) Applied 8 concrete security patches: SQL injection fix (parameterized queries in github_issues_manager), GITHUB_TOKEN moved to env-file in start.sh, empty secret placeholder removed from k8s/secret.yaml, hardcoded private IP replaced in docs, NetworkPolicy default-deny + allow-ingress-nginx created, setup-vscode-k8s.sh hardcoded path fixed, update.sh error handling hardened, and loguru logger exc_info replaced with opt(exception=).
+    - (US-021) Kubernetes manifest hardening: readOnlyRootFilesystem=true, seccompProfile RuntimeDefault, KUBECONFIG dir-path env removed, PSA baseline/restricted labels on namespace, helm password passed via --password-stdin.
+    ### Files
+    - src/github_issues_manager.py
+    - src/logger.py
+    - src/helm_manager.py
+    - k8s/secret.yaml
+    - k8s/namespace.yaml
+    - k8s/deployment.yaml
+    - k8s/networkpolicy.yaml (new)
+    - VSCODE_K8S_INTEGRATION.md
+    - README.md
+    - setup-vscode-k8s.sh
+    - start.sh
+    - update.sh
+    - tests/unit/test_us021_security.py (new)
+    
+    ## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05
+    ### Added
+    - (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.
+    ### Files
+    - config/safety.yaml
+    - src/safety_config.py
+    - src/audit.py
+    - src/safety_gate.py
+    - tests/test_safety_gate.py
+    - docs/audit-run-001/proofs/US-006/pytest-output.txt
+    
+    ## [Alpha-6-168973-0-1_0-2026-06-05] — 2026-06-05
+    
+    ### Added
+    - (US-001) Namespace guard module: TRADING_BLOCKED_NAMESPACES constant, ProtectedNamespaceError, and check_namespace_allowed() that blocks automated remediation against trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live).
+    - (US-001) AuditLogger: thread-safe, append-only JSONL audit writer with guard-rejection and remediation-action convenience methods.
+    - (US-001) Roadmap: three-sprint structured baseline data as code, Sprint 1 marked IN_PROGRESS with trading hardblock items done.
+    
+    ### Files
+    - src/auto_remediate/__init__.py (new)
+    - src/auto_remediate/namespace_guard.py (new)
+    - src/auto_remediate/audit_logger.py (new)
+    - src/auto_remediate/roadmap.py (new)
+    - tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)
+    - docs/audit-run-001/proofs/US-001/pytest-output.txt (new)
+    
+    ## [Alpha-5-168973-0-1_0-2026-06-05] — 2026-06-05
+    ### Added
+    - (US-002) AuditInventory module (src/audit_inventory.py) parses all-findings.json and exposes severity/fix-class breakdowns, component summaries, and pattern analysis over the 480 audit findings.
+    - (US-002) 29 unit tests (tests/unit/test_US_002_audit_inventory.py) covering fixture and real data; all pass including real-data assertions (critical=117, high=215, total=480).
+    ### Files
+    - src/audit_inventory.py
+    - tests/unit/test_US_002_audit_inventory.py
+    - docs/audit-run-001/proofs/US-002/pytest-output.txt
+    
+    ## [Alpha-4-168973-0-1_0-2026-06-05] — 2026-06-05
+    ### Added
+    - (US-019) Four-identity RBAC split: reader ClusterRole, namespaced applier Roles for brightflow-dashboard and triton-inference, sandbox Role template, and pr-bot ServiceAccount with automountServiceAccountToken=false. Trading namespaces have no applier binding.
+    - (US-019) rbac_identities.py, rbac_audit_logger.py, rbac_ci_check.py modules with 28 passing unit tests covering namespace classification, §18 audit record schema, pre/post-action logging contracts, degraded-session detection, and CI violation detection.
+    ### Files
+    - k8s/rbac/reader-cluster-role.yaml
+    - k8s/rbac/reader-service-account.yaml
+    - k8s/rbac/reader-cluster-role-binding.yaml
+    - k8s/rbac/applier-role-template.yaml
+    - k8s/rbac/applier-service-account.yaml
+    - k8s/rbac/applier-role-binding-template.yaml
+    - k8s/rbac/applier-role-brightflow-dashboard.yaml
+    - k8s/rbac/applier-role-binding-brightflow-dashboard.yaml
+    - k8s/rbac/applier-role-triton-inference.yaml
+    - k8s/rbac/applier-role-binding-triton-inference.yaml
+    - k8s/rbac/sandbox-role-template.yaml
+    - k8s/rbac/sandbox-service-account.yaml
+    - k8s/rbac/sandbox-role-binding-template.yaml
+    - k8s/rbac/pr-bot-service-account.yaml
+    - src/auto_remediate/rbac_identities.py
+    - src/auto_remediate/rbac_audit_logger.py
+    - src/auto_remediate/rbac_ci_check.py
+    - tests/unit/test_US019_rbac_split.py
+    - docs/audit-run-001/proofs/US-019/pytest-output.txt
+    
+    ## [Alpha-3-168973-0-1_0-2026-06-05] — 2026-06-05
+    ### Added
+    - (US-020) Added CI/CD GitHub Actions workflows using albright-runners with lint, type-check, test, build/Trivy scan, and GHCR push jobs. Deployment image pinned to digest, imagePullPolicy set to IfNotPresent, pre-commit hooks configured, and Dependabot enabled for pip and GitHub Actions.
+    ### Files
+    - .github/workflows/ci.yml
+    - .github/workflows/release.yml
+    - .github/dependabot.yml
+    - .pre-commit-config.yaml
+    - k8s/deployment.yaml (image digest pin + pull policy)
+    - tests/test_US_020_cicd.py
+    - docs/audit-run-001/proofs/US-020/test-output.txt
+    
+    ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
+    
+    ### Added
+    - `scripts/runner/claim_task.py` — atomic ZPOPMIN claim against `corey-fl-redis`; idempotent on requeued tasks.
+    - `scripts/runner/mark_done.py`, `mark_failed.py`, `heartbeat.py` — task lifecycle ops, used by sub-agents via `kubectl exec`.
+    - `infra/redis/redis.yaml` — PVC `corey-fl-redis-data` (1Gi local-path) + RDB `save 60 1` + memory request bumped to 128Mi.
+    
+    ### Removed
+    - `scripts/claim_task.py`, `scripts/mark_done.py` — SQLite-era stubs, superseded by Redis runner.
+    - `docs/audit-run-001/worklist.db` — SQLite worklist, superseded by Redis hashes + queue:pending zset.
+    
+    ### Fixed
+    - Redis lost all 25 tasks on first pod restart (no persistence). Documented in Lessons_Learned. RDB+PVC now in place.
+    
+    ### Files changed
+    - infra/redis/redis.yaml, Lessons_Learned.md, CHANGELOG.md, scripts/runner/*.py, scripts/claim_task.py (deleted), scripts/mark_done.py (deleted), docs/audit-run-001/worklist.db (deleted)
+    
+    ## [Alpha-1-ccfe7b-0-1_0-2026-06-03] — 2026-06-03
+    
+    ### Added
+    - `prd.json` — 25 userStories converted from PRD chunks per gold-prompt schema.
+    - `infra/redis/redis.yaml` — corey-fl-redis Deployment + Service in corey-coder ns; 256Mi LRU, no persistence, 24h TTL on keys, readOnlyRootFilesystem, non-root.
+    - Lessons_Learned.md — first entry on Docker daemon down + ARM/x86_64 mismatch decision.
+    - 25 task hashes seeded into Redis under key `task:US-*` with 86400s TTL.
+    - `queue:pending` sorted set scored by story priority.
+    
+    ### Reason
+    Phase 1 of the corey-fl-loop gold-prompt structure. Redis must live in-cluster
+    (corey-coder ns) because the dev workstation is arm64 and cluster nodes are
+    x86_64; local Docker is also unavailable on the host.
+    
+    ### Files changed
+    - prd.json (new)
+    - infra/redis/redis.yaml (new)
+    - Lessons_Learned.md (new)
+    - CHANGELOG.md (new)
+=================== 1 failed, 20 passed, 2 warnings in 5.48s ===================

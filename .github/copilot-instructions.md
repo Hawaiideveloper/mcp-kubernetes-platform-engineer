@@ -218,7 +218,7 @@ docker inspect k8s-mcp-server | grep Health # Check health status
 ### Learning Metrics
 ```bash
 # Check knowledge base growth
-curl http://localhost:3001/stats 2>/dev/null || echo "Stats not available"
+# /stats endpoint does not exist. Server is stdio-only; no HTTP port is opened.
 
 # Monitor background learning
 ./logs.sh | grep -i "background\|github\|fetching"
