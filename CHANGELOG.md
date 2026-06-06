@@ -1,3 +1,22 @@
+## [Alpha-39-c1c9d5-0-1_0-2026-06-06] — 2026-06-06
+
+### Added (US-018)
+- src/auto_remediate/audit_logger.py — enhanced with PRD §18 compliant append (fcntl lock, reopen, 8 action verbs, stderr on write failure)
+- src/auto_remediate/finding_store.py — SQLite WAL-mode finding persistence with upsert dedup
+- src/auto_remediate/root_cause.py — root_cause_hash normalization (UUID, IP, timestamp stripping)
+- src/auto_remediate/audit_query.py — read-only query_audit_log with ns/since/until/finding_id filters (max 500)
+- tests/unit/test_us018_audit_log.py — 14 unit tests; all pass
+- docs/audit-run-001/proofs/US-018/pytest-output.txt — test proof
+
+### Files changed
+- src/auto_remediate/audit_logger.py
+- src/auto_remediate/finding_store.py
+- src/auto_remediate/root_cause.py
+- src/auto_remediate/audit_query.py
+- tests/unit/test_us018_audit_log.py
+- docs/audit-run-001/proofs/US-018/pytest-output.txt
+- CHANGELOG.md
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
