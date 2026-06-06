@@ -1,0 +1,14 @@
+# Replace <SANDBOX_NAMESPACE> with the actual sandbox namespace, e.g. sandbox-pr-42.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: auto-remediate-sandbox
+  namespace: <SANDBOX_NAMESPACE>
+  labels:
+    app.kubernetes.io/part-of: auto-remediate
+    app.kubernetes.io/component: rbac
+    auto-remediate/identity: sandbox
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
