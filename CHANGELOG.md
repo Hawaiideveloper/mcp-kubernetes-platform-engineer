@@ -1,3 +1,10 @@
+## [Alpha-1-c1c9d5-0-1_0-20260606] — 2026-06-06
+
+### Added (US-011)
+- src/analyzers/pvc_analyzer.py: PVCAnalyzer detecting Pending/no-SC, Pending/no-PV, Pending-unknown, FailedMount, capacity >85%, RWO multi-node, and NFS advisory findings
+- src/analyzers/node_analyzer.py: NodeAnalyzer detecting NotReady, MemoryPressure/DiskPressure/PIDPressure, kubelet stale >2min, taint count >5, and version skew
+- tests/unit/test_us011_pvc_node_analyzers.py: 11 unit tests covering all finding categories; all pass
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
