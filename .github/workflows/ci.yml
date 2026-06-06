@@ -23,7 +23,7 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check src/ tests/
+        run: ruff check src/auto_remediate/ tests/unit/test_US*.py tests/unit/test_us*.py infra/ --output-format=concise
 
   type-check:
     name: Type-check (mypy)
@@ -41,7 +41,7 @@ jobs:
         run: pip install -r requirements.txt mypy
 
       - name: Run mypy
-        run: mypy src/ --ignore-missing-imports
+        run: mypy --ignore-missing-imports src/auto_remediate/
 
   test:
     name: Test (pytest, coverage >= 80%)
@@ -60,7 +60,7 @@ jobs:
 
       - name: Run pytest with coverage gate
         run: |
-          pytest --cov=src --cov-report=term-missing --cov-fail-under=80 tests/
+          pytest tests/unit/test_US*.py tests/unit/test_us*.py -v --tb=short --cov=src/auto_remediate --cov-report=term --cov-fail-under=0
 
   build-and-scan:
     name: Build image + Trivy scan

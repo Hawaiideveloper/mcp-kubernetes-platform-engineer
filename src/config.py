@@ -4,8 +4,7 @@ Configuration management for Kubernetes Platform Engineer MCP Server.
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
-from pathlib import Path
+from typing import List, Optional
 
 
 @dataclass

@@ -5,14 +5,10 @@ This module provides shared fixtures, mock data, and utility functions
 used across all test categories.
 """
 
-import asyncio
-import json
 import os
-import tempfile
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-from unittest.mock import Mock, AsyncMock, MagicMock
+from typing import Dict, List, Any
+from unittest.mock import Mock
 
 import pytest
 import pytest_asyncio
@@ -364,7 +360,6 @@ async def populate_test_issues(manager: GitHubIssuesManager, count: int = 100):
         "scheduler", "control-plane", "kubelet"
     ]
     
-    severities = ["low", "medium", "high", "critical"]
     states = ["open", "closed"]
     
     for i in range(count):

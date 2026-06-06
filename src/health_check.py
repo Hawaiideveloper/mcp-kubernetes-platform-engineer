@@ -2,7 +2,6 @@
 Health check module for Kubernetes Platform Engineer MCP Server.
 """
 
-import asyncio
 import sys
 from pathlib import Path
 

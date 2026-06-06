@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Mark a claimed task done."""
-import json, sys, time, redis, os
+import json
+import sys
+import time
+import redis
+import os
 r = redis.Redis(host=os.environ.get("REDIS_HOST","corey-fl-redis"), port=6379, decode_responses=True)
 if len(sys.argv) < 2:
     print("usage: mark_done.py <story_id> [result] [proof_ref]", file=sys.stderr); sys.exit(64)

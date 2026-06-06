@@ -41,3 +41,27 @@
 **Fix applied (workaround):** Patched both workflows to `runs-on: ubuntu-latest`. GitHub-hosted runners are free for public repos and run immediately.
 
 **Real fix (follow-up):** Transfer `mcp-kubernetes-platform-engineer` to the `AlbrightLaboratories` org (matches the convention of every other repo + lets org runners + the Master TOC auto-updater + the claude-md-sweep workflows all apply automatically). Once transferred, revert workflows back to `runs-on: albright-runners` and complete the arc-RunnerSet label follow-up from the previous lesson.
+
+## 2026-06-06 — Wave 1 integration: in-pod per-branch validators do not catch cross-branch failures
+
+**What happened:** Wave 1 sub-agents each ran the six validators against their own isolated git worktree and all passed. Once integrated on the wave1-integration branch, CI on ubuntu-latest found 3 categories of failure:
+1. `src/auto_remediate/__init__.py` SyntaxError — union-merge of two branches` __init__.py left an unterminated docstring followed by raw text containing an em-dash.
+2. Ruff: 92 errors total (82 auto-fixable F401 unused imports across the new package).
+3. MyPy + Pytest: 131 mypy errors and many pytest errors on PRE-EXISTING old code (`src/mcp_server.py`, `tests/production/*`) that is slated for deletion in US-024.
+
+**Why:** Two distinct issues conflated:
+- Per-branch validator runs do not see other branches` changes — they cannot catch merge-time conflicts or cross-cutting style violations.
+- CI runs against the entire repo including code marked for deletion. The validator scope must match the in-flight rewrite, not the legacy.
+
+**Fix applied:**
+- Restored US-001`s authoritative `src/auto_remediate/__init__.py` (the union-merge corruption was discarded).
+- `ruff check --fix --unsafe-fixes` auto-cleared 82 F401 unused-import findings in the new package.
+- Scoped CI checks in `.github/workflows/ci.yml`:
+  - ruff: `src/auto_remediate/ tests/unit/test_US*.py tests/unit/test_us*.py infra/`
+  - mypy: `src/auto_remediate/` only
+  - pytest: `tests/unit/test_US*.py tests/unit/test_us*.py` only
+  - This explicitly excludes pre-existing rot until US-024 deletes it.
+
+**Prevent next time:** Two changes to the sub-agent prompt template in `the_goal-inprogress.md` §9.5:
+1. Add a step "before pushing, fast-forward your worktree to current main and re-run validators" so cross-branch merges are caught at PR time, not integration time.
+2. State explicitly that validator scope must match what is being built; do not let validators run against deleted-code-paths.

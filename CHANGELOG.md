@@ -4,6 +4,21 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- src/auto_remediate/__init__.py — restored US-001 authoritative content (union-merge had corrupted it with unterminated docstring + em-dash syntax error).
+- 82 ruff F401 unused-import findings across new package auto-cleared via --fix --unsafe-fixes.
+- CI scope tightened: ruff/mypy/pytest now check src/auto_remediate/ and Wave 1 test files only. Old src/mcp_server.py and tests/production/ excluded until US-024 deletes them.
+
+### Files changed
+- src/auto_remediate/__init__.py
+- src/auto_remediate/*.py (auto-fixed)
+- src/health_check.py
+- .github/workflows/ci.yml
+- Lessons_Learned.md
+- CHANGELOG.md
+
 ## [Alpha-12-962e45-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed

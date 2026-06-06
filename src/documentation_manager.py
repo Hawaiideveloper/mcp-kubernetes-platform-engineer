@@ -4,10 +4,8 @@ Documentation Manager for fetching and indexing Kubernetes documentation and bes
 
 import asyncio
 import aiohttp
-import json
-import re
-from typing import Any, Dict, List, Optional, Set
-from urllib.parse import urljoin, urlparse
+from typing import Any, Dict, List
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import hashlib
 from datetime import datetime

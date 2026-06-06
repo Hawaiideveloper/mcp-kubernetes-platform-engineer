@@ -2,8 +2,6 @@
 Monitoring Manager for performance analysis and observability.
 """
 
-import asyncio
-import json
 from typing import Any, Dict, List, Optional
 
 from config import MonitoringConfig

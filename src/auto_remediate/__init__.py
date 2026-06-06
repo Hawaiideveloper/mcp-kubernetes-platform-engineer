@@ -3,6 +3,7 @@ auto_remediate — Sprint 1 foundation package.
 
 Exports the namespace guard, AuditLogger, and roadmap tracker that establish
 the authoritative baseline documented in PRD §01 (Executive Summary & Roadmap).
+"""
 
 from .namespace_guard import (
     TRADING_BLOCKED_NAMESPACES,
@@ -20,4 +21,3 @@ __all__ = [
     "SprintStatus",
     "Roadmap",
 ]
-"""auto_remediate — four-identity RBAC split (US-019)."""

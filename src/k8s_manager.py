@@ -2,9 +2,7 @@
 Kubernetes Manager for cluster operations and management.
 """
 
-import asyncio
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from config import KubernetesConfig
 from logger import get_logger

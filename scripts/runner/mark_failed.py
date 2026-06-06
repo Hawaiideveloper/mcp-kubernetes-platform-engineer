@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Mark a task needs_fix; requeue at slightly higher priority for critic loop."""
-import json, sys, time, redis, os
+import json
+import sys
+import time
+import redis
+import os
 r = redis.Redis(host=os.environ.get("REDIS_HOST","corey-fl-redis"), port=6379, decode_responses=True)
 if len(sys.argv) < 3:
     print("usage: mark_failed.py <story_id> <error>", file=sys.stderr); sys.exit(64)

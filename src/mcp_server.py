@@ -5,19 +5,16 @@ Main MCP server implementation for comprehensive Kubernetes platform engineering
 cluster troubleshooting, monitoring, and system administration.
 """
 
-import asyncio
 import json
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional
 
-from mcp import ClientSession, ListResourcesResult, ListToolsResult, ReadResourceResult
+from mcp import ListToolsResult
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
 
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolResult,
-    EmbeddedResource,
-    Resource,
     TextContent,
     Tool,
 )

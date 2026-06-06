@@ -355,7 +355,7 @@ class GitHubIssuesManager:
     
     def _analyze_component(self, issue: Dict) -> str:
         """Analyze which Kubernetes component the issue relates to."""
-        labels = [label['name'].lower() for label in issue.get('labels', [])]
+        [label['name'].lower() for label in issue.get('labels', [])]
         title = issue['title'].lower()
         body = issue.get('body', '').lower()
         
