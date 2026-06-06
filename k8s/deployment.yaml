@@ -32,6 +32,8 @@ spec:
         runAsUser: 1001
         runAsGroup: 1001
         fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mcp-server
         image: ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest
@@ -46,8 +48,8 @@ spec:
           containerPort: 8080
           protocol: TCP
         env:
-        - name: KUBECONFIG
-          value: "/var/run/secrets/kubernetes.io/serviceaccount"
+        # KUBECONFIG removed: Python kubernetes client auto-detects in-cluster credentials
+        # from KUBERNETES_SERVICE_HOST; setting it to a directory causes init failure.
         - name: KUBERNETES_SERVICE_HOST
           value: kubernetes.default.svc.cluster.local
         - name: KUBERNETES_SERVICE_PORT
@@ -87,7 +89,7 @@ spec:
           mountPath: /app/logs
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL

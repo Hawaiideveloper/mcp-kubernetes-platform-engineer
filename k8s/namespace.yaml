@@ -6,3 +6,7 @@ metadata:
     app.kubernetes.io/name: kubernetes-platform-engineer
     app.kubernetes.io/component: mcp-server
     app.kubernetes.io/part-of: kubernetes-platform-engineer-mcp
+    # Pod Security Admission labels — enforce baseline, warn+audit on restricted
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

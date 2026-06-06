@@ -52,7 +52,7 @@ This guide explains how to integrate your Kubernetes-deployed MCP server with VS
 ### Direct Cluster Access
 ```bash
 # Test NodePort connectivity
-curl http://172.100.10.107:30001/health
+curl http://${NODE_IP}:${NODE_PORT}/health
 
 # Check MCP server status
 kubectl get pods -n mcp-kubernetes
@@ -118,7 +118,7 @@ kubectl get pods -n mcp-kubernetes
 kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server
 
 # Test direct connectivity
-curl http://172.100.10.107:30001/health
+curl http://${NODE_IP}:${NODE_PORT}/health
 ```
 
 #### 2. Port Forward Issues
@@ -163,7 +163,7 @@ Monitor your MCP server health:
 
 ```bash
 # Quick health check
-curl -s http://172.100.10.107:30001/health | jq '.'
+curl -s http://${NODE_IP}:${NODE_PORT}/health | jq '.'
 
 # Pod resource usage
 kubectl top pods -n mcp-kubernetes
@@ -252,7 +252,7 @@ You'll know the integration is working when:
 If you encounter issues:
 
 1. **Check the logs**: `kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server`
-2. **Verify connectivity**: `curl http://172.100.10.107:30001/health`
+2. **Verify connectivity**: `curl http://${NODE_IP}:${NODE_PORT}/health`
 3. **Test port forward**: `./mcp-port-forward.sh test`
 4. **Restore settings**: Use backup files if needed
 5. **Restart everything**: Stop services, restart VS Code, reconfigure
