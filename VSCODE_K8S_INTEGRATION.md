@@ -12,7 +12,7 @@ This guide explains how to integrate your Kubernetes-deployed MCP server with VS
 ### Method 2: Port Forward Access (Recommended for Development)
 - **Advantages**: Standard localhost access, easy debugging, secure tunnel
 - **Setup**: `./setup-vscode-k8s.sh`
-- **URL**: localhost:3001 via kubectl port-forward
+- **URL**: localhost:3001 via kubectl port-forward (HTTP mode only; stdio mode has no port)
 
 ## 📋 **Quick Setup Guide**
 
@@ -142,7 +142,7 @@ cat "$HOME/Library/Application Support/Code/User/settings.json" | grep -A 10 mod
 ls -la "$HOME/Library/Application Support/Code/User/settings.json.backup."*
 
 # Test MCP fetch command directly
-npx -y @modelcontextprotocol/server-fetch http://localhost:3001
+npx -y @modelcontextprotocol/server-fetch http://localhost:3001  # HTTP mode only (src/main.py); not the default stdio mode
 ```
 
 #### 4. Network Connectivity Issues

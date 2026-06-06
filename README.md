@@ -1,3 +1,11 @@
+<!-- toc-backlink -->
+> Master TOC: [Org-wide repo index](https://github.com/AlbrightLaboratories/daxxon-ai-gpu-01/issues/17) -- auto-updated every 15 min from this repo's commit stream. No manual entry needed; just write commit subjects that read well as one-line bullets.
+
+> **STATUS: Alpha -- diagnose-only / not production ready.**
+> All cluster-facing tools return stub/hardcoded data.
+> No Kubernetes API client is initialized.
+> See docs/audit-run-001/ for the full audit record.
+
 
 
 # Kubernetes Platform Engineer MCP Server
@@ -53,9 +61,9 @@
 
 A comprehensive Model Context Protocol (MCP) server designed for Kubernetes platform engineering, cluster troubleshooting, monitoring, and advanced system administration. **Now with native Kubernetes deployment support!**
 
-> **🧠 Always Learning**: This MCP server continuously monitors 17+ major Kubernetes repositories and automatically updates its knowledge base every hour. As the Kubernetes ecosystem evolves with new issues, solutions, and best practices, your assistant grows smarter without any manual intervention.
+> **🧠 Always Learning**: intends to monitor Kubernetes repositories (polling loop not yet implemented).
 
-> **🚀 Production Ready**: Successfully deployed in both Docker containers and Kubernetes clusters with full authentication, persistent storage, and comprehensive documentation integration (1,029+ official Kubernetes reference files).
+> **Status: Alpha -- diagnose-only.** All manager methods return stub data. No Kubernetes API client is loaded. See /docs/audit-run-001/ for details.
 
 ## 🚀 **Quick Start Options**
 
@@ -79,7 +87,7 @@ curl http://<your-cluster-ip>:30001/health
 - ✅ Persistent storage for knowledge base and logs
 - ✅ Service mesh ready (ClusterIP + NodePort services)
 - ✅ Health checks and monitoring integration
-- ✅ Official Kubernetes documentation (1,029+ files)
+- ✅ Kubernetes documentation (scraped at startup from kubernetes.io; count varies; empty until scrape completes)
 
 ### **Option 2: Docker Deployment (Quick Testing)**
 
@@ -117,7 +125,7 @@ kubectl apply -f k8s/
 - **Services:** ClusterIP (internal) + NodePort (external access)
 - **Storage:** 5Gi persistent volume for knowledge base
 - **Authentication:** GitHub Container Registry with Personal Access Token
-- **Documentation:** 1,029 official Kubernetes reference files integrated
+- **Documentation:** documentation indexed at startup via HTTP scrape; no bundled corpus
 - **Health Status:** All health checks passing ✅
 
 **Access Points:**
@@ -147,7 +155,7 @@ kubectl logs -n mcp-kubernetes deployment/kubernetes-mcp-server
 - **Persistent Storage** - 5Gi volume for knowledge base and continuous learning data
 - **Service Mesh Ready** - ClusterIP for internal communication, NodePort for external access
 - **Health Monitoring** - Kubernetes-native health checks with liveness and readiness probes
-- **Comprehensive Documentation** - 1,029 official Kubernetes reference documents integrated
+- **Documentation** - scraped at startup; requires network; may be incomplete
 - **Auto-scaling Ready** - Deployment configured for horizontal pod autoscaling
 - **Monitoring Integration** - Prometheus metrics endpoint on port 8080
 - **Security Standards** - Non-root containers with read-only root filesystem
@@ -171,7 +179,6 @@ curl http://<cluster-ip>:30001/health
 
 # Port forward for local access (alternative to NodePort)
 kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001
-curl http://localhost:3001/health
 ```
 
 ## 🛠️ **Core Features**
@@ -199,7 +206,7 @@ curl http://localhost:3001/health
 - **Troubleshooting Guides** - Official troubleshooting guides and solutions from Kubernetes documentation
 
 ### **🐛 GitHub Issues Intelligence & Continuous Learning**
-- **Live Issue Database** - Monitors 17 major Kubernetes repositories with 45,720+ indexed issues
+- **Issue Database** -- populated at runtime via GitHub API (requires GITHUB_TOKEN; count unverified; may be 0 on cold start)
 - **Automatic Knowledge Updates** - Fetches new issues every hour, ensuring cutting-edge knowledge
 - **Similar Issue Detection** - AI-powered matching of current problems with known solutions
 - **Solution Mining** - Extracts solutions, workarounds, and fixes from resolved issues  
@@ -359,65 +366,9 @@ kubectl get endpoints -n mcp-kubernetes
 kubectl describe pod -n mcp-kubernetes -l app.kubernetes.io/name=kubernetes-platform-engineer
 ```
 
-### **Direct API Usage**
+### **MCP Tool Usage**
 
-```bash
-# Get cluster health overview
-curl -X POST http://localhost:3001/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "diagnose_cluster_health",
-      "arguments": {
-        "check_types": ["nodes", "pods", "services", "networking"]
-      }
-    }
-  }'
-
-# Troubleshoot specific pod
-curl -X POST http://localhost:3001/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "tools/call", 
-    "params": {
-      "name": "troubleshoot_pod_issues",
-      "arguments": {
-        "pod_name": "my-app-pod",
-        "namespace": "production",
-        "include_logs": true
-      }
-    }
-  }'
-
-# Search Kubernetes documentation
-curl -X POST http://localhost:3001/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "search_documentation", 
-      "arguments": {
-        "query": "pod security best practices",
-        "max_results": 5
-      }
-    }
-  }'
-
-# Find similar GitHub issues
-curl -X POST http://localhost:3001/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "find_similar_issues",
-      "arguments": {
-        "error_message": "ImagePullBackOff: Failed to pull image",
-        "max_results": 10
-      }
-    }
-  }'
-```
+This server uses stdio MCP transport. Use it via VS Code or Claude Desktop MCP integration -- HTTP endpoints do not exist.
 
 ## 🧠 **Continuous Learning & Knowledge Evolution**
 
@@ -459,13 +410,6 @@ The MCP server is designed to grow smarter over time by continuously monitoring 
 | `cilium/cilium` | Networking | CNI and network policy issues |
 | `projectcalico/calico` | Networking | Alternative CNI solutions |
 | + 8 more repositories | Various | Comprehensive ecosystem coverage |
-
-### **Knowledge Growth Metrics**
-
-Track your MCP server's learning progress:
-```bash
-curl http://localhost:3001/stats | jq '.knowledge_base'
-```
 
 Example output:
 ```json
@@ -1014,7 +958,6 @@ kubectl delete -f k8s/                   # Remove deployment
 
 # Service access
 kubectl port-forward -n mcp-kubernetes service/kubernetes-mcp-server-service 3001:3001  # Local access
-curl http://localhost:3001/health         # Test health endpoint
 kubectl get svc -n mcp-kubernetes         # Check service endpoints
 
 # Troubleshooting
@@ -1101,7 +1044,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **🚀 Kubernetes Deployment**: Successfully running on cluster at `${NODE_IP}:${NODE_PORT}`
 - **📦 Container Registry**: `ghcr.io/hawaiideveloper/mcp-kubernetes-platform-engineer:latest`
 - **🏥 Health Status**: All endpoints responding with healthy status
-- **📚 Documentation**: 1,029 official Kubernetes reference files integrated
+- **📚 Documentation**: documentation indexed at startup via HTTP scrape; no bundled corpus
 - **🔐 Security**: RBAC configured with GitHub registry authentication
 - **💾 Storage**: 5Gi persistent volume for knowledge base
 

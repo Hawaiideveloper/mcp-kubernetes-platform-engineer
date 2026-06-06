@@ -66,7 +66,7 @@ After configuration:
 
 When working correctly, you should see:
 - 🤖 Enhanced Copilot responses with specific Kubernetes troubleshooting steps
-- 📋 References to actual GitHub issues and solutions
+- 📋 References to indexed GitHub issues (when GITHUB_TOKEN is set and DB is populated)
 - 🔧 Step-by-step debugging commands
 - 💡 Best practices from the community
 - 🛡️ Security recommendations
@@ -158,4 +158,4 @@ export KUBECONFIG=~/.kube/config:~/.kube/staging:~/.kube/prod
    - "Implement network policies for namespace isolation"
    - "Configure pod security standards"
 
-The MCP server will provide responses based on real GitHub issues and community solutions! 🚀
+The MCP server returns stub data for cluster operations. GitHub issue search is available when GITHUB_TOKEN is configured. 🚀
