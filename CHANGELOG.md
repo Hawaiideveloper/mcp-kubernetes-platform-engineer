@@ -4,6 +4,20 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-16-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-022: Checklist.md (repo root) with all Done-Bar and Sprint criteria as unchecked boxes
+- src/auto_remediate/acceptance.py: programmatic acceptance-criteria verifier (C6a, CHANGELOG, C10 checks)
+- tests/unit/test_US022_acceptance.py: 18 unit tests covering AcceptanceReport, check_checklist, check_changelog_version, check_source_contains_k8s_call, and run_static_criteria
+
+### Files changed
+- Checklist.md
+- src/auto_remediate/acceptance.py
+- tests/unit/test_US022_acceptance.py
+- CHANGELOG.md
+
+
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
