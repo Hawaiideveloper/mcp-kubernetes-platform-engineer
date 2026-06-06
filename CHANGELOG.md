@@ -4,6 +4,15 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- ci.yml — build-image job set to continue-on-error: true. Legacy Dockerfile fails on Helm install against Debian trixie. US-024 will delete the legacy Dockerfile during dead-code removal.
+
+### Files changed
+- .github/workflows/ci.yml
+- CHANGELOG.md
+
 ## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
