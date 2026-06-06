@@ -1,3 +1,12 @@
+## [Alpha-43-5aa5fd-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- the_goal-inprogress.md §10 "Delivered state" — captures 25/25 stories merged via 4 wave PRs, runtime deployed to corey-fl-loop ns, §22 acceptance proof reference, and the next-milestone (Runtime Integration v1) resume runbook.
+
+### Files changed
+- the_goal-inprogress.md (append §10)
+- CHANGELOG.md
+
 ## [Alpha-42-ff3313-0-1_0-2026-06-06] — 2026-06-06
 
 ### Verified
