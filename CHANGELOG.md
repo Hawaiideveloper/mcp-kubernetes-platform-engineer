@@ -62,6 +62,18 @@ Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 - tests/unit/test_US022_acceptance.py
 - CHANGELOG.md
 
+
+## [Alpha-18-b3f2e3-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- `src/auto_remediate/watchdog.py` — 5-minute post-remediation watchdog with healed/still-sick verdict (US-004)
+- `tests/unit/test_US_004_watchdog.py` — 12 unit tests covering healed, still-sick, deleted, namespace-deleted, and restart-count paths
+
+### Files changed
+- src/auto_remediate/watchdog.py (new)
+- tests/unit/test_US_004_watchdog.py (new)
+- CHANGELOG.md
+
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
