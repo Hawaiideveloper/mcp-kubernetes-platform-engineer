@@ -1,0 +1,75 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /work/wt/US-024
+configfile: pytest.ini
+plugins: Faker-40.21.0, asyncio-1.4.0, mock-3.15.1, cov-7.1.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/unit/test_US-024_dead_code.py::test_bak_file_deleted PASSED        [ 10%]
+tests/unit/test_US-024_dead_code.py::test_backup_py_deleted PASSED       [ 20%]
+tests/unit/test_US-024_dead_code.py::test_enhanced_tools_deleted PASSED  [ 30%]
+tests/unit/test_US-024_dead_code.py::test_kubectl_manager_deleted PASSED [ 40%]
+tests/unit/test_US-024_dead_code.py::test_helm_manager_deleted PASSED    [ 50%]
+tests/unit/test_US-024_dead_code.py::test_getting_started_duplicate_deleted PASSED [ 60%]
+tests/unit/test_US-024_dead_code.py::test_mcp_server_no_dead_imports PASSED [ 70%]
+tests/unit/test_US-024_dead_code.py::test_github_issues_manager_env_var_support PASSED [ 80%]
+tests/unit/test_US-024_dead_code.py::test_github_issues_manager_uses_env_path PASSED [ 90%]
+tests/unit/test_US-024_dead_code.py::test_dockerfile_no_copy_docs PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                                      Stmts   Miss  Cover   Missing
+-----------------------------------------------------------------------
+src/__init__.py                               3      3     0%   5-7
+src/audit.py                                 24     24     0%   8-60
+src/audit_inventory.py                       85     85     0%   10-236
+src/auto_remediate/__init__.py                4      4     0%   8-16
+src/auto_remediate/audit_logger.py           37     37     0%   9-115
+src/auto_remediate/namespace_guard.py        15     15     0%   9-65
+src/auto_remediate/rbac_audit_logger.py      40     40     0%   11-153
+src/auto_remediate/rbac_ci_check.py          37     37     0%   9-75
+src/auto_remediate/rbac_identities.py        20     20     0%   9-73
+src/auto_remediate/roadmap.py                47     47     0%   8-207
+src/config.py                                71      0   100%
+src/diagnostics_manager.py                   80     66    18%   18-19, 23-28, 41-79, 95-152, 168-213, 217, 230, 244, 255, 266
+src/documentation_manager.py                217    191    12%   24-36, 40-47, 51-64, 68-86, 90-136, 140-172, 176-188, 192-212, 216-247, 252-260, 264-276, 280, 328-372, 376-378, 382-397, 401-412
+src/github_issues_manager.py                299    257    14%   34-40, 66-77, 81-147, 151-171, 175-191, 196-227, 231-237, 241-250, 254-276, 280-298, 302-310, 334-359, 363-388, 392-412, 417-464, 468-480, 484-521, 526-544, 548-576, 580-623
+src/health_check.py                          31     31     0%   5-63
+src/k8s_manager.py                           55     46    16%   18-21, 25-32, 44-87, 100-162, 176-208
+src/logger.py                                53     36    32%   40-113, 132-138, 143-148, 153-159, 164-169, 175, 182
+src/main.py                                 108    108     0%   17-217
+src/mcp_server.py                            95     76    20%   46-68, 73-610, 616-644
+src/monitoring_manager.py                    85     67    21%   18-19, 23-28, 43-71, 88-144, 159-188, 192-216, 220, 232, 244, 256, 275, 290, 303, 317
+src/safety_config.py                         41     41     0%   8-87
+src/safety_gate.py                           56     56     0%   14-169
+src/security_manager.py                      66     51    23%   18-19, 23-28, 43-87, 91, 118, 152, 178, 203, 235-247, 251, 274
+-----------------------------------------------------------------------
+TOTAL                                      1569   1338    15%
+Coverage HTML written to dir reports/coverage
+============================= slowest 10 durations =============================
+0.07s call     tests/unit/test_US-024_dead_code.py::test_github_issues_manager_uses_env_path
+0.05s setup    tests/unit/test_US-024_dead_code.py::test_github_issues_manager_uses_env_path
+0.04s setup    tests/unit/test_US-024_dead_code.py::test_bak_file_deleted
+0.03s setup    tests/unit/test_US-024_dead_code.py::test_dockerfile_no_copy_docs
+0.01s teardown tests/unit/test_US-024_dead_code.py::test_dockerfile_no_copy_docs
+0.00s setup    tests/unit/test_US-024_dead_code.py::test_getting_started_duplicate_deleted
+0.00s setup    tests/unit/test_US-024_dead_code.py::test_backup_py_deleted
+0.00s setup    tests/unit/test_US-024_dead_code.py::test_mcp_server_no_dead_imports
+0.00s setup    tests/unit/test_US-024_dead_code.py::test_github_issues_manager_env_var_support
+0.00s setup    tests/unit/test_US-024_dead_code.py::test_kubectl_manager_deleted
+======================== 10 passed, 2 warnings in 4.13s ========================

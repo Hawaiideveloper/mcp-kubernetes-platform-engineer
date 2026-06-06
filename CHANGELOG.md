@@ -4,6 +4,17 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-17-b3f2e3-0-1_0-2026-06-06] - 2026-06-06
+
+### US-024: Dead-code removal
+
+- Deleted backup/stale files: `src/mcp_server.py.bak`, `src/mcp_server_backup.py`, `src/enhanced_tools.py`, `GettingStarted.md`
+- Removed dead wiring (`KubectlManager`, `HelmManager`) from `src/mcp_server.py`; deleted `kubectl_manager.py` and `helm_manager.py`
+- Removed `data/github_issues.db` from git tracking; added `GITHUB_ISSUES_DB_PATH` env-var override to `github_issues_manager.py`; removed stale `tests/__init__.py`; fixed `Dockerfile` `COPY docs/` line
+
+**Files changed:** `.gitignore`, `Dockerfile`, `src/github_issues_manager.py`, `src/mcp_server.py`, `tests/unit/test_US-024_dead_code.py`
+
+
 ## [Alpha-15-1a43ef-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
