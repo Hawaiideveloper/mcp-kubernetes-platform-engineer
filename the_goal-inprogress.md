@@ -692,3 +692,94 @@ For the next milestone (Runtime Integration v1):
 3. Update the auto-remediate Deployment to use the new entrypoint (still `python3 -m auto_remediate.runtime`, but with real behaviour).
 4. Re-run §22 acceptance proof; capture a fresh `docs/audit-run-001/proofs/acceptance/` artifact.
 5. Verify it emits DPO pair issues into this repo with label `dpo-pair`. That closes the corey-coder learning loop.
+
+---
+
+## 11. Where this stands at v0.1.0 release (session 2 close)
+
+This section supersedes §10 on the points that have changed. Read §10 for the historical "right after Wave 4" state.
+
+### What is different from §10
+
+- **Runtime is no longer heartbeat-only.** `src/auto_remediate/runtime.py` now drives `PodAnalyzer` on a 30-second interval, deduplicates findings within a 5-minute window, and appends them to `/tmp/audit.log`. PR [#20](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/pull/20).
+- **The deploy bootstrap now clones the repo and runs the real module.** `k8s/auto-remediate.yaml`'s ConfigMap bootstrap installs git, clones the repo into the pod, and execs `python3 -m auto_remediate.runtime`. PR [#21](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/pull/21).
+- **First official release cut.** Tag [`v0.1.0`](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/releases/tag/v0.1.0). Gold-prompt version `47-ca362a-0-1_0-2026-06-06`.
+- **README rewritten.** 1057 → 75 lines. Reflects v0.1.0 state. PR [#22](https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer/pull/22).
+- **`main` HEAD at session close:** `1e31067`.
+
+### Live proof at session close
+
+Pod `auto-remediate-75695d7975-j7tvv` on node `kubeadm-worker07`.
+
+- **Uptime:** 4h 42m+, 0 restarts.
+- **Last observed tick:** 418, findings stable at 19 (deduped).
+- **Audit log:** 982 lines and growing.
+- **Latest real findings:** `corey-rag/mcp-api OOMKilled`, `brightflow/execution-service` crash-loop (restarts=2), `ibkr-live-trader/composite-gate` probe timeout (observed but never auto-actioned per US-006 hardblock).
+
+Captured in:
+- [`docs/audit-run-001/proofs/acceptance/wave4-deploy.md`](docs/audit-run-001/proofs/acceptance/wave4-deploy.md) — §22 criteria after Wave 4.
+- [`docs/audit-run-001/proofs/acceptance/runtime-v1-live.md`](docs/audit-run-001/proofs/acceptance/runtime-v1-live.md) — observer loop finding real cluster issues, deduping across ticks.
+
+### What is left to do (v0.2 milestone — "wire the write side")
+
+The runtime currently **only observes**. The write-side modules are all merged on main but not wired into the entrypoint. Wiring them in is the v0.2 milestone.
+
+Priority order (cheapest leverage first):
+
+1. **Restart-first ladder (~30 min, biggest leverage per minute)**
+   - File: `src/auto_remediate/remediation_ladder.py` (already shipped, has tests).
+   - Wire: in `runtime.py`, after each tick's analyzer pass, for each finding in a *safe* namespace (allowlist), invoke the ladder. The ladder issues `kubectl rollout restart` and watches `/tmp/healthz`-style verification for 5 minutes before escalating.
+   - Hardblock check: every action must pass through `SafetyGate` (`src/auto_remediate/safety_gate.py`) which rejects mutating actions in `ibkr-live-trader`, `daxxon-trading`, `brightflow-live`.
+   - Acceptance: a brightflow-dashboard probe-race triggers a single `kubectl rollout restart`; pod returns Ready within 5 min; ladder records the success in the audit log.
+
+2. **DPO emission as GitHub issues (~30 min, compounding win)**
+   - File: `src/auto_remediate/dpo_pair.py` (already shipped).
+   - Wire: when the ladder reports `escalated` (restart did not heal) AND a subsequent action succeeds, emit a `DpoPair{prompt, rejected, chosen}` and POST it to this repo as an issue with label `dpo-pair` for corey-coder ingest.
+   - Acceptance: an OOMKilled pod gets restart-tried, fails, then a manual `kubectl patch deployment ... limits.memory` succeeds; a `dpo-pair` issue appears on GitHub.
+
+3. **vcluster sandbox verification (~2-3 hours, safety net)**
+   - File: `src/auto_remediate/vcluster_sandbox.py` (already shipped).
+   - Wire: for any candidate fix that is not a pod restart (manifest patch, image migration, etc.), apply to an ephemeral vcluster first; only proceed if smoke test is green.
+   - Required before write side is allowed to do anything beyond restarts.
+
+4. **GitOps PR generator (~1-2 hours)**
+   - File: `src/auto_remediate/gitops_pr.py` (already on main but tests were deleted in Wave 3 — rewrite required).
+   - Wire: for non-restart fixes, open a PR against the manifests repo with the diff + sandbox log + finding evidence. Trading namespaces never auto-merge — open the PR, assign a human reviewer, label `human-review-required`.
+
+5. **Persistent audit log (~30 min)**
+   - Today: `/tmp/audit.log` (lost on pod restart).
+   - Wire: switch to `/var/log/auto-remediate/audit.jsonl` on a PVC. Add daily rotation. After 90 days, offload to corey-rag for retention + retrieval.
+
+### Other known follow-ups (lower priority, but tracked)
+
+- **`tests/unit/test_us016_gitops_pr_generator.py` rewrite** — Wave 3 deleted it after 6 logic mismatches with the production code. Rewrite alongside whichever wiring fixes the production gaps.
+- **Distroless image** — Trivy scan reports HIGH/CRITICAL on the `python:3.11-slim` base image. Switch to `gcr.io/distroless/python3-debian12` after the runtime stabilises.
+- **Repo transfer to `AlbrightLaboratories` org** — unlocks self-hosted `albright-runners` per the org CLAUDE.md convention, plus the Master TOC auto-updater and the `claude-md-sweep` workflow.
+- **`arc` repo: add `albright-runners` label to the RunnerSet** — required so workflows can use `runs-on: albright-runners` per org convention once the repo lives in the org.
+- **PR #22 test flake** — docs-only PR caught one transient pytest failure. Identify which test is flaky in CI and stabilise.
+
+### Resume runbook (still authoritative)
+
+§9 of this file is still the operational manual:
+
+- **§9.1** discover pods by label.
+- **§9.2** health check (run this on any resume).
+- **§9.3** re-seed from `prd.json` if Redis ever loses data.
+- **§9.5** sub-agent prompt template (proven across 4 waves + 1 runtime integration + multiple cleanup runs).
+- **§9.6** CHANGELOG insertion algorithm (use it for every commit going forward).
+- **§9.7** batch-PR command.
+- **§9.8** full pod rebuild.
+- **§9.9** post-restart recovery (PVC vs container-layer gotcha).
+- **§9.11** session-close checklist (`BGSAVE`, branches pushed, main pulled).
+
+For the v0.2 work specifically:
+
+1. Fire one sub-agent with the §9.5 template, story_id `NEXT-002`, brief: "wire `RemediationLadder` into `auto_remediate.runtime` per §11 priority #1; gate every action through `SafetyGate`; on escalation emit a `DpoPair` issue per §11 priority #2."
+2. PR, CI green, merge.
+3. Re-apply `k8s/auto-remediate.yaml` (the bootstrap will pull the new code on next pod restart — `kubectl rollout restart deploy/auto-remediate -n corey-fl-loop`).
+4. Capture fresh proof under `docs/audit-run-001/proofs/acceptance/` — show: (a) safe-namespace pod auto-restarts, (b) trading-namespace finding is observed but not actioned, (c) `dpo-pair` labeled issue appears on GitHub.
+5. Cut release tag `v0.2.0` with that proof linked in the release notes.
+
+### Session close marker
+
+End of session 2, 2026-06-06. Open `the_goal-inprogress.md`, read §1-3 for the goal, §11 (this section) for current state and what is next. Then run §9.2 health check before doing anything.
