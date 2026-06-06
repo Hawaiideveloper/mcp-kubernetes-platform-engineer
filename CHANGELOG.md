@@ -1,3 +1,13 @@
+## [Alpha-34-c9440e-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- ci.yml + pytest config — pytest-asyncio installed + asyncio_mode=auto. US-009/US-016 wrote async tests; Python 3.11 no longer auto-creates event loops.
+
+### Files changed
+- .github/workflows/ci.yml
+- pytest.ini (or pyproject.toml)
+- CHANGELOG.md
+
 ## [Alpha-33-df728e-0-1_0-2026-06-06] — 2026-06-06
 
 ### Added
