@@ -1,3 +1,12 @@
+## [Alpha-49-1e3106-0-1_0-2026-06-06] - 2026-06-06
+
+### Added
+- the_goal-inprogress.md §11 "Where this stands at v0.1.0 release" — captures runtime now drives PodAnalyzer (not just heartbeat), live cluster proof, v0.2 priority order with file references and acceptance criteria, and a brief for the next sub-agent to fire.
+
+### Files changed
+- the_goal-inprogress.md (append §11)
+- CHANGELOG.md
+
 ## [Alpha-48-ca362a-0-1_0-2026-06-06] - 2026-06-06 (session wrap-up)
 
 ### Changed
