@@ -3,6 +3,14 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-33-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- US-015: vcluster sandbox lifecycle module (src/auto_remediate/vcluster_sandbox.py)
+- SmokeResult dataclass, SmokeTest protocol, DeploymentRolloutSmoke and PodRunningSmoke built-in tests
+- SMOKE_REGISTRY keyed by fix_class; run_sandbox() public entry with semaphore concurrency control
+- write_sandbox_log() captures manifest diff, smoke output, and k8s events to docs/audit-run-001/sandboxes/<run_id>/sandbox.log
+
 ## [Alpha-27-cedaab-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
