@@ -56,7 +56,7 @@ jobs:
           cache: "pip"
 
       - name: Install deps
-        run: pip install -r requirements.txt -r requirements-test.txt
+        run: pip install -r requirements.txt -r requirements-test.txt pytest-asyncio "psycopg[binary]"
 
       - name: Run pytest with coverage gate
         run: |

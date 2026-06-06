@@ -1,0 +1,104 @@
+[
+  {
+    "type": "ADDED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod.backoff.1",
+        "namespace": "default",
+        "resourceVersion": "100001"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod", "namespace": "default"},
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container",
+      "type": "Warning",
+      "count": 1
+    }
+  },
+  {
+    "type": "MODIFIED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod.backoff.1",
+        "namespace": "default",
+        "resourceVersion": "100002"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod", "namespace": "default"},
+      "reason": "BackOff",
+      "message": "Back-off restarting failed container",
+      "type": "Warning",
+      "count": 2
+    }
+  },
+  {
+    "type": "ADDED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod.imagepull.1",
+        "namespace": "default",
+        "resourceVersion": "100003"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod", "namespace": "default"},
+      "reason": "ImagePullBackOff",
+      "message": "Back-off pulling image myrepo/app:latest",
+      "type": "Warning",
+      "count": 1
+    }
+  },
+  {
+    "type": "ADDED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod2.failedmount.1",
+        "namespace": "staging",
+        "resourceVersion": "100004"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod2", "namespace": "staging"},
+      "reason": "FailedMount",
+      "message": "Unable to mount volumes for pod",
+      "type": "Warning",
+      "count": 1
+    }
+  },
+  {
+    "type": "ADDED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod.killing.1",
+        "namespace": "default",
+        "resourceVersion": "100005"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod", "namespace": "default"},
+      "reason": "Killing",
+      "message": "Stopping container app",
+      "type": "Warning",
+      "count": 1
+    }
+  },
+  {
+    "type": "ADDED",
+    "object": {
+      "apiVersion": "v1",
+      "kind": "Event",
+      "metadata": {
+        "name": "test-pod.normal.1",
+        "namespace": "default",
+        "resourceVersion": "100006"
+      },
+      "involvedObject": {"kind": "Pod", "name": "test-pod", "namespace": "default"},
+      "reason": "Pulled",
+      "message": "Successfully pulled image",
+      "type": "Normal",
+      "count": 1
+    }
+  }
+]
