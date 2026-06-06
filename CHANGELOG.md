@@ -6,6 +6,14 @@
 - SMOKE_REGISTRY keyed by fix_class; run_sandbox() public entry with semaphore concurrency control
 - write_sandbox_log() captures manifest diff, smoke output, and k8s events to docs/audit-run-001/sandboxes/<run_id>/sandbox.log
 
+## [Alpha-32-df728e-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- `src/gitops/pr_generator.py`: GitOps auto-PR generation (PRD §16) — every proposed fix expressed as a manifest diff PR via `gh` CLI; trading-namespace PRs never auto-merge; idempotency via `(finding_id, fix_id)` marker; dry-run mode.
+- `src/gitops/__init__.py`: gitops package exporting `PRResult`, `Finding`, `SandboxResult`, `create_remediation_pr`.
+- `config/safety.yaml`: added `gitops` block with `default_repo`, `default_base_branch`, and `repo_overrides` for trading namespaces (`pr-only` policy, assignee `corey-albright`).
+- `tests/unit/test_us016_gitops_pr_generator.py`: 10 unit tests covering dry-run, title format/truncation, label assertions, trading-namespace block, idempotency comment, sandbox-red and non-deterministic fix-class auto-merge gates.
+
 ## [Alpha-31-df728e-0-1_0-2026-06-06] — 2026-06-06
 
 ### US-009: BaseAnalyzer + PodAnalyzer
