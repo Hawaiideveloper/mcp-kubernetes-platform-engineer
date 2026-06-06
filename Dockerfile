@@ -74,8 +74,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Ensure docs directory is included
-COPY docs/ ./docs/
 
 # Create directories for logs, configs, and data
 RUN mkdir -p /app/logs /app/configs /app/data /root/.kube

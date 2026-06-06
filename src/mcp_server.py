@@ -26,10 +26,7 @@ from monitoring_manager import MonitoringManager
 from security_manager import SecurityManager
 from documentation_manager import DocumentationManager
 from github_issues_manager import GitHubIssuesManager
-from kubectl_manager import KubectlManager
-from helm_manager import HelmManager
 from logger import get_logger
-
 
 class KubernetesPlatformEngineerMCPServer:
     """
@@ -66,9 +63,6 @@ class KubernetesPlatformEngineerMCPServer:
         self.documentation_manager = DocumentationManager(config)
         self.github_issues_manager = GitHubIssuesManager(config)
         
-        # Initialize enhanced managers
-        self.kubectl_manager = KubectlManager(non_destructive_mode=self.non_destructive_mode)
-        self.helm_manager = HelmManager(non_destructive_mode=self.non_destructive_mode)
         
         # Register MCP handlers
         self._register_handlers()
