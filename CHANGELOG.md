@@ -3,6 +3,15 @@
 All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
+## [Alpha-24-dca6bb-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- tests/unit/test_us021_security.py — definitive SOH strip + class line restore.
+
+### Files changed
+- tests/unit/test_us021_security.py
+- CHANGELOG.md
+
 ## [Alpha-23-c35b36-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed

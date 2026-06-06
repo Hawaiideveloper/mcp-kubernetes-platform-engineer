@@ -177,7 +177,7 @@ class TestUS021Logger:
 # ---------------------------------------------------------------------------
 
 @helm_manager_present
-:
+class TestUS021HelmPassword:
     """helm password passed via stdin, not as positional arg."""
 
     def test_no_password_positional_arg(self):
