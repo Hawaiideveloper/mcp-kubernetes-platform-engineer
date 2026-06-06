@@ -4,6 +4,16 @@ All notable changes documented per Keep-a-Changelog 1.1.0 and SemVer.
 Pre-release versions: `Alpha-{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 Release versions: `{build_number}-{parent_sha6}-{major}-{minor}_{patch}-{date}`
 
+## [Alpha-14-76cf16-0-1_0-2026-06-06] — 2026-06-06
+
+### Fixed
+- ci.yml + release.yml — replaced github.repository_owner with literal lowercase hawaiideveloper to satisfy GHCR all-lowercase rule.
+
+### Files changed
+- .github/workflows/ci.yml
+- .github/workflows/release.yml
+- CHANGELOG.md
+
 ## [Alpha-13-0181bc-0-1_0-2026-06-06] — 2026-06-06
 
 ### Fixed
