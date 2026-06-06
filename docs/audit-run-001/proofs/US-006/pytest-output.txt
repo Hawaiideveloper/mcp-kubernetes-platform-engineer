@@ -1,0 +1,78 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /work/wt/US-006
+configfile: pytest.ini
+plugins: Faker-40.21.0, asyncio-1.4.0, mock-3.15.1, cov-7.1.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 44 items
+
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-ibkr-live-trader] PASSED [  2%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-daxxon-trading] PASSED [  4%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-brightflow-live] PASSED [  6%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-ibkr-live-trader] PASSED [  9%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-daxxon-trading] PASSED [ 11%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-brightflow-live] PASSED [ 13%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[delete-ibkr-live-trader] PASSED [ 15%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[delete-daxxon-trading] PASSED [ 18%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[delete-brightflow-live] PASSED [ 20%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[scale-ibkr-live-trader] PASSED [ 22%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[scale-daxxon-trading] PASSED [ 25%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[scale-brightflow-live] PASSED [ 27%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[auto_merge-ibkr-live-trader] PASSED [ 29%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[auto_merge-daxxon-trading] PASSED [ 31%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[auto_merge-brightflow-live] PASSED [ 34%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_even_when_dry_run_false[ibkr-live-trader] PASSED [ 36%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_even_when_dry_run_false[daxxon-trading] PASSED [ 38%]
+tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_even_when_dry_run_false[brightflow-live] PASSED [ 40%]
+tests/test_safety_gate.py::test_US_006_trading_ns_allows_read_only[ibkr-live-trader] PASSED [ 43%]
+tests/test_safety_gate.py::test_US_006_trading_ns_allows_read_only[daxxon-trading] PASSED [ 45%]
+tests/test_safety_gate.py::test_US_006_trading_ns_allows_read_only[brightflow-live] PASSED [ 47%]
+tests/test_safety_gate.py::test_US_006_pattern_matched_trading_ns_is_blocked[payments-live] PASSED [ 50%]
+tests/test_safety_gate.py::test_US_006_pattern_matched_trading_ns_is_blocked[algo-trader] PASSED [ 52%]
+tests/test_safety_gate.py::test_US_006_pattern_matched_trading_ns_is_blocked[fx-trading] PASSED [ 54%]
+tests/test_safety_gate.py::test_US_006_pattern_matched_trading_ns_is_blocked[ibkr-paper] PASSED [ 56%]
+tests/test_safety_gate.py::test_US_006_system_ns_blocks_mutating[kube-system] PASSED [ 59%]
+tests/test_safety_gate.py::test_US_006_system_ns_blocks_mutating[calico-system] PASSED [ 61%]
+tests/test_safety_gate.py::test_US_006_system_ns_blocks_mutating[cert-manager] PASSED [ 63%]
+tests/test_safety_gate.py::test_US_006_system_ns_blocks_mutating[ingress-nginx] PASSED [ 65%]
+tests/test_safety_gate.py::test_US_006_gate_logs_deny_decision PASSED    [ 68%]
+tests/test_safety_gate.py::test_US_006_gate_logs_allow_decision PASSED   [ 70%]
+tests/test_safety_gate.py::test_US_006_stateless_web_allows_mutations PASSED [ 72%]
+tests/test_safety_gate.py::test_US_006_batch_allows_mutations PASSED     [ 75%]
+tests/test_safety_gate.py::test_US_006_safety_gate_error_attributes PASSED [ 77%]
+tests/test_safety_gate.py::test_US_006_mutating_actions_set_contains_required_operations PASSED [ 79%]
+tests/test_safety_gate.py::test_US_006_config_loads_trading_namespaces PASSED [ 81%]
+tests/test_safety_gate.py::test_US_006_config_loads_trading_patterns PASSED [ 84%]
+tests/test_safety_gate.py::test_US_006_config_missing_file_raises_runtime_error PASSED [ 86%]
+tests/test_safety_gate.py::test_US_006_config_unparseable_raises_runtime_error PASSED [ 88%]
+tests/test_safety_gate.py::test_US_006_config_override_disabled_by_default PASSED [ 90%]
+tests/test_safety_gate.py::test_US_006_categorize_returns_trading_for_exact PASSED [ 93%]
+tests/test_safety_gate.py::test_US_006_categorize_returns_system_for_kube_system PASSED [ 95%]
+tests/test_safety_gate.py::test_US_006_categorize_returns_unknown_for_unmatched PASSED [ 97%]
+tests/test_safety_gate.py::test_US_006_check_returns_true_on_allow PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 10 durations =============================
+0.01s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-ibkr-live-trader]
+0.00s call     tests/test_safety_gate.py::test_US_006_trading_ns_allows_read_only[daxxon-trading]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-daxxon-trading]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-daxxon-trading]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[scale-ibkr-live-trader]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[auto_merge-brightflow-live]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[auto_merge-daxxon-trading]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-brightflow-live]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[apply-brightflow-live]
+0.00s setup    tests/test_safety_gate.py::test_US_006_trading_ns_blocks_mutating_actions[restart-ibkr-live-trader]
+======================== 44 passed, 2 warnings in 0.17s ========================

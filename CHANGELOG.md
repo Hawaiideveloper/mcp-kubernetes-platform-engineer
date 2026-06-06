@@ -28,6 +28,17 @@ Pause point — capture the full picture so any future session can pick up cold.
 - the_goal-inprogress.md (new)
 - CHANGELOG.md
 
+## [Alpha-7-168973-0-1_0-2026-06-05] — 2026-06-05
+### Added
+- (US-006) SafetyGate hardblock for trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live) and fnmatch patterns (*-live, *-trading, *-trader, ibkr-*). System namespaces are also blocked; all decisions are written to an append-only audit log.
+### Files
+- config/safety.yaml
+- src/safety_config.py
+- src/audit.py
+- src/safety_gate.py
+- tests/test_safety_gate.py
+- docs/audit-run-001/proofs/US-006/pytest-output.txt
+
 ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
 
 ### Added
