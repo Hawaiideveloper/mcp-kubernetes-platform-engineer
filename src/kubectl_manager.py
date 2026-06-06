@@ -3,13 +3,11 @@ Enhanced Kubectl Manager with comprehensive kubectl API coverage
 Matches and exceeds capabilities from Flux159/mcp-server-kubernetes
 """
 
-import os
 import json
 import subprocess
 import asyncio
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 import re
-from pathlib import Path
 
 try:
     from logger import get_logger

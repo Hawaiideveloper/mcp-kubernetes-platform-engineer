@@ -2,8 +2,6 @@
 Diagnostics Manager for comprehensive cluster troubleshooting.
 """
 
-import asyncio
-import json
 from typing import Any, Dict, List, Optional
 
 from config import DiagnosticsConfig

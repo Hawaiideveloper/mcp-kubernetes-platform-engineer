@@ -69,12 +69,16 @@ cat > /tmp/mcp_config.json << 'EOF'
 EOF
 
 # Merge configurations using Python
-python3 << 'EOF'
+[[ -f "$SETTINGS_FILE" ]] || { echo "VS Code settings not found at $SETTINGS_FILE"; exit 1; }
+
+SETTINGS_FILE="$SETTINGS_FILE" python3 - <<'PYEOF'
 import json
-import sys
+import os
+
+settings_file = os.environ["SETTINGS_FILE"]
 
 # Read existing settings
-with open("/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json", 'r') as f:
+with open(settings_file, 'r') as f:
     existing_settings = json.load(f)
 
 # Read new MCP configuration
@@ -86,11 +90,11 @@ for key, value in mcp_config.items():
     existing_settings[key] = value
 
 # Write back to settings file
-with open("/Users/hawaiidevelopergmail.com/Library/Application Support/Code/User/settings.json", 'w') as f:
+with open(settings_file, 'w') as f:
     json.dump(existing_settings, f, indent=2)
 
-print("✅ VS Code settings updated successfully")
-EOF
+print("VS Code settings updated successfully")
+PYEOF
 
 echo "🎯 Configuration Complete!"
 echo "========================="

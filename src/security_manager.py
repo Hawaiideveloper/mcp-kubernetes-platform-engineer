@@ -2,8 +2,6 @@
 Security Manager for Kubernetes security scanning and compliance.
 """
 
-import asyncio
-import json
 from typing import Any, Dict, List, Optional
 
 from config import SecurityConfig

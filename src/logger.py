@@ -1,6 +1,13 @@
 """
 Logging configuration for Kubernetes Platform Engineer MCP Server.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import loguru
+
 
 import logging
 import logging.handlers
@@ -8,8 +15,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from rich.console import Console
-from rich.logging import RichHandler
 from loguru import logger
 
 
@@ -36,8 +41,7 @@ def setup_logging(
     logger.remove()
     
     # Setup console logging with Rich for beautiful output
-    console = Console()
-    
+        
     # Default format
     if format_string is None:
         format_string = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
@@ -109,7 +113,7 @@ def setup_logging(
     logger.info(f"Logging initialized - Level: {level}, File: {file_path or 'Console only'}")
 
 
-def get_logger(name: str) -> logger:
+def get_logger(name: str) -> "loguru.Logger":
     """
     Get a configured logger instance.
     
@@ -168,15 +172,13 @@ def log_security_event(event_type: str, severity: str, details: dict = None):
 # Exception logging helpers
 def log_k8s_error(operation: str, error: Exception, **context):
     """Log Kubernetes-related errors with context."""
-    logger.bind(operation=operation, **context).error(
-        f"K8s Error in {operation}: {error}", 
-        exc_info=error
+    logger.bind(operation=operation, **context).opt(exception=error).error(
+        f"K8s Error in {operation}: {error}"
     )
 
 
 def log_diagnostic_error(diagnostic_type: str, error: Exception, **context):
     """Log diagnostic errors with context."""
-    logger.bind(diagnostic_type=diagnostic_type, **context).error(
-        f"Diagnostic Error in {diagnostic_type}: {error}",
-        exc_info=error
+    logger.bind(diagnostic_type=diagnostic_type, **context).opt(exception=error).error(
+        f"Diagnostic Error in {diagnostic_type}: {error}"
     )

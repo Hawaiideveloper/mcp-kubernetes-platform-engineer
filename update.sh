@@ -1,6 +1,14 @@
-#!/bin/bash
-echo "🔄 Updating Kubernetes Platform Engineer MCP..."
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Updating Kubernetes Platform Engineer MCP..."
+
+git pull origin main || { echo "ERROR: git pull failed"; exit 1; }
+
+[[ -x ./stop.sh ]] || { echo "ERROR: stop.sh not found or not executable"; exit 1; }
 ./stop.sh
-git pull origin main 2>/dev/null || echo "No git repository to update"
+
+[[ -x ./start.sh ]] || { echo "ERROR: start.sh not found or not executable"; exit 1; }
 ./start.sh
-echo "✓ MCP server updated and restarted"
+
+echo "Update complete and server restarted."

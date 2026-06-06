@@ -8,9 +8,7 @@ This module contains 50 tests covering all major issue types.
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, List, Any
+from unittest.mock import AsyncMock
 
 # Test markers
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

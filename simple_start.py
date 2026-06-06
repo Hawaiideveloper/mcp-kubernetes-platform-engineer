@@ -24,7 +24,7 @@ async def demo_enhanced_capabilities():
     kubectl_mgr = KubectlManager(non_destructive_mode=False)
     helm_mgr = HelmManager(non_destructive_mode=False)
     
-    print(f"✅ kubectl Manager: Ready")
+    print("✅ kubectl Manager: Ready")
     print(f"✅ Helm Manager: Available = {helm_mgr.is_available()}")
     
     # Test kubectl connectivity

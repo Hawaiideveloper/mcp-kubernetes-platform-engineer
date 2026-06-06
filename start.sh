@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 # Kubernetes Platform Engineer MCP - Automated Setup Script
 # This script sets up everything needed to run the MCP server with VS Code Copilot
@@ -94,9 +95,14 @@ print_status "Data directories created"
 
 # Prepare environment variables
 ENV_ARGS=""
-if [ ! -z "$GITHUB_TOKEN" ]; then
-    ENV_ARGS="$ENV_ARGS -e GITHUB_TOKEN=$GITHUB_TOKEN"
-    print_status "GitHub token configured for higher API limits"
+# Write token to a short-lived temp file to avoid ps aux exposure
+TMPENV=$(mktemp)
+trap 'rm -f "$TMPENV"' EXIT
+chmod 600 "$TMPENV"
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    printf 'GITHUB_TOKEN=%s\n' "$GITHUB_TOKEN" > "$TMPENV"
+    ENV_ARGS="$ENV_ARGS --env-file $TMPENV"
+    print_status "GitHub token configured for higher API limits (via env-file)"
 fi
 
 ENV_ARGS="$ENV_ARGS -e LOG_LEVEL=$LOG_LEVEL"

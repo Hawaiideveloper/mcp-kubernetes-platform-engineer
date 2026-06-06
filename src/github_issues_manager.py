@@ -5,9 +5,8 @@ GitHub Issues Manager for fetching and indexing Kubernetes GitHub issues for rap
 import asyncio
 import aiohttp
 import json
-import sqlite3
 import aiosqlite
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 from datetime import datetime, timedelta
 import re
 
@@ -356,7 +355,7 @@ class GitHubIssuesManager:
     
     def _analyze_component(self, issue: Dict) -> str:
         """Analyze which Kubernetes component the issue relates to."""
-        labels = [label['name'].lower() for label in issue.get('labels', [])]
+        [label['name'].lower() for label in issue.get('labels', [])]
         title = issue['title'].lower()
         body = issue.get('body', '').lower()
         
@@ -417,7 +416,7 @@ class GitHubIssuesManager:
                 SELECT * FROM github_issues 
                 WHERE (title LIKE ? OR body LIKE ?)
             """
-            params = [f"%{query}%", f"%{query}%"]
+            params: list[object] = [f"%{query}%", f"%{query}%"]
             
             if repo:
                 sql += " AND repo = ?"
@@ -484,21 +483,22 @@ class GitHubIssuesManager:
             if not key_terms:
                 return []
             
-            # Build search query
-            search_terms = " OR ".join([f"title LIKE '%{term}%' OR body LIKE '%{term}%'" for term in key_terms])
-            
-            sql = f"""
-                SELECT *, 
-                       (reactions_count + comments_count) as relevance_score
-                FROM github_issues 
-                WHERE ({search_terms})
-                AND state = 'closed'
-                ORDER BY relevance_score DESC, updated_at DESC
-                LIMIT ?
-            """
-            
+            # Build search query - parameterized to prevent SQL injection
+            clauses = ["(title LIKE ? OR body LIKE ?)"] * len(key_terms)
+            params: list[object] = [v for t in key_terms for v in (f"%{t}%", f"%{t}%")]
+
+            sql = (
+                "SELECT *, (reactions_count + comments_count) as relevance_score "
+                "FROM github_issues "
+                "WHERE " + " OR ".join(clauses) + " "
+                "AND state = 'closed' "
+                "ORDER BY relevance_score DESC, updated_at DESC "
+                "LIMIT ?"
+            )
+            params.append(max_results)
+
             async with aiosqlite.connect(self.db_path) as db:
-                async with db.execute(sql, (max_results,)) as cursor:
+                async with db.execute(sql, params) as cursor:
                     rows = await cursor.fetchall()
                     columns = [description[0] for description in cursor.description]
                     

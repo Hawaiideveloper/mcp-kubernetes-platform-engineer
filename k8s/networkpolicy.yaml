@@ -1,0 +1,41 @@
+# NetworkPolicy — default-deny ingress + allow from ingress-nginx only
+#
+# NOTE: If NodePort is retained, also add a host-level firewall rule restricting
+# access to trusted CIDRs on port 30001. Prefer ClusterIP + kubectl port-forward
+# for developer access to eliminate the NodePort exposure entirely.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: mcp-kubernetes
+  labels:
+    app.kubernetes.io/name: kubernetes-platform-engineer
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-nginx
+  namespace: mcp-kubernetes
+  labels:
+    app.kubernetes.io/name: kubernetes-platform-engineer
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kubernetes-platform-engineer
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3001

@@ -1,0 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: auto-remediate-applier
+  namespace: brightflow-dashboard
+  labels:
+    app.kubernetes.io/part-of: auto-remediate
+    app.kubernetes.io/component: rbac
+    auto-remediate/identity: applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: auto-remediate-applier
+subjects:
+  - kind: ServiceAccount
+    name: auto-remediate-applier
+    namespace: auto-remediate

@@ -1,0 +1,102 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /work/wt/US-019
+configfile: pytest.ini
+plugins: Faker-40.21.0, asyncio-1.4.0, mock-3.15.1, cov-7.1.0, anyio-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 28 items
+
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_trading_namespace_detection PASSED [  3%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_non_trading_namespace PASSED [  7%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_system_namespace_detection PASSED [ 10%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_sandbox_namespace_detection PASSED [ 14%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_applier_eligible_non_trading PASSED [ 17%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_applier_not_eligible_trading PASSED [ 21%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_applier_not_eligible_system PASSED [ 25%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_applier_not_eligible_sandbox PASSED [ 28%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_validate_no_applier_raises_for_trading PASSED [ 32%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_validate_no_applier_passes_for_eligible PASSED [ 35%]
+tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_rbac_identity_enum_values PASSED [ 39%]
+tests/unit/test_US019_rbac_split.py::TestBuildAuditRecord::test_record_has_required_fields PASSED [ 42%]
+tests/unit/test_US019_rbac_split.py::TestBuildAuditRecord::test_record_service_account_from_env PASSED [ 46%]
+tests/unit/test_US019_rbac_split.py::TestBuildAuditRecord::test_record_error_detail PASSED [ 50%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_session_id_generated_if_not_provided PASSED [ 53%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_explicit_session_id_preserved PASSED [ 57%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_pre_action_log_emits_record 
+-------------------------------- live log call ---------------------------------
+2026-06-05 14:19:26 [    INFO] src.auto_remediate.rbac_audit_logger: {"event": "applier_action", "timestamp": "2026-06-05T18:19:26.396311+00:00", "service_account": "auto-remediate-applier", "namespace": "brightflow-dashboard", "resource_kind": "Deployment", "resource_name": "api", "verb": "patch", "dry_run": false, "session_id": "sess-pre", "result": "success", "error_detail": "pre-action"}
+PASSED                                                                   [ 60%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_pre_action_log_failure_raises PASSED [ 64%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_post_action_log_sets_degraded_on_failure 
+-------------------------------- live log call ---------------------------------
+2026-06-05 14:19:26 [CRITICAL] src.auto_remediate.rbac_audit_logger: CRITICAL: post-action audit log failed — session marked degraded. Manual audit required. error=disk full session_id=fail-post
+PASSED                                                                   [ 67%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_post_action_log_does_not_raise_on_failure 
+-------------------------------- live log call ---------------------------------
+2026-06-05 14:19:26 [CRITICAL] src.auto_remediate.rbac_audit_logger: CRITICAL: post-action audit log failed — session marked degraded. Manual audit required. error=boom session_id=b97a9c23-036e-40f8-b7a2-748f1baa53e6
+PASSED                                                                   [ 71%]
+tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_not_degraded_on_success 
+-------------------------------- live log call ---------------------------------
+2026-06-05 14:19:26 [    INFO] src.auto_remediate.rbac_audit_logger: {"event": "applier_action", "timestamp": "2026-06-05T18:19:26.412435+00:00", "service_account": "auto-remediate-applier", "namespace": "brightflow-dashboard", "resource_kind": "Deployment", "resource_name": "deploy-a", "verb": "patch", "dry_run": false, "session_id": "ok-sess", "result": "success", "error_detail": null}
+PASSED                                                                   [ 75%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_clean_file_has_no_violations PASSED [ 78%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_trading_ns_applier_detected PASSED [ 82%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_all_trading_namespaces_detected PASSED [ 85%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_non_applier_file_ignored PASSED [ 89%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_directory_check_returns_zero_on_clean PASSED [ 92%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_directory_check_returns_nonzero_on_violation PASSED [ 96%]
+tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_performance_p95_under_2s PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                                      Stmts   Miss  Cover   Missing
+-----------------------------------------------------------------------
+src/__init__.py                               3      0   100%
+src/auto_remediate/__init__.py                0      0   100%
+src/auto_remediate/rbac_audit_logger.py      40      1    98%   31
+src/auto_remediate/rbac_ci_check.py          37      6    84%   47, 64-71, 75
+src/auto_remediate/rbac_identities.py        20      0   100%
+src/config.py                                72      0   100%
+src/diagnostics_manager.py                   82     66    20%   20-21, 25-30, 43-81, 97-154, 170-215, 219, 232, 246, 257, 268
+src/documentation_manager.py                219    191    13%   26-38, 42-49, 53-66, 70-88, 92-138, 142-174, 178-190, 194-214, 218-249, 254-262, 266-278, 282, 330-374, 378-380, 384-399, 403-414
+src/enhanced_tools.py                         6      6     0%   6-405
+src/github_issues_manager.py                294    263    11%   25-58, 62-73, 77-143, 147-167, 171-187, 192-223, 227-233, 237-246, 250-272, 276-294, 298-306, 330-355, 359-384, 388-408, 413-460, 464-476, 480-516, 521-539, 543-571, 575-618
+src/health_check.py                          32     32     0%   5-64
+src/helm_manager.py                         215    178    17%   14-15, 27-34, 38-43, 47-84, 94-98, 111-139, 149-169, 175-191, 197-207, 214-221, 228-237, 243-250, 257-266, 272-288, 296-303, 307, 311-316, 320, 329-336, 342-347, 355-371, 377, 382-387, 392-397, 401, 405, 409, 415, 420-447
+src/k8s_manager.py                           57     46    19%   20-23, 27-34, 46-89, 102-164, 178-210
+src/kubectl_manager.py                      221    186    16%   16-17, 29-34, 38-43, 47-75, 85-91, 95-102, 110-123, 128-132, 137-141, 146-150, 155-168, 174-185, 190-194, 200-206, 211-215, 220-235, 240-244, 248-252, 256-267, 274-317, 327-354, 364-377, 390, 396-506, 518-534
+src/logger.py                                54     37    31%   35-109, 128-134, 139-144, 149-155, 160-165, 171, 179
+src/main.py                                 108    108     0%   17-217
+src/mcp_server.py                           100     78    22%   52-77, 82-619, 625-653
+src/mcp_server_backup.py                    108    108     0%   17-217
+src/monitoring_manager.py                    87     67    23%   20-21, 25-30, 45-73, 90-146, 161-190, 194-218, 222, 234, 246, 258, 277, 292, 305, 319
+src/security_manager.py                      68     51    25%   20-21, 25-30, 45-89, 93, 120, 154, 180, 205, 237-249, 253, 276
+-----------------------------------------------------------------------
+TOTAL                                      1823   1424    22%
+Coverage HTML written to dir reports/coverage
+============================= slowest 10 durations =============================
+0.02s call     tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_performance_p95_under_2s
+0.01s setup    tests/unit/test_US019_rbac_split.py::TestRbacIdentities::test_trading_namespace_detection
+0.00s call     tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_all_trading_namespaces_detected
+0.00s call     tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_directory_check_returns_zero_on_clean
+0.00s call     tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_pre_action_log_failure_raises
+0.00s call     tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_pre_action_log_emits_record
+0.00s call     tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_post_action_log_sets_degraded_on_failure
+0.00s call     tests/unit/test_US019_rbac_split.py::TestApplierAuditLogger::test_post_action_log_does_not_raise_on_failure
+0.00s call     tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_directory_check_returns_nonzero_on_violation
+0.00s call     tests/unit/test_US019_rbac_split.py::TestRbacCiCheck::test_clean_file_has_no_violations
+======================== 28 passed, 2 warnings in 1.25s ========================

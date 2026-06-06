@@ -1,0 +1,88 @@
+============================= test session starts ==============================
+collecting ... collected 32 items
+
+tests/unit/test_US_001_exec_summary.py::TestTradingBlockedNamespaces::test_constant_is_frozenset PASSED [  3%]
+tests/unit/test_US_001_exec_summary.py::TestTradingBlockedNamespaces::test_trading_namespaces_present PASSED [  6%]
+tests/unit/test_US_001_exec_summary.py::TestTradingBlockedNamespaces::test_immutable PASSED [  9%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_allowed_namespace_passes PASSED [ 12%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_blocked_namespaces_raise PASSED [ 15%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_extra_blocked_namespace PASSED [ 18%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_extra_blocked_does_not_affect_allowed PASSED [ 21%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_empty_string_raises_value_error PASSED [ 25%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_whitespace_string_raises_value_error PASSED [ 28%]
+tests/unit/test_US_001_exec_summary.py::TestCheckNamespaceAllowed::test_non_string_raises_value_error PASSED [ 31%]
+tests/unit/test_US_001_exec_summary.py::TestProtectedNamespaceError::test_is_exception PASSED [ 34%]
+tests/unit/test_US_001_exec_summary.py::TestProtectedNamespaceError::test_namespace_attribute PASSED [ 37%]
+tests/unit/test_US_001_exec_summary.py::TestProtectedNamespaceError::test_message_contains_namespace PASSED [ 40%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_creates_file PASSED [ 43%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_returns_dict_with_event PASSED [ 46%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_appends_jsonl PASSED [ 50%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_read_entries PASSED [ 53%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_guard_rejection PASSED [ 56%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_remediation PASSED [ 59%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_log_path_property PASSED [ 62%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_read_entries_empty_when_no_file PASSED [ 65%]
+tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_thread_safety PASSED [ 68%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_build_baseline_returns_roadmap PASSED [ 71%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_three_sprints PASSED [ 75%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_sprint_numbers PASSED [ 78%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_sprint1_in_progress PASSED [ 81%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_sprint2_planned PASSED [ 84%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_sprint1_has_trading_hardblock_done PASSED [ 87%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_sprint_by_number_missing_returns_none PASSED [ 90%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_completion_ratio_is_float PASSED [ 93%]
+tests/unit/test_US_001_exec_summary.py::TestRoadmapBaseline::test_overall_completion_is_float PASSED [ 96%]
+tests/unit/test_US_001_exec_summary.py::TestKubernetesClientCall::test_kubernetes_client_version_api PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+../../../usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.15-final-0 _______________
+
+Name                                    Stmts   Miss  Cover   Missing
+---------------------------------------------------------------------
+src/__init__.py                             3      3     0%   5-7
+src/auto_remediate/__init__.py              4      0   100%
+src/auto_remediate/audit_logger.py         37      0   100%
+src/auto_remediate/namespace_guard.py      15      0   100%
+src/auto_remediate/roadmap.py              47      2    96%   49, 206
+src/config.py                              72      0   100%
+src/diagnostics_manager.py                 82     66    20%   20-21, 25-30, 43-81, 97-154, 170-215, 219, 232, 246, 257, 268
+src/documentation_manager.py              219    191    13%   26-38, 42-49, 53-66, 70-88, 92-138, 142-174, 178-190, 194-214, 218-249, 254-262, 266-278, 282, 330-374, 378-380, 384-399, 403-414
+src/enhanced_tools.py                       6      6     0%   6-405
+src/github_issues_manager.py              294    263    11%   25-58, 62-73, 77-143, 147-167, 171-187, 192-223, 227-233, 237-246, 250-272, 276-294, 298-306, 330-355, 359-384, 388-408, 413-460, 464-476, 480-516, 521-539, 543-571, 575-618
+src/health_check.py                        32     32     0%   5-64
+src/helm_manager.py                       215    178    17%   14-15, 27-34, 38-43, 47-84, 94-98, 111-139, 149-169, 175-191, 197-207, 214-221, 228-237, 243-250, 257-266, 272-288, 296-303, 307, 311-316, 320, 329-336, 342-347, 355-371, 377, 382-387, 392-397, 401, 405, 409, 415, 420-447
+src/k8s_manager.py                         57     46    19%   20-23, 27-34, 46-89, 102-164, 178-210
+src/kubectl_manager.py                    221    186    16%   16-17, 29-34, 38-43, 47-75, 85-91, 95-102, 110-123, 128-132, 137-141, 146-150, 155-168, 174-185, 190-194, 200-206, 211-215, 220-235, 240-244, 248-252, 256-267, 274-317, 327-354, 364-377, 390, 396-506, 518-534
+src/logger.py                              54     37    31%   35-109, 128-134, 139-144, 149-155, 160-165, 171, 179
+src/main.py                               108    108     0%   17-217
+src/mcp_server.py                         100     78    22%   52-77, 82-619, 625-653
+src/mcp_server_backup.py                  108    108     0%   17-217
+src/monitoring_manager.py                  87     67    23%   20-21, 25-30, 45-73, 90-146, 161-190, 194-218, 222, 234, 246, 258, 277, 292, 305, 319
+src/security_manager.py                    68     51    25%   20-21, 25-30, 45-89, 93, 120, 154, 180, 205, 237-249, 253, 276
+---------------------------------------------------------------------
+TOTAL                                    1829   1422    22%
+Coverage HTML written to dir reports/coverage
+============================= slowest 10 durations =============================
+1.31s call     tests/unit/test_US_001_exec_summary.py::TestKubernetesClientCall::test_kubernetes_client_version_api
+0.02s call     tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_thread_safety
+0.01s setup    tests/unit/test_US_001_exec_summary.py::TestTradingBlockedNamespaces::test_constant_is_frozenset
+0.01s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_creates_file
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_log_path_property
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_thread_safety
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_returns_dict_with_event
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_read_entries_empty_when_no_file
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_guard_rejection
+0.00s setup    tests/unit/test_US_001_exec_summary.py::TestAuditLogger::test_record_remediation
+======================== 32 passed, 2 warnings in 2.73s ========================

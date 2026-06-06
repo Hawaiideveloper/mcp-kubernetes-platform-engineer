@@ -3,7 +3,7 @@ Enhanced Tools Integration for Kubernetes Platform Engineer MCP Server
 Provides comprehensive kubectl and Helm tools matching and exceeding Flux159 capabilities
 """
 
-from typing import List, Dict, Any
+from typing import List
 from mcp.types import Tool
 
 

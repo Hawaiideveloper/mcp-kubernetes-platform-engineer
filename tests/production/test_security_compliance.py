@@ -9,11 +9,7 @@ the complete resolution workflow from detection to fix.
 """
 
 import pytest
-import asyncio
-import time
-from datetime import datetime
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, List, Any
+from unittest.mock import AsyncMock
 
 # Test markers
 pytestmark = [pytest.mark.production, pytest.mark.asyncio, pytest.mark.security]

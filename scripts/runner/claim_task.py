@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Atomically claim the highest-priority queued task from corey-fl-redis."""
-import json, os, sys, time, redis
+import json
+import os
+import sys
+import time
+import redis
 REDIS_HOST = os.environ.get("REDIS_HOST", "corey-fl-redis")
 AGENT_ID = os.environ.get("AGENT_ID", f"agent-{os.getpid()}")
 r = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
