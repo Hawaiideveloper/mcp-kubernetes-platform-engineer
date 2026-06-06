@@ -21,3 +21,13 @@
 3. Bumped memory request to 128Mi (limit still 320Mi) so the pod doesn't get killed under burst seed.
 
 **Prevent next time:** Default to RDB + PVC for any "task queue" Redis even when keys are explicitly TTL'd. EmptyDir + no-persistence is only correct for *true* cache patterns where the consumer can recompute from source — and even then, document explicitly.
+
+## 2026-06-06 — Org runners do not advertise an albright-runners label
+
+**What happened:** US-020 CI/CD workflows used `runs-on: albright-runners` per the org CLAUDE.md convention. After opening Wave 1 integration PR #3, all three checks (Lint, Type-check, Test) sat in `queued` for 5+ minutes. `gh api /orgs/AlbrightLaboratories/actions/runners` showed 7+ online runners (`albright-runners-cg7p2-*` runner set), but every one had `labels=` empty — only the implicit `self-hosted`, `Linux`, `X64` labels were advertised. Job runner_name stayed null because no runner matched the requested label.
+
+**Why:** The ARC runner-set name (`albright-runners-cg7p2`) is a Kubernetes resource name, not an Actions Runner label. Labels must be added explicitly via the ARC RunnerSet spec (`spec.template.spec.labels: [albright-runners]`) or at runner registration time.
+
+**Fix applied here (workaround):** Patched both CI workflows to `runs-on: [self-hosted, Linux, X64]` so they match the implicit labels every org runner already advertises. This unblocks Wave 1.
+
+**Real fix (follow-up):** Open a PR against the `arc` repo to add `albright-runners` to the RunnerSet labels, then revert these workflows back to `runs-on: albright-runners` per org convention.

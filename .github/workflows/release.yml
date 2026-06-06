@@ -8,7 +8,7 @@ on:
 jobs:
   release-image:
     name: Tag, push, and pin digest
-    runs-on: albright-runners
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: write
       packages: write
