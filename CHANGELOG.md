@@ -1,3 +1,12 @@
+## [Alpha-46-58a9ac-0-1_0-2026-06-06] — 2026-06-06
+
+### Changed
+- k8s/auto-remediate.yaml — bootstrap now clones the repo and runs python3 -m auto_remediate.runtime (the real observer loop from PR #20). Container runs as root inside the pod (PSA baseline allows) so apt/pip/git work during bootstrap. RBAC remains read-only.
+
+### Files changed
+- k8s/auto-remediate.yaml
+- CHANGELOG.md
+
 ## [Alpha-45-a77e17-0-1_0-2026-06-06] — 2026-06-06
 
 ### Added

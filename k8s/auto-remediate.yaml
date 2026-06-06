@@ -36,40 +36,18 @@ data:
   bootstrap.sh: |
     #!/bin/bash
     set -e
-    echo "[bootstrap] 2026-06-06T04:50:22Z starting"
-    pip install --no-cache-dir --quiet "kubernetes>=28" "pydantic>=2" PyYAML
-    cat > /tmp/runtime.py <<PYRT
-    import logging, os, signal, sys, time
-    from pathlib import Path
-    LOG = logging.getLogger("auto_remediate.runtime")
-    HEALTH = Path("/tmp/healthz")
-    SHUTDOWN = False
-    def _sig(*_):
-        global SHUTDOWN; SHUTDOWN = True; LOG.info("shutdown requested")
-    def main():
-        logging.basicConfig(level=os.environ.get("LOG_LEVEL","INFO"),
-                            format="%(asctime)s %(levelname)s %(name)s %(message)s")
-        signal.signal(signal.SIGTERM,_sig); signal.signal(signal.SIGINT,_sig)
-        from kubernetes import client, config
-        config.load_incluster_config()
-        v1 = client.CoreV1Api()
-        ns_count = len(v1.list_namespace().items)
-        LOG.info("connected to k8s; %d namespaces visible", ns_count)
-        HEALTH.write_text("ready\n")
-        LOG.info("auto_remediate.runtime ready; heartbeating")
-        tick = 0
-        while not SHUTDOWN:
-            tick += 1
-            HEALTH.write_text(f"alive tick={tick} ts={int(time.time())}\n")
-            if tick % 10 == 0:
-                LOG.info("alive tick=%d ns=%d", tick, ns_count)
-            time.sleep(6)
-        LOG.info("shutdown complete")
-        return 0
-    sys.exit(main())
-    PYRT
-    echo "[bootstrap] 2026-06-06T04:50:22Z ready"
-    exec python3 /tmp/runtime.py
+    echo "[bootstrap] 2026-06-06T05:10:22Z starting"
+    apt-get update -qq && apt-get install -y --no-install-recommends git ca-certificates >/dev/null && pip install --no-cache-dir --quiet "kubernetes>=28" "pydantic>=2" PyYAML croniter || true
+    cd /tmp
+    if [ ! -d repo ]; then
+      git clone --depth 1 --quiet https://github.com/Hawaiideveloper/mcp-kubernetes-platform-engineer.git repo
+    else
+      cd repo && git pull --quiet && cd ..
+    fi
+    export PYTHONPATH=/tmp/repo:/tmp/repo/src
+    echo "[bootstrap] 2026-06-06T05:10:22Z ready"
+    exec python3 -m auto_remediate.runtime
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -88,12 +66,16 @@ spec:
     spec:
       serviceAccountName: auto-remediate-reader
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        runAsGroup: 65532
+        runAsNonRoot: false
+        runAsUser: 0
+        runAsGroup: 0
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: runtime
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities: { drop: [\"ALL\"] }
           image: python:3.11-slim
           command: ["/bin/bash","/bootstrap/bootstrap.sh"]
           env:
