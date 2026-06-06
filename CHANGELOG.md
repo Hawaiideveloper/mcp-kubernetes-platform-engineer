@@ -28,6 +28,21 @@ Pause point — capture the full picture so any future session can pick up cold.
 - the_goal-inprogress.md (new)
 - CHANGELOG.md
 
+## [Alpha-6-168973-0-1_0-2026-06-05] — 2026-06-05
+
+### Added
+- (US-001) Namespace guard module: TRADING_BLOCKED_NAMESPACES constant, ProtectedNamespaceError, and check_namespace_allowed() that blocks automated remediation against trading namespaces (ibkr-live-trader, daxxon-trading, brightflow-live).
+- (US-001) AuditLogger: thread-safe, append-only JSONL audit writer with guard-rejection and remediation-action convenience methods.
+- (US-001) Roadmap: three-sprint structured baseline data as code, Sprint 1 marked IN_PROGRESS with trading hardblock items done.
+
+### Files
+- src/auto_remediate/__init__.py (new)
+- src/auto_remediate/namespace_guard.py (new)
+- src/auto_remediate/audit_logger.py (new)
+- src/auto_remediate/roadmap.py (new)
+- tests/unit/test_US_001_exec_summary.py (new, 32 tests passing)
+- docs/audit-run-001/proofs/US-001/pytest-output.txt (new)
+
 ## [Alpha-2-fb53c1-0-1_0-2026-06-04] — 2026-06-04
 
 ### Added
