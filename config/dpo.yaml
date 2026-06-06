@@ -1,0 +1,3 @@
+# DPO pair emission config (PRD §05)
+dpo_issue_repo: ""   # empty = use GITHUB_REPOSITORY env var or hardcoded fallback
+dpo_enabled: true
