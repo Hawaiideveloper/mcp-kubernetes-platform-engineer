@@ -1,3 +1,18 @@
+## [Alpha-39-c1c9d5d-0-1_0-2026-06-06] — 2026-06-06
+
+### Added
+- src/analyzers/service_analyzer.py — ServiceAnalyzer: detects selector-no-pods, endpoints-not-ready, port-mismatch, headless-misuse
+- src/analyzers/ingress_analyzer.py — IngressAnalyzer: detects missing-backend, tls-secret-missing, tls-expiry, host-conflict, unsupported-annotation
+- tests/unit/test_us010_service_analyzer.py — 5 unit tests (runtime validator: read_namespaced_endpoints called)
+- tests/unit/test_us010_ingress_analyzer.py — 6 unit tests (runtime validator: list_ingress_for_all_namespaces called)
+
+### Files changed
+- src/analyzers/service_analyzer.py (new)
+- src/analyzers/ingress_analyzer.py (new)
+- tests/unit/test_us010_service_analyzer.py (new)
+- tests/unit/test_us010_ingress_analyzer.py (new)
+- CHANGELOG.md
+
 ## [Alpha-38-443043-0-1_0-2026-06-06] — 2026-06-06
 
 ### Removed
